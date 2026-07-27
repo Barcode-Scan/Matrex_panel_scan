@@ -1238,7 +1238,7 @@ function refreshSettings(){
   if(cfg.url){srv.className='chip chip-on';srv.innerHTML='<span></span>Configured';}
   else{srv.className='chip chip-off';srv.innerHTML='<span></span>Not configured';}
 }
-const SETTINGS_PASSWORD='3090L4K572';
+const SETTINGS_PASSWORD='3090MWS';
 function openSettingsScreen(){
   stopScanner(); // camera has no business running while the user isn't on the scan screen
   $('setUrl').value=cfg.url;$('setDev').value=cfg.dev;$('setFilePrefix').value=cfg.filePrefix||'Matrex_Scans';$('connRes').textContent='';refreshSettings();checkMixedWarn();show('scrSettings');
