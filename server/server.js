@@ -50,6 +50,20 @@ if (fs.existsSync(VIEWER_KEY_PATH)) {
 }
 
 const app = express();
+// Chrome's Private Network Access (PNA) requires this explicit opt-in header
+// on top of standard CORS before a public HTTPS page (the phone app on
+// GitHub Pages) is allowed to reach a private-LAN server like this one.
+// Without it, any request that triggers a CORS preflight (e.g. a JSON POST)
+// is silently blocked by the browser before it ever reaches this server —
+// plain GETs can slip through, which is why /health can work while
+// /devices/register (or any other JSON POST) fails with no server-side
+// trace of the request at all.
+app.use((req, res, next) => {
+  if (req.get('Access-Control-Request-Private-Network')) {
+    res.set('Access-Control-Allow-Private-Network', 'true');
+  }
+  next();
+});
 app.use(cors());
 app.use(express.json({ limit: '5mb' })); // /upload carries the whole day's rows
 app.use(express.static(path.join(__dirname, 'public')));
