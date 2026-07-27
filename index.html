@@ -1497,7 +1497,7 @@ function tryBatchAuth(){
     setTimeout(()=>{$('batchAuthErr').classList.remove('on');},3000);
   }
 }
-$('bBatch').onclick=openBatchAuth;
+$('bBatch').onclick=()=>{viewerKey=BATCH_PASSWORD;openBatchStatusScreen();};
 $('batchAuthOk').onclick=tryBatchAuth;
 $('batchAuthPw').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();tryBatchAuth();}});
 $('batchAuthCancel').onclick=()=>modal('mBatchAuth',false);
