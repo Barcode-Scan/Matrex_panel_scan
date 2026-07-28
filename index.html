@@ -1525,15 +1525,11 @@ function renderBatchList(q){
   q=(q||'').trim().toUpperCase();
   const rows=q?batchListCache.filter(b=>b.batch.toUpperCase().includes(q)):batchListCache;
   if(!rows.length){$('batchContent').innerHTML='<div class="empty-box"><div class="et">'+(q?'No matches':'No batches registered yet')+'</div></div>';return;}
-  // Shows the scanned/total count + progress bar again (2026-07-23). The
-  // per-batch label DETAIL screen (tapping into a batch to see individual
-  // labels) is intentionally hidden for now — no onclick here, so a row
-  // is display-only, not a broken link. openBatchDetailScreen/
-  // renderBatchDetail/openBatchLabelDetail below are all still fully
-  // intact, just unreachable from this list until it's wired back up.
+  // Tapping a row opens the per-label detail screen (openBatchDetailScreen)
+  // showing each label's individual scanned/not-scanned/void status.
   $('batchContent').innerHTML=rows.map(b=>{
     const pct=b.total?Math.round((b.scanned/b.total)*100):0;
-    return`<div class="batch-row">
+    return`<div class="batch-row" onclick="openBatchDetailScreen('${esc(b.batch)}')" style="cursor:pointer">
       <div class="batch-row-top"><div class="batch-name">${esc(b.batch)}</div><div class="batch-count">${b.scanned}/${b.total}</div></div>
       <div class="batch-bar"><div class="batch-bar-fill" style="width:${pct}%"></div></div>
     </div>`;
