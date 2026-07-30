@@ -26,6 +26,8 @@
   .pill.PENDING{background:var(--amber-50);color:var(--amber-700)}
   .pill.APPROVED{background:var(--green-50);color:var(--green-700)}
   .pill.REVOKED{background:var(--red-50);color:var(--red-600)}
+  .pill.ARCHIVED{background:var(--gray-200);color:var(--gray-500)}
+  .pill.ACTIVE{background:var(--green-50);color:var(--green-700)}
   .acts{margin-left:auto;display:flex;gap:6px}
   .empty{color:var(--gray-500);font-size:13px;padding:20px;text-align:center}
   h2{font-size:16px;margin:28px 0 4px}
@@ -72,6 +74,10 @@
   </div>
   <div id="list"></div>
 
+  <h2>Batches</h2>
+  <div class="sub">Archive hides a batch from the phone's Batch Status list — it never touches scan history or void status, and can be undone any time.</div>
+  <div id="batchList"></div>
+
   <h2>Part Lookup</h2>
   <div class="sub">Look up any registered part by its 10-character unique ID, view its notes, or add one.</div>
   <div class="keybar">
@@ -110,7 +116,7 @@ const $=id=>document.getElementById(id);
 let KEY=localStorage.getItem('mx_admin_key')||'';
 $('key').value=KEY;
 
-function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();}
+function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadBatches();loadReports();loadTunnelUrl();}
 
 async function api(path,opts){
   const r=await fetch(path,Object.assign({headers:{'X-Admin-Key':KEY,'Content-Type':'application/json'}},opts||{}));
@@ -138,6 +144,28 @@ async function load(){
   }catch(e){$('list').innerHTML='<div class="empty">Wrong key, or server unreachable.</div>';}
 }
 async function act(id,action){await api(`/admin/api/devices/${encodeURIComponent(id)}/${action}`,{method:'POST'});load();}
+
+// ── BATCHES ──────────────────────────────────────────────────
+async function loadBatches(){
+  if(!KEY){$('batchList').innerHTML='<div class="empty">Enter the admin key to see batches.</div>';return;}
+  try{
+    const data=await api('/admin/api/batches');
+    if(!data.batches.length){$('batchList').innerHTML='<div class="empty">No batches registered yet.</div>';return;}
+    $('batchList').innerHTML=data.batches.map(b=>`
+      <div class="card">
+        <div>
+          <div class="name">${esc(b.batch)}</div>
+          <div class="meta">${fmtNum(b.scanned)}/${fmtNum(b.total)} scanned${b.voided?' · '+fmtNum(b.voided)+' voided':''}${b.archived_at?' · archived '+fmt(b.archived_at):''}</div>
+        </div>
+        <span class="pill ${b.archived_at?'ARCHIVED':'ACTIVE'}">${b.archived_at?'Archived':'Active'}</span>
+        <div class="acts">
+          ${b.archived_at?`<button class="ok" onclick="batchAct('${esc(b.batch)}','unarchive')">Unarchive</button>`
+                         :`<button class="danger" onclick="batchAct('${esc(b.batch)}','archive')">Archive</button>`}
+        </div>
+      </div>`).join('');
+  }catch(e){$('batchList').innerHTML='<div class="empty">Wrong key, or server unreachable.</div>';}
+}
+async function batchAct(batch,action){await api(`/admin/api/batches/${encodeURIComponent(batch)}/${action}`,{method:'POST'});loadBatches();}
 function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function fmt(iso){return iso?new Date(iso).toLocaleString():'—';}
 
@@ -319,6 +347,7 @@ function csvDownload(which){
   $('repFrom').value=from.toISOString().slice(0,10);
 })();
 loadReports();
+loadBatches();
 </script>
 </body>
 </html>
