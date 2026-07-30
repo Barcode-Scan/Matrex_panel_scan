@@ -453,41 +453,9 @@ app.get('/viewer/api/batches', requireViewer, (req, res) => {
            SUM(pi.void='Yes') AS voided
     FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
     WHERE pp.batch IS NOT NULL AND pp.batch != ''
-      AND pp.batch NOT IN (SELECT batch FROM archived_batches)
     GROUP BY pp.batch ORDER BY pp.batch DESC
   `).all();
   res.json({ ok: true, batches: rows });
-});
-
-// ── BATCH ARCHIVE — admin-only. Purely a visibility flag (see schema.sql):
-// archiving/unarchiving never touches parts_index/parts_panel, so a batch's
-// scan history and void status are completely unaffected either way.
-const archiveBatchStmt = db.prepare(`
-  INSERT INTO archived_batches (batch, archived_at, archived_by) VALUES (@batch, @now, @by)
-  ON CONFLICT(batch) DO UPDATE SET archived_at = @now, archived_by = @by
-`);
-const unarchiveBatchStmt = db.prepare('DELETE FROM archived_batches WHERE batch = ?');
-
-app.get('/admin/api/batches', requireAdmin, (req, res) => {
-  const rows = db.prepare(`
-    SELECT pp.batch, COUNT(*) AS total,
-           SUM(pi.scanned='Yes') AS scanned,
-           SUM(pi.void='Yes') AS voided,
-           ab.archived_at
-    FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
-    LEFT JOIN archived_batches ab ON ab.batch = pp.batch
-    WHERE pp.batch IS NOT NULL AND pp.batch != ''
-    GROUP BY pp.batch ORDER BY pp.batch DESC
-  `).all();
-  res.json({ ok: true, batches: rows });
-});
-app.post('/admin/api/batches/:batch/archive', requireAdmin, (req, res) => {
-  archiveBatchStmt.run({ batch: req.params.batch, now: new Date().toISOString(), by: 'ADMIN' });
-  res.json({ ok: true });
-});
-app.post('/admin/api/batches/:batch/unarchive', requireAdmin, (req, res) => {
-  unarchiveBatchStmt.run(req.params.batch);
-  res.json({ ok: true });
 });
 
 app.get('/viewer/api/batches/:batch', requireViewer, (req, res) => {

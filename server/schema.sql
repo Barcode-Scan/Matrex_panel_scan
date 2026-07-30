@@ -103,15 +103,3 @@ CREATE TABLE IF NOT EXISTS parts_panel (
   colour        TEXT,
   generated_on  TEXT
 );
-
--- Batch-level archive — admin-only, reversible hide of a batch from the
--- phone's Batch Status list. Deliberately its own table rather than a
--- column on parts_index/parts_panel: archiving never touches registry
--- data (scanned/void/notes all stay exactly as they are), matching this
--- project's existing principle that hide/flag actions never destroy a
--- record. Unarchiving is just deleting the row here.
-CREATE TABLE IF NOT EXISTS archived_batches (
-  batch         TEXT PRIMARY KEY,
-  archived_at   TEXT NOT NULL,
-  archived_by   TEXT
-);
