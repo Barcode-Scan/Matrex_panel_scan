@@ -354,6 +354,40 @@ app.post('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
   res.json({ ok: true, batch, schedule: formatSchedule(getProductionSchedule.get(batch)) });
 });
 
+// Permanently deletes a batch: every registered part in it (parts_index +
+// parts_panel), their notes and scan-log entries, and the production
+// schedule row itself. Deliberately allowed even if parts were already
+// scanned (the admin UI warns and requires typing the batch name first) —
+// this is for cleaning up mistaken/test batches, not a safety-gated
+// operation like void, so unlike void it's not logged anywhere afterward.
+app.delete('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
+  const batch = String(req.params.batch || '').trim();
+  if (!batch) return res.status(400).json({ ok: false, error: 'batch required' });
+
+  const uids = db.prepare('SELECT unique_id FROM parts_panel WHERE batch = ?').all(batch).map(r => r.unique_id);
+  const delNotes = db.prepare('DELETE FROM part_notes WHERE unique_id = ?');
+  const delScans = db.prepare('DELETE FROM scans WHERE unique_id = ?');
+  const delPanel = db.prepare('DELETE FROM parts_panel WHERE unique_id = ?');
+  const delIndex = db.prepare('DELETE FROM parts_index WHERE unique_id = ?');
+
+  db.exec('BEGIN');
+  try {
+    for (const uid of uids) {
+      delNotes.run(uid);
+      delScans.run(uid);
+      delPanel.run(uid);
+      delIndex.run(uid);
+    }
+    db.prepare('DELETE FROM production_schedule WHERE batch = ?').run(batch);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+
+  res.json({ ok: true, deleted_parts: uids.length });
+});
+
 // ── SCAN-TIME MATCH — the phone calls this for every scanned ID, live.
 // parts_index is checked first (universal, fast); only if a match exists
 // there do we join into that department's detail table. Adding a new

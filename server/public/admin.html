@@ -562,7 +562,7 @@ function renderScheduleGrid(){
   }).join('');
 }
 
-let currentScheduleBatch=null,currentExtraFields={};
+let currentScheduleBatch=null,currentExtraFields={},currentScheduleLabels=[];
 
 async function openScheduleDetail(batch){
   currentScheduleBatch=batch;
@@ -579,12 +579,14 @@ async function openScheduleDetail(batch){
 // field name as its placeholder so an empty cell still shows what goes there.
 function renderScheduleDetail(batch,sched,labels){
   currentExtraFields=Object.assign({},sched.extra_fields||{});
+  currentScheduleLabels=labels;
   const sourcePill=sched.schedule_source?`<span class="source-pill">${esc(sched.schedule_source)}</span>`:'';
   const scannedCount=labels.filter(l=>l.scanned==='Yes').length;
   const inp=(k,ph)=>`<input id="sf_${k}" placeholder="${esc(ph)}" value="${esc(sched[k]||'')}">`;
   $('scheduleDetail').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <button class="secondary" onclick="$('scheduleDetail').innerHTML=''">&larr; Close</button>${sourcePill}
+      <button class="secondary" onclick="$('scheduleDetail').innerHTML=''">&larr; Close</button>
+      <div style="display:flex;gap:8px;align-items:center">${sourcePill}<button class="danger-solid" onclick="deleteBatch()">Delete Batch</button></div>
     </div>
     <table class="sched-table">
       <tr>
@@ -611,6 +613,29 @@ function renderScheduleDetail(batch,sched,labels){
     <h2>Labels in this Batch</h2>
     <div>${labelRowsHtml(labels)}</div>`;
   renderExtraFieldRows();
+}
+// Permanently deletes the batch: every registered part in it, their notes
+// and scan-log entries, and the schedule row itself. Allowed even with
+// scanned parts (per the "warn but don't block" choice for this feature -
+// this is for cleaning up mistaken/test batches) - but requires typing the
+// exact batch name first, and the warning text says plainly how many parts
+// have already been scanned when that's the case, so it's never a surprise.
+async function deleteBatch(){
+  const total=currentScheduleLabels.length;
+  const scannedCount=currentScheduleLabels.filter(l=>l.scanned==='Yes').length;
+  let warning=`This permanently deletes batch "${currentScheduleBatch}" and all ${total} registered part(s) in it. This cannot be undone.`;
+  if(scannedCount>0){
+    warning+=`\n\nWARNING: ${scannedCount} of ${total} part(s) in this batch have ALREADY BEEN SCANNED. Deleting will permanently lose that scan history.`;
+  }
+  warning+=`\n\nType the batch name exactly to confirm:\n${currentScheduleBatch}`;
+  const typed=prompt(warning);
+  if(typed===null)return;
+  if(typed!==currentScheduleBatch){alert('Batch name did not match — nothing deleted.');return;}
+  try{
+    await api('/admin/api/schedule/'+encodeURIComponent(currentScheduleBatch),{method:'DELETE'});
+    $('scheduleDetail').innerHTML='';
+    await loadScheduleList();
+  }catch(e){alert('Could not delete — check the admin key and try again.');}
 }
 // Same read-only per-label view the phone app's Production Schedule
 // drill-down shows (project/floor/type/size/qty/colour + scan status) -
