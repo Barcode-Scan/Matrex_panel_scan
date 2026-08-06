@@ -317,7 +317,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
           <circle cx="3" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="3" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="3" cy="18" r="1.5" fill="currentColor" stroke="none"/>
         </svg>
       </button>
-      <button class="tb-btn" id="bBatch" aria-label="Batch status">
+      <button class="tb-btn" id="bBatch" aria-label="Production schedule">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
         </svg>
@@ -462,12 +462,13 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       Back
     </button>
-    <div><div class="tb-name" style="font-size:16px" id="batchTitle">Batch Status</div><div class="tb-date" id="batchSub"></div></div>
+    <div><div class="tb-name" style="font-size:16px" id="batchTitle">Production Schedule</div><div class="tb-date" id="batchSub"></div></div>
     <div style="width:70px"></div>
   </div>
   <div class="search-wrap">
     <input class="search-inp" id="batchSearchInp" placeholder="Search batches…">
   </div>
+  <div id="batchScheduleHeader"></div>
   <div id="batchContent" class="page"></div>
 </div>
 
@@ -1503,7 +1504,8 @@ $('batchAuthEye').onclick=()=>{const i=$('batchAuthPw');i.type=i.type==='passwor
 function openBatchStatusScreen(){
   stopScanner(); // not a scanning screen — same rule as Settings/All Scans
   batchView='list';batchDetailCache=null;
-  $('batchTitle').textContent='Batch Status';$('batchSub').textContent='';
+  $('batchTitle').textContent='Production Schedule';$('batchSub').textContent='';
+  $('batchScheduleHeader').innerHTML='';
   $('batchSearchInp').value='';$('batchSearchInp').placeholder='Search batches…';
   show('scrBatch');
   loadBatchList();
@@ -1529,8 +1531,13 @@ function renderBatchList(q){
   // showing each label's individual scanned/not-scanned/void status.
   $('batchContent').innerHTML=rows.map(b=>{
     const pct=b.total?Math.round((b.scanned/b.total)*100):0;
+    // Job Name / Target Finish are the two production-schedule fields worth
+    // showing at a glance in the list — the rest only show once you drill in,
+    // so this row stays scannable instead of dumping all 9 fields per batch.
+    const sub=[b.job_name,b.target_finish].filter(Boolean).map(esc).join(' · ');
     return`<div class="batch-row" onclick="openBatchDetailScreen('${esc(b.batch)}')" style="cursor:pointer">
       <div class="batch-row-top"><div class="batch-name">${esc(b.batch)}</div><div class="batch-count">${b.scanned}/${b.total}</div></div>
+      ${sub?`<div class="bl-sub" style="margin-bottom:6px">${sub}</div>`:''}
       <div class="batch-bar"><div class="batch-bar-fill" style="width:${pct}%"></div></div>
     </div>`;
   }).join('');
@@ -1546,10 +1553,24 @@ async function loadBatchDetail(batch,silent){
     const data=await viewerFetch('/viewer/api/batches/'+encodeURIComponent(batch));
     batchDetailCache=data;
     $('batchSub').textContent=data.labels.length+' label'+(data.labels.length===1?'':'s');
+    $('batchScheduleHeader').innerHTML=scheduleHeaderHtml(data.schedule);
     renderBatchDetail($('batchSearchInp').value);
   }catch(e){
     if(!silent)$('batchContent').innerHTML='<div class="empty-box"><div class="et">Could not load batch</div><div class="es">'+esc(e.message)+'</div></div>';
   }
+}
+// Batch-level production-schedule fields, shown once above the label list
+// (not per label — this is one set of values for the whole batch).
+function scheduleHeaderHtml(sched){
+  if(!sched)return'';
+  const rows=[['Job Name',sched.job_name],['Floor / Work Order',sched.floor_or_work_order],
+    ['Target Finish',sched.target_finish],['Material',sched.material],['Finish',sched.finish],
+    ['Part Name',sched.part_name],['Sheet Qty',sched.sheet_qty],['Tasked',sched.tasked],
+    ['Comment',sched.comment]]
+    .concat(Object.entries(sched.extra_fields||{}))
+    .filter(([,v])=>v);
+  if(!rows.length)return'';
+  return`<div class="data-card">${rows.map(([k,v])=>`<div class="data-row"><span class="data-k">${esc(k)}</span><span class="data-v">${esc(v)}</span></div>`).join('')}</div>`;
 }
 function renderBatchDetail(q){
   q=(q||'').trim().toUpperCase();
@@ -1598,7 +1619,8 @@ $('batchSearchInp').addEventListener('input',e=>{
 $('bBackBatch').onclick=()=>{
   if(batchView==='detail'){
     batchView='list';batchDetailCache=null;
-    $('batchTitle').textContent='Batch Status';$('batchSub').textContent='';
+    $('batchTitle').textContent='Production Schedule';$('batchSub').textContent='';
+    $('batchScheduleHeader').innerHTML='';
     $('batchSearchInp').value='';$('batchSearchInp').placeholder='Search batches…';
     renderBatchList('');
   }else{

@@ -46,10 +46,33 @@
   .rep-actions{display:flex;gap:8px;align-items:center;margin-bottom:6px}
   .daterange{display:flex;gap:8px;align-items:center;margin-bottom:10px}
   .daterange input{flex:none;width:140px}
+
+  /* ── Production Schedule tab ─────────────────────────────── */
+  .tabbar{display:flex;margin-bottom:20px;border-bottom:1.5px solid var(--gray-200)}
+  .tab-btn{background:none;color:var(--gray-500);font-weight:700;padding:10px 4px;margin-right:24px;border-radius:0;border-bottom:2.5px solid transparent;font-size:14px}
+  .tab-btn.active{color:var(--blue-600);border-bottom-color:var(--blue-600)}
+  .tab-btn:hover{background:none}
+  .sched-card{cursor:pointer;flex-direction:column;align-items:stretch}
+  .sched-card:hover{border-color:var(--blue-600)}
+  .sched-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .sched-bar{height:6px;border-radius:3px;background:var(--gray-200);overflow:hidden;margin-top:8px}
+  .sched-bar-fill{height:100%;background:var(--green-700);border-radius:3px}
+  .fg{margin-bottom:12px}
+  .fg-label{display:block;font-size:12px;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}
+  .fg-input{width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit}
+  .extra-row{display:flex;gap:8px;margin-bottom:6px}
+  .extra-row input{flex:1}
+  .source-pill{font-size:11px;font-weight:800;padding:3px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:.4px;background:var(--gray-200);color:var(--gray-500)}
 </style>
 </head>
 <body>
 <div class="wrap">
+  <div class="tabbar">
+    <button class="tab-btn active" id="tabBtnOps" onclick="showTab('ops')">Operations</button>
+    <button class="tab-btn" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
+  </div>
+
+  <div id="tabOperations">
   <h1>Device Approvals</h1>
   <div class="sub">Only approved devices can write scans to the server. New phones show up here as Pending.</div>
   <div class="keybar">
@@ -104,13 +127,31 @@
   <div class="rep-sub">Notes &amp; defects by category</div>
   <div class="rep-actions"><button class="secondary" onclick="csvDownload('notes')">Download CSV</button></div>
   <div id="repNotes"></div>
+  </div>
+
+  <div id="tabSchedule" style="display:none">
+    <h1>Production Schedule</h1>
+    <div class="sub">Job name, work order, target finish, material, and more — one entry per batch. Filled in automatically by the Excel label generator, or added/edited manually here.</div>
+    <div id="scheduleList"></div>
+    <div id="scheduleDetail" style="display:none"></div>
+  </div>
 </div>
 <script>
 const $=id=>document.getElementById(id);
 let KEY=localStorage.getItem('mx_admin_key')||'';
 $('key').value=KEY;
 
-function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();}
+function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();}
+
+// ── TABS ─────────────────────────────────────────────────────
+function showTab(name){
+  const isOps=name==='ops';
+  $('tabOperations').style.display=isOps?'':'none';
+  $('tabSchedule').style.display=isOps?'none':'';
+  $('tabBtnOps').classList.toggle('active',isOps);
+  $('tabBtnSchedule').classList.toggle('active',!isOps);
+  if(!isOps)loadScheduleList();
+}
 
 async function api(path,opts){
   const r=await fetch(path,Object.assign({headers:{'X-Admin-Key':KEY,'Content-Type':'application/json'}},opts||{}));
@@ -319,6 +360,109 @@ function csvDownload(which){
   $('repFrom').value=from.toISOString().slice(0,10);
 })();
 loadReports();
+
+// ── PRODUCTION SCHEDULE ─────────────────────────────────────
+// Reuses the same /viewer/api/batches* endpoints the phone app polls
+// (requireViewer also accepts X-Admin-Key, so the api() helper above works
+// unchanged) for reading; POST /admin/api/schedule/:batch (admin-only) for
+// writing. One form serves both "add info for an existing batch" and
+// "correct what Excel sent" — it's an upsert either way.
+const SCHEDULE_FIELDS=[
+  ['job_name','Job Name'],['floor_or_work_order','Floor / Work Order'],['target_finish','Target Finish'],
+  ['material','Material'],['finish','Finish'],['part_name','Part Name'],['sheet_qty','Sheet Qty'],
+  ['comment','Comment'],['tasked','Tasked']
+];
+let scheduleBatches=[];
+
+async function loadScheduleList(){
+  if(!KEY){$('scheduleList').innerHTML='<div class="empty">Enter the admin key above to load.</div>';return;}
+  try{
+    const data=await api('/viewer/api/batches');
+    scheduleBatches=data.batches||[];
+    renderScheduleList();
+  }catch(e){$('scheduleList').innerHTML='<div class="empty">Could not load — wrong key, or server unreachable.</div>';}
+}
+function renderScheduleList(){
+  $('scheduleDetail').style.display='none';
+  $('scheduleList').style.display='';
+  if(!scheduleBatches.length){$('scheduleList').innerHTML='<div class="empty">No batches registered yet.</div>';return;}
+  $('scheduleList').innerHTML=scheduleBatches.map(b=>{
+    const pct=b.total?Math.round((b.scanned/b.total)*100):0;
+    const sub=[b.job_name,b.target_finish].filter(Boolean).map(esc).join(' · ');
+    return`<div class="card sched-card" onclick="openScheduleDetail('${esc(b.batch)}')">
+      <div class="sched-top"><div class="name">${esc(b.batch)}</div><div class="meta">${b.scanned}/${b.total} scanned</div></div>
+      ${sub?`<div class="meta">${sub}</div>`:''}
+      <div class="sched-bar"><div class="sched-bar-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+let currentScheduleBatch=null,currentExtraFields={};
+
+async function openScheduleDetail(batch){
+  currentScheduleBatch=batch;
+  $('scheduleList').style.display='none';
+  $('scheduleDetail').style.display='';
+  $('scheduleDetail').innerHTML='<div class="empty">Loading…</div>';
+  try{
+    const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
+    renderScheduleDetail(batch,data.schedule||{});
+  }catch(e){$('scheduleDetail').innerHTML='<div class="empty">Could not load this batch.</div>';}
+}
+function renderScheduleDetail(batch,sched){
+  currentExtraFields=Object.assign({},sched.extra_fields||{});
+  const sourcePill=sched.schedule_source?`<span class="source-pill">${esc(sched.schedule_source)}</span>`:'';
+  $('scheduleDetail').innerHTML=`
+    <button class="secondary" onclick="renderScheduleList()" style="margin-bottom:14px">&larr; All Batches</button>
+    <div class="card" style="flex-direction:column;align-items:stretch">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="name">${esc(batch)}</div>${sourcePill}
+      </div>
+      ${SCHEDULE_FIELDS.map(([k,label])=>`
+        <div class="fg"><label class="fg-label">${esc(label)}</label>
+          <input class="fg-input" id="sf_${k}" value="${esc(sched[k]||'')}"></div>`).join('')}
+      <label class="fg-label" style="margin-top:4px">Extra Fields</label>
+      <div id="extraFieldRows"></div>
+      <button class="secondary" onclick="addExtraFieldRow()" style="align-self:flex-start;margin-bottom:12px">+ Add Field</button>
+      <button onclick="saveSchedule()">Save</button>
+      ${sched.schedule_updated_at?`<div class="meta" style="margin-top:8px">Last updated ${fmt(sched.schedule_updated_at)}${sched.schedule_updated_by?' by '+esc(sched.schedule_updated_by):''}</div>`:''}
+    </div>`;
+  renderExtraFieldRows();
+}
+function renderExtraFieldRows(){
+  const keys=Object.keys(currentExtraFields);
+  $('extraFieldRows').innerHTML=keys.map(k=>`
+    <div class="extra-row">
+      <input placeholder="Field name" value="${esc(k)}" onchange="renameExtraField('${esc(k)}',this.value)">
+      <input placeholder="Value" value="${esc(currentExtraFields[k])}" onchange="currentExtraFields['${esc(k)}']=this.value">
+      <button class="danger" onclick="removeExtraField('${esc(k)}')">Remove</button>
+    </div>`).join('');
+}
+function addExtraFieldRow(){
+  let n=1,key='Field '+n;
+  while(currentExtraFields.hasOwnProperty(key)){n++;key='Field '+n;}
+  currentExtraFields[key]='';
+  renderExtraFieldRows();
+}
+function renameExtraField(oldKey,newKey){
+  newKey=newKey.trim();
+  if(!newKey||newKey===oldKey)return;
+  const v=currentExtraFields[oldKey];
+  delete currentExtraFields[oldKey];
+  currentExtraFields[newKey]=v;
+  renderExtraFieldRows();
+}
+function removeExtraField(key){delete currentExtraFields[key];renderExtraFieldRows();}
+
+async function saveSchedule(){
+  const body={extra_fields:currentExtraFields};
+  SCHEDULE_FIELDS.forEach(([k])=>{body[k]=$('sf_'+k).value.trim();});
+  try{
+    await api('/admin/api/schedule/'+encodeURIComponent(currentScheduleBatch),{method:'POST',body:JSON.stringify(body)});
+    await loadScheduleList();
+    openScheduleDetail(currentScheduleBatch);
+  }catch(e){alert('Could not save — check the admin key and try again.');}
+}
 </script>
 </body>
 </html>

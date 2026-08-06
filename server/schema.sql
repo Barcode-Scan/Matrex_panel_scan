@@ -103,3 +103,30 @@ CREATE TABLE IF NOT EXISTS parts_panel (
   colour        TEXT,
   generated_on  TEXT
 );
+
+-- ── PRODUCTION SCHEDULE — one row per batch, batch-level metadata that
+-- doesn't belong on any individual label (job name, work order, target
+-- finish, material, etc.). Separate from parts_panel (per-label, write-once
+-- from Excel) — this can be created by Excel OR filled in manually later
+-- from the admin dashboard for batches that predate this feature, and can
+-- be corrected after the fact, so it's upsert, not insert-once.
+-- extra_fields is a JSON object (stringified) — the one flexible/ad hoc
+-- extension point in this schema, editable as key/value pairs from the
+-- admin UI, for anything not worth a real column yet.
+CREATE TABLE IF NOT EXISTS production_schedule (
+  batch               TEXT PRIMARY KEY,
+  job_name            TEXT,
+  floor_or_work_order TEXT,
+  target_finish       TEXT,
+  material            TEXT,
+  finish              TEXT,
+  part_name           TEXT,
+  sheet_qty           TEXT,
+  comment             TEXT,
+  tasked              TEXT,
+  extra_fields        TEXT,
+  source              TEXT NOT NULL DEFAULT 'MANUAL',  -- 'EXCEL' | 'MANUAL'
+  created_at          TEXT NOT NULL,
+  updated_at          TEXT,
+  updated_by          TEXT
+);

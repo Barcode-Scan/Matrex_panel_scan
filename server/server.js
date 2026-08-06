@@ -231,6 +231,74 @@ const insertPartsPanel = db.prepare(`
 `);
 const getPartsIndexRow = db.prepare('SELECT unique_id FROM parts_index WHERE unique_id = ?');
 
+// ── PRODUCTION SCHEDULE — batch-level metadata (job name, work order,
+// target finish, material, finish, part name, sheet qty, comment, tasked),
+// separate from parts_panel's per-label fields. Written by Excel at
+// register time OR filled in manually later from the admin dashboard for
+// batches that predate this feature — upsert, not insert-once, so either
+// side can correct it after the fact. Only fields actually present in the
+// request overwrite the stored value, so a partial edit never blanks out
+// fields it didn't touch. extra_fields is the one flexible/ad hoc extension
+// point — a JSON object, stored stringified, for anything not worth a real
+// column yet.
+const SCHEDULE_FIELDS = ['job_name', 'floor_or_work_order', 'target_finish', 'material', 'finish', 'part_name', 'sheet_qty', 'comment', 'tasked'];
+const upsertProductionSchedule = db.prepare(`
+  INSERT INTO production_schedule
+    (batch, job_name, floor_or_work_order, target_finish, material, finish,
+     part_name, sheet_qty, comment, tasked, extra_fields, source, created_at, updated_at, updated_by)
+  VALUES
+    (@batch, @job_name, @floor_or_work_order, @target_finish, @material, @finish,
+     @part_name, @sheet_qty, @comment, @tasked, @extra_fields, @source, @now, @now, @updated_by)
+  ON CONFLICT(batch) DO UPDATE SET
+    job_name=excluded.job_name, floor_or_work_order=excluded.floor_or_work_order,
+    target_finish=excluded.target_finish, material=excluded.material, finish=excluded.finish,
+    part_name=excluded.part_name, sheet_qty=excluded.sheet_qty, comment=excluded.comment,
+    tasked=excluded.tasked, extra_fields=excluded.extra_fields,
+    source=excluded.source, updated_at=excluded.updated_at, updated_by=excluded.updated_by
+`);
+const getProductionSchedule = db.prepare('SELECT * FROM production_schedule WHERE batch = ?');
+
+function hasScheduleFields(body) {
+  return SCHEDULE_FIELDS.some(f => body[f] !== undefined && body[f] !== null && String(body[f]).trim() !== '')
+    || (body.extra_fields && typeof body.extra_fields === 'object' && Object.keys(body.extra_fields).length > 0);
+}
+
+function upsertSchedule(batch, body, source, updatedBy) {
+  const existing = getProductionSchedule.get(batch) || {};
+  const now = new Date().toISOString();
+  let extraFields = existing.extra_fields || null;
+  if (body.extra_fields && typeof body.extra_fields === 'object') {
+    extraFields = JSON.stringify(body.extra_fields);
+  }
+  const params = { batch, source, now, updated_by: updatedBy || null, extra_fields: extraFields };
+  for (const f of SCHEDULE_FIELDS) {
+    const v = body[f];
+    params[f] = (v !== undefined && v !== null && String(v).trim() !== '') ? String(v) : (existing[f] || null);
+  }
+  upsertProductionSchedule.run(params);
+}
+
+function formatSchedule(row) {
+  if (!row) return null;
+  let extra = {};
+  if (row.extra_fields) { try { extra = JSON.parse(row.extra_fields); } catch (e) { extra = {}; } }
+  return {
+    job_name: row.job_name || null,
+    floor_or_work_order: row.floor_or_work_order || null,
+    target_finish: row.target_finish || null,
+    material: row.material || null,
+    finish: row.finish || null,
+    part_name: row.part_name || null,
+    sheet_qty: row.sheet_qty || null,
+    comment: row.comment || null,
+    tasked: row.tasked || null,
+    extra_fields: extra,
+    schedule_source: row.source || null,
+    schedule_updated_at: row.updated_at || null,
+    schedule_updated_by: row.updated_by || null
+  };
+}
+
 app.post('/parts/panel/register', requireIngest, (req, res) => {
   const { batch, rows } = req.body || {};
   if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ ok: false, error: 'rows array required' });
@@ -267,7 +335,23 @@ app.post('/parts/panel/register', requireIngest, (req, res) => {
     return res.status(500).json({ ok: false, error: e.message });
   }
 
+  const scheduleBatch = String(batch || '').trim();
+  if (scheduleBatch && hasScheduleFields(req.body)) {
+    upsertSchedule(scheduleBatch, req.body, 'EXCEL', 'excel-macro');
+  }
+
   res.json({ ok: true, inserted, already_existed: alreadyExisted, skipped, total: rows.length });
+});
+
+// Manual add/edit of a batch's production-schedule metadata from the admin
+// dashboard — same upsert as the Excel path above (§ SCHEDULE_FIELDS), so
+// this also covers correcting a batch Excel already sent, not just filling
+// in ones that predate this feature.
+app.post('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
+  const batch = String(req.params.batch || '').trim();
+  if (!batch) return res.status(400).json({ ok: false, error: 'batch required' });
+  upsertSchedule(batch, req.body || {}, 'MANUAL', (req.body && req.body.updated_by) || 'ADMIN');
+  res.json({ ok: true, batch, schedule: formatSchedule(getProductionSchedule.get(batch)) });
 });
 
 // ── SCAN-TIME MATCH — the phone calls this for every scanned ID, live.
@@ -456,7 +540,11 @@ app.get('/viewer/api/batches', requireViewer, (req, res) => {
     WHERE pp.batch IS NOT NULL AND pp.batch != ''
     GROUP BY pp.batch ORDER BY added_at DESC
   `).all();
-  res.json({ ok: true, batches: rows });
+  // Production-schedule metadata is batch-level, not per-label — enrich
+  // each row here rather than adding a second request the phone/admin
+  // would have to make (this endpoint is already polled every 5s).
+  const batches = rows.map(r => Object.assign({}, r, formatSchedule(getProductionSchedule.get(r.batch))));
+  res.json({ ok: true, batches });
 });
 
 app.get('/viewer/api/batches/:batch', requireViewer, (req, res) => {
@@ -470,7 +558,8 @@ app.get('/viewer/api/batches/:batch', requireViewer, (req, res) => {
     WHERE pp.batch = ?
     ORDER BY pi.scanned ASC, pp.tag ASC
   `).all(req.params.batch);
-  res.json({ ok: true, batch: req.params.batch, labels: rows });
+  const schedule = formatSchedule(getProductionSchedule.get(req.params.batch));
+  res.json({ ok: true, batch: req.params.batch, schedule, labels: rows });
 });
 
 // Read-only notes lookup for the Batch Status label-detail modal. Deliberately
