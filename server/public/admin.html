@@ -61,7 +61,19 @@
   .sched-table input:focus{outline:1.5px solid var(--blue-600);border-radius:4px}
   .sched-grid{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:16px}
   .sched-grid th{position:sticky;top:0;background:var(--white);border-bottom:2px solid var(--gray-200);padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;z-index:1}
-  .sched-grid th select{display:block;margin-top:4px;width:100%;font-size:11px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--gray-900);border:1px solid var(--gray-200);border-radius:4px;padding:2px 4px;background:var(--white);font-family:inherit}
+  .colf-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:4px;border:none;background:var(--gray-200);color:var(--gray-500);border-radius:3px;font-size:9px;line-height:1;cursor:pointer;vertical-align:middle}
+  .colf-btn.active{background:var(--blue-600);color:#fff}
+  .colf-pop{display:none;position:fixed;z-index:50;width:240px;background:var(--white);border:1.5px solid var(--gray-200);border-radius:10px;box-shadow:0 8px 24px rgba(16,24,40,.16);padding:10px;font-size:13px}
+  .colf-sortrow{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--gray-200)}
+  .colf-sortbtn{background:none;color:var(--gray-900);font-weight:500;text-align:left;padding:5px 6px;border-radius:6px}
+  .colf-sortbtn:hover{background:var(--bg)}
+  .colf-search{width:100%;padding:6px 8px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:12.5px;font-family:inherit;margin-bottom:8px}
+  .colf-list{max-height:220px;overflow-y:auto;margin-bottom:8px}
+  .colf-item{display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:12.5px;cursor:pointer}
+  .colf-item.colf-all{font-weight:700;border-bottom:1px solid var(--gray-200);margin-bottom:4px;padding-bottom:6px}
+  .colf-item input{margin:0;flex-shrink:0}
+  .colf-actions{display:flex;gap:8px}
+  .colf-actions button{flex:1;padding:7px;font-size:12.5px}
   .sched-grid td{padding:8px 10px;border-bottom:1px solid var(--gray-200);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
   .sched-grid tbody tr{cursor:pointer}
   .sched-grid tbody tr:hover td{background:var(--bg)}
@@ -152,28 +164,29 @@
 
   <div id="tabSchedule" style="display:none">
     <h1>Production Schedule</h1>
-    <div class="sub">Job name, work order, target finish, material, and more — one row per batch. Filled in automatically by the Excel label generator, or click any row to edit manually. Use the dropdown under a column header to filter by that column.</div>
+    <div class="sub">Job name, work order, target finish, material, and more — one row per batch. Filled in automatically by the Excel label generator, or click any row to edit manually. Click a column header's arrow to filter or sort it, same as Excel's AutoFilter — filters on different columns combine (AND).</div>
     <div style="overflow-x:auto">
     <table class="sched-grid">
       <thead>
-        <tr>
-          <th>Job<select id="fJob" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
-          <th>Floor or Work Order<select id="fFloor" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
-          <th>Target Finish<select id="fTargetFinish" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
-          <th>Material<select id="fMaterial" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
-          <th>Finish<select id="fFinish" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
-          <th>Part Name<select id="fPartName" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
-          <th>Batch Name<select id="fBatch" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
-          <th>Part Qty<select id="fStatus" onchange="renderScheduleGrid()"><option value="">All</option><option value="complete">Complete</option><option value="progress">In Progress</option><option value="none">Not Started</option></select></th>
-          <th>Sheet Qty<select id="fSheetQty" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
-          <th>Comment<select id="fComment" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
-          <th>Tasked<select id="fTasked" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
-        </tr>
+        <tr id="scheduleHeadRow"></tr>
       </thead>
       <tbody id="scheduleTbody"></tbody>
     </table>
     </div>
     <div id="scheduleDetail"></div>
+  </div>
+</div>
+
+<div class="colf-pop" id="colFilterPopover">
+  <div class="colf-sortrow">
+    <button class="colf-sortbtn" onclick="sortGridBy(true)">&#8593; Sort A to Z</button>
+    <button class="colf-sortbtn" onclick="sortGridBy(false)">&#8595; Sort Z to A</button>
+  </div>
+  <input class="colf-search" id="colfSearch" placeholder="Search values…" oninput="renderColFilterList()">
+  <div class="colf-list" id="colfList"></div>
+  <div class="colf-actions">
+    <button onclick="applyColFilter()">OK</button>
+    <button class="secondary" onclick="closeColFilter()">Cancel</button>
   </div>
 </div>
 <script>
@@ -414,49 +427,119 @@ const SCHEDULE_FIELDS=[
 ];
 let scheduleBatches=[];
 
+const GRID_COLUMNS=[
+  ['job_name','Job'],['floor_or_work_order','Floor or Work Order'],['target_finish','Target Finish'],
+  ['material','Material'],['finish','Finish'],['part_name','Part Name'],['batch','Batch Name'],
+  ['status','Part Qty'],['sheet_qty','Sheet Qty'],['comment','Comment'],['tasked','Tasked']
+];
+function renderScheduleHead(){
+  $('scheduleHeadRow').innerHTML=GRID_COLUMNS.map(([key,label])=>
+    `<th>${esc(label)}<button class="colf-btn" id="colfbtn_${key}" onclick="openColFilter(event,'${key}','${esc(label)}')">&#9660;</button></th>`
+  ).join('');
+}
 async function loadScheduleList(){
+  if(!$('scheduleHeadRow').children.length)renderScheduleHead();
   if(!KEY){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Enter the admin key above to load.</td></tr>';return;}
   try{
     const data=await api('/viewer/api/batches');
     scheduleBatches=data.batches||[];
-    populateGridFilterOptions();
     renderScheduleGrid();
   }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
-const GRID_FILTER_FIELDS=[['fJob','job_name'],['fFloor','floor_or_work_order'],['fTargetFinish','target_finish'],
-  ['fMaterial','material'],['fFinish','finish'],['fPartName','part_name'],['fBatch','batch'],
-  ['fSheetQty','sheet_qty'],['fComment','comment'],['fTasked','tasked']];
-function populateGridFilterOptions(){
-  GRID_FILTER_FIELDS.forEach(([id,key])=>{
-    const values=[...new Set(scheduleBatches.map(b=>b[key]).filter(Boolean))].sort();
-    const current=$(id).value;
-    $(id).innerHTML='<option value="">All</option>'+values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
-    $(id).value=current;
-  });
+
+// ── AutoFilter (Excel-style: checkbox multi-select per column, search,
+// sort A-Z/Z-A from the same dropdown, columns AND together) ──────────
+function rowStatus(b){return b.total>0&&b.scanned===b.total?'complete':b.scanned>0?'progress':'none';}
+function statusLabel(v){return v==='complete'?'Complete':v==='progress'?'In Progress':'Not Started';}
+function colValue(b,key){return key==='status'?rowStatus(b):(b[key]||'');}
+function uniqueValuesFor(key){
+  if(key==='status')return['complete','progress','none'];
+  return[...new Set(scheduleBatches.map(b=>b[key]).filter(Boolean))].sort();
 }
-// One row per batch, a filter dropdown under every column header (AND'd
-// together) - Part Qty's filter is by completion state instead of raw
-// value, since scanned/total is a computed progress figure, not a stored
-// field. Clicking a row opens the same edit panel used below, without
-// hiding the grid, so switching between batches (or re-filtering) doesn't
-// require navigating away and back.
+
+let columnFilters={};      // key -> Set of checked values (absent = no filter on that column)
+let gridSort=null;         // {key, asc}
+let colfKey=null,colfLabel=null,colfPending=new Set();
+
+function openColFilter(evt,key,label){
+  evt.stopPropagation();
+  colfKey=key;colfLabel=label;
+  const values=uniqueValuesFor(key);
+  colfPending=new Set(columnFilters[key]?[...columnFilters[key]]:values);
+  $('colfSearch').value='';
+  renderColFilterList();
+  const r=evt.currentTarget.getBoundingClientRect();
+  const pop=$('colFilterPopover');
+  pop.style.top=(r.bottom+4)+'px';
+  pop.style.left=Math.min(r.left,window.innerWidth-260)+'px';
+  pop.style.display='block';
+}
+function renderColFilterList(){
+  const q=$('colfSearch').value.trim().toLowerCase();
+  const values=uniqueValuesFor(colfKey).filter(v=>(colfKey==='status'?statusLabel(v):v).toLowerCase().includes(q));
+  const allChecked=values.length>0&&values.every(v=>colfPending.has(v));
+  $('colfList').innerHTML=`
+    <label class="colf-item colf-all"><input type="checkbox" ${allChecked?'checked':''} onchange="toggleAllColf(this.checked)"> (Select All)</label>
+    ${values.map(v=>{
+      const label=colfKey==='status'?statusLabel(v):esc(v);
+      return`<label class="colf-item"><input type="checkbox" ${colfPending.has(v)?'checked':''} onchange="toggleColfValue('${esc(v)}',this.checked)"> ${label}</label>`;
+    }).join('')}`;
+}
+function toggleAllColf(checked){
+  const values=uniqueValuesFor(colfKey);
+  if(checked)values.forEach(v=>colfPending.add(v));else values.forEach(v=>colfPending.delete(v));
+  renderColFilterList();
+}
+function toggleColfValue(v,checked){
+  if(checked)colfPending.add(v);else colfPending.delete(v);
+}
+function applyColFilter(){
+  const allValues=uniqueValuesFor(colfKey);
+  if(colfPending.size>=allValues.length)delete columnFilters[colfKey];
+  else columnFilters[colfKey]=new Set(colfPending);
+  closeColFilter();
+  renderScheduleGrid();
+}
+function closeColFilter(){
+  $('colFilterPopover').style.display='none';
+  colfKey=null;
+}
+function sortGridBy(asc){
+  gridSort=colfKey?{key:colfKey,asc}:gridSort;
+  closeColFilter();
+  renderScheduleGrid();
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#colFilterPopover')&&!e.target.closest('.colf-btn'))closeColFilter();
+});
+
+// One row per batch, an Excel-style AutoFilter dropdown on every column
+// header (columns AND together, same as Excel) - Part Qty filters/sorts
+// by completion state since scanned/total is computed, not stored.
+// Clicking a row opens the same edit panel used below, without hiding
+// the grid, so switching batches (or re-filtering) never loses context.
 function renderScheduleGrid(){
   let rows=scheduleBatches.filter(b=>{
-    for(const [id,key] of GRID_FILTER_FIELDS){
-      const want=$(id).value;
-      if(want&&(b[key]||'')!==want)return false;
-    }
-    const wantStatus=$('fStatus').value;
-    if(wantStatus){
-      const state=b.total>0&&b.scanned===b.total?'complete':b.scanned>0?'progress':'none';
-      if(state!==wantStatus)return false;
+    for(const key in columnFilters){
+      if(!columnFilters[key].has(colValue(b,key)))return false;
     }
     return true;
+  });
+  if(gridSort){
+    const{key,asc}=gridSort;
+    rows=[...rows].sort((a,b)=>{
+      const av=String(colValue(a,key)),bv=String(colValue(b,key));
+      return asc?av.localeCompare(bv):bv.localeCompare(av);
+    });
+  }
+  GRID_COLUMNS.forEach(([key])=>{
+    const btn=$('colfbtn_'+key);
+    if(btn)btn.classList.toggle('active',!!columnFilters[key]);
   });
   if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="11" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;return;}
   $('scheduleTbody').innerHTML=rows.map(b=>{
     const pct=b.total?Math.round((b.scanned/b.total)*100):0;
-    const state=b.total>0&&b.scanned===b.total?'complete':b.scanned>0?'progress':'none';
+    const state=rowStatus(b);
     return`<tr onclick="openScheduleDetail('${esc(b.batch)}')">
       <td>${esc(b.job_name||'')}</td>
       <td>${esc(b.floor_or_work_order||'')}</td>
