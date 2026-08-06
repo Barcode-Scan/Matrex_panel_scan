@@ -63,6 +63,13 @@
   .extra-row{display:flex;gap:8px;margin-bottom:6px}
   .extra-row input{flex:1}
   .source-pill{font-size:11px;font-weight:800;padding:3px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:.4px;background:var(--gray-200);color:var(--gray-500)}
+  .bl-row{display:flex;align-items:center;gap:12px;background:var(--white);border:1.5px solid var(--gray-200);border-radius:10px;padding:10px 12px;margin-bottom:6px}
+  .bl-dot{width:8px;height:8px;border-radius:50%;background:var(--gray-200);flex-shrink:0}
+  .bl-dot.scanned{background:var(--green-700)}
+  .bl-dot.void{background:var(--red-600)}
+  .bl-info{flex:1;min-width:0}
+  .bl-name{font-size:13px;font-weight:700}
+  .bl-sub{font-size:12px;color:var(--gray-500);margin-top:2px}
 </style>
 </head>
 <body>
@@ -406,18 +413,20 @@ async function openScheduleDetail(batch){
   $('scheduleDetail').innerHTML='<div class="empty">Loading…</div>';
   try{
     const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
-    renderScheduleDetail(batch,data.schedule||{});
+    renderScheduleDetail(batch,data.schedule||{},data.labels||[]);
   }catch(e){$('scheduleDetail').innerHTML='<div class="empty">Could not load this batch.</div>';}
 }
-function renderScheduleDetail(batch,sched){
+function renderScheduleDetail(batch,sched,labels){
   currentExtraFields=Object.assign({},sched.extra_fields||{});
   const sourcePill=sched.schedule_source?`<span class="source-pill">${esc(sched.schedule_source)}</span>`:'';
+  const scannedCount=labels.filter(l=>l.scanned==='Yes').length;
   $('scheduleDetail').innerHTML=`
     <button class="secondary" onclick="renderScheduleList()" style="margin-bottom:14px">&larr; All Batches</button>
     <div class="card" style="flex-direction:column;align-items:stretch">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div class="name">${esc(batch)}</div>${sourcePill}
       </div>
+      <div class="meta" style="margin-bottom:10px">${scannedCount}/${labels.length} scanned</div>
       ${SCHEDULE_FIELDS.map(([k,label])=>`
         <div class="fg"><label class="fg-label">${esc(label)}</label>
           <input class="fg-input" id="sf_${k}" value="${esc(sched[k]||'')}"></div>`).join('')}
@@ -426,8 +435,22 @@ function renderScheduleDetail(batch,sched){
       <button class="secondary" onclick="addExtraFieldRow()" style="align-self:flex-start;margin-bottom:12px">+ Add Field</button>
       <button onclick="saveSchedule()">Save</button>
       ${sched.schedule_updated_at?`<div class="meta" style="margin-top:8px">Last updated ${fmt(sched.schedule_updated_at)}${sched.schedule_updated_by?' by '+esc(sched.schedule_updated_by):''}</div>`:''}
-    </div>`;
+    </div>
+    <h2>Labels in this Batch</h2>
+    <div>${labelRowsHtml(labels)}</div>`;
   renderExtraFieldRows();
+}
+// Same read-only per-label view the phone app's Production Schedule
+// drill-down shows (project/floor/type/size/qty/colour + scan status) -
+// admin sees the same picture, just alongside the editable fields above.
+function labelRowsHtml(labels){
+  if(!labels.length)return'<div class="empty">No labels in this batch.</div>';
+  return labels.map(l=>{
+    const dc=l.void==='Yes'?'void':l.scanned==='Yes'?'scanned':'';
+    const statusText=l.void==='Yes'?'VOID':l.scanned==='Yes'?'Scanned':'Not scanned';
+    const sub=[l.project,l.floor,l.part_type,[l.width,l.height].filter(Boolean).join(' X '),l.qty,l.colour].filter(Boolean).map(esc).join(' · ');
+    return`<div class="bl-row"><div class="bl-dot ${dc}"></div><div class="bl-info"><div class="bl-name">${esc(l.tag||l.unique_id)}</div><div class="bl-sub">${sub?sub+' · ':''}${esc(statusText)}</div></div></div>`;
+  }).join('');
 }
 function renderExtraFieldRows(){
   const keys=Object.keys(currentExtraFields);
