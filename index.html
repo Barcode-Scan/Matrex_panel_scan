@@ -209,6 +209,14 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .search-wrap{padding:12px 16px;background:rgba(255,255,255,.72);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid rgba(0,0,0,.06)}
 .search-inp{width:100%;background:var(--gray-100);border:1.5px solid transparent;color:var(--gray-900);font-size:17px;padding:10px 16px 10px 40px;border-radius:var(--pill);font-family:inherit;outline:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7' stroke='%2386868B' stroke-width='2'/%3E%3Cpath d='m20 20-3-3' stroke='%2386868B' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:14px center;transition:all .2s var(--ease)}
 .search-inp:focus{background-color:var(--white);border-color:var(--blue-600);box-shadow:0 0 0 4px var(--blue-50)}
+select.search-inp{background-image:none;padding-left:16px;color:var(--gray-900)}
+
+/* ── Production Schedule table (matches the printed-label look) ── */
+.sched-table{width:100%;border-collapse:collapse;margin-bottom:14px;border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow-sm)}
+.sched-table td{border:1px solid var(--gray-100);padding:10px 12px;font-size:13px;font-weight:700;color:var(--gray-900);background:var(--white);vertical-align:middle}
+.sched-table td.stc-batch{font-weight:800;font-size:15px}
+.sched-table td.stc-progress{font-weight:800;text-align:right}
+.sched-table td.stc-empty{color:var(--gray-300);text-transform:uppercase;font-size:11px;letter-spacing:.3px;font-weight:700}
 #fullList{flex:1;overflow-y:auto;background:var(--white)}
 .fl-row{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--gray-100)}
 .fl-row:last-child{border-bottom:0}
@@ -226,12 +234,6 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .flag-pill{display:inline-block;border-radius:var(--pill);font-size:11px;font-weight:800;padding:2px 7px;margin-left:5px;letter-spacing:.4px}
 .fp-dup{background:var(--amber-50);color:var(--amber-700)}.fp-void{background:var(--red-50);color:var(--red-600)}.fp-unknown{background:var(--red-50);color:var(--red-600)}.fp-unverified{background:var(--amber-50);color:var(--amber-700)}.fp-note{background:var(--blue-50);color:var(--blue-600)}
 /* BATCH STATUS */
-.batch-row{background:var(--white);border-radius:var(--r);padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow-sm)}
-.batch-row-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px}
-.batch-name{font-size:15px;font-weight:700;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.batch-count{font-size:13px;font-weight:600;color:var(--gray-500);flex-shrink:0}
-.batch-bar{height:6px;border-radius:3px;background:var(--gray-100);overflow:hidden}
-.batch-bar-fill{height:100%;background:var(--green-700);border-radius:3px;transition:width .3s var(--ease)}
 .bl-row{display:flex;align-items:center;gap:12px;background:var(--white);border-radius:var(--r);padding:12px 16px;margin-bottom:8px;box-shadow:var(--shadow-sm);cursor:pointer}
 .bl-dot{width:8px;height:8px;border-radius:50%;background:var(--gray-300);flex-shrink:0}
 .bl-dot.scanned{background:var(--green-700)}.bl-dot.void{background:var(--red-600)}
@@ -466,9 +468,14 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
     <div style="width:70px"></div>
   </div>
   <div class="search-wrap">
-    <input class="search-inp" id="batchSearchInp" placeholder="Search batches…">
+    <select class="search-inp" id="batchPicker">
+      <option value="">Select a batch…</option>
+    </select>
   </div>
   <div id="batchScheduleHeader"></div>
+  <div class="search-wrap" id="labelSearchWrap" style="display:none">
+    <input class="search-inp" id="batchSearchInp" placeholder="Search this batch…">
+  </div>
   <div id="batchContent" class="page"></div>
 </div>
 
@@ -1506,7 +1513,10 @@ function openBatchStatusScreen(){
   batchView='list';batchDetailCache=null;
   $('batchTitle').textContent='Production Schedule';$('batchSub').textContent='';
   $('batchScheduleHeader').innerHTML='';
-  $('batchSearchInp').value='';$('batchSearchInp').placeholder='Search batches…';
+  $('batchPicker').value='';
+  $('labelSearchWrap').style.display='none';
+  $('batchSearchInp').value='';
+  $('batchContent').innerHTML='';
   show('scrBatch');
   loadBatchList();
   clearInterval(batchRefreshTimer);
@@ -1518,33 +1528,25 @@ async function loadBatchList(){
   try{
     const data=await viewerFetch('/viewer/api/batches');
     batchListCache=data.batches||[];
-    renderBatchList($('batchSearchInp').value);
+    renderBatchPicker();
   }catch(e){
     $('batchContent').innerHTML='<div class="empty-box"><div class="et">Could not load batches</div><div class="es">'+esc(e.message)+'</div></div>';
   }
 }
-function renderBatchList(q){
-  q=(q||'').trim().toUpperCase();
-  const rows=q?batchListCache.filter(b=>b.batch.toUpperCase().includes(q)):batchListCache;
-  if(!rows.length){$('batchContent').innerHTML='<div class="empty-box"><div class="et">'+(q?'No matches':'No batches registered yet')+'</div></div>';return;}
-  // Tapping a row opens the per-label detail screen (openBatchDetailScreen)
-  // showing each label's individual scanned/not-scanned/void status.
-  $('batchContent').innerHTML=rows.map(b=>{
-    const pct=b.total?Math.round((b.scanned/b.total)*100):0;
-    // Job Name / Target Finish are the two production-schedule fields worth
-    // showing at a glance in the list — the rest only show once you drill in,
-    // so this row stays scannable instead of dumping all 9 fields per batch.
-    const sub=[b.job_name,b.target_finish].filter(Boolean).map(esc).join(' · ');
-    return`<div class="batch-row" onclick="openBatchDetailScreen('${esc(b.batch)}')" style="cursor:pointer">
-      <div class="batch-row-top"><div class="batch-name">${esc(b.batch)}</div><div class="batch-count">${b.scanned}/${b.total}</div></div>
-      ${sub?`<div class="bl-sub" style="margin-bottom:6px">${sub}</div>`:''}
-      <div class="batch-bar"><div class="batch-bar-fill" style="width:${pct}%"></div></div>
-    </div>`;
-  }).join('');
+function renderBatchPicker(){
+  const current=$('batchPicker').value;
+  const options=batchListCache.map(b=>`<option value="${esc(b.batch)}">${esc(b.batch)} (${b.scanned}/${b.total})</option>`).join('');
+  $('batchPicker').innerHTML=`<option value="">Select a batch…</option>${options}`;
+  $('batchPicker').value=current; // preserve selection across the 5s refresh
 }
+$('batchPicker').addEventListener('change',e=>{
+  if(e.target.value)openBatchDetailScreen(e.target.value);
+});
 window.openBatchDetailScreen=function(batch){
   batchView='detail';
+  $('batchPicker').value=batch;
   $('batchTitle').textContent=batch;$('batchSub').textContent='Loading…';
+  $('labelSearchWrap').style.display='';
   $('batchSearchInp').value='';$('batchSearchInp').placeholder='Search this batch…';
   loadBatchDetail(batch);
 };
@@ -1552,25 +1554,40 @@ async function loadBatchDetail(batch,silent){
   try{
     const data=await viewerFetch('/viewer/api/batches/'+encodeURIComponent(batch));
     batchDetailCache=data;
+    const scanned=data.labels.filter(l=>l.scanned==='Yes').length;
     $('batchSub').textContent=data.labels.length+' label'+(data.labels.length===1?'':'s');
-    $('batchScheduleHeader').innerHTML=scheduleHeaderHtml(data.schedule);
+    $('batchScheduleHeader').innerHTML=scheduleHeaderHtml(batch,data.schedule,scanned,data.labels.length);
     renderBatchDetail($('batchSearchInp').value);
   }catch(e){
     if(!silent)$('batchContent').innerHTML='<div class="empty-box"><div class="et">Could not load batch</div><div class="es">'+esc(e.message)+'</div></div>';
   }
 }
-// Batch-level production-schedule fields, shown once above the label list
-// (not per label — this is one set of values for the whole batch).
-function scheduleHeaderHtml(sched){
-  if(!sched)return'';
-  const rows=[['Job Name',sched.job_name],['Floor / Work Order',sched.floor_or_work_order],
-    ['Target Finish',sched.target_finish],['Material',sched.material],['Finish',sched.finish],
-    ['Part Name',sched.part_name],['Sheet Qty',sched.sheet_qty],['Tasked',sched.tasked],
-    ['Comment',sched.comment]]
-    .concat(Object.entries(sched.extra_fields||{}))
-    .filter(([,v])=>v);
-  if(!rows.length)return'';
-  return`<div class="data-card">${rows.map(([k,v])=>`<div class="data-row"><span class="data-k">${esc(k)}</span><span class="data-v">${esc(v)}</span></div>`).join('')}</div>`;
+// Batch-level production-schedule fields, shown as a table above the label
+// list (not per label — one set of values for the whole batch), laid out
+// to match the physical label sheet's grid look. Empty fields show their
+// name dimmed, like a placeholder, instead of just being blank.
+function scheduleHeaderHtml(batch,sched,scanned,total){
+  sched=sched||{};
+  const cell=(v,label)=>v?esc(v):`<span class="stc-empty">${esc(label)}</span>`;
+  const extra=Object.entries(sched.extra_fields||{}).filter(([,v])=>v);
+  return`<table class="sched-table">
+    <tr>
+      <td class="stc-batch">${esc(batch)}</td>
+      <td>${cell(sched.target_finish,'TARGET FINISH')}</td>
+      <td colspan="2">${cell(sched.material,'MATERIAL')}</td>
+      <td class="stc-progress">${scanned}/${total}</td>
+    </tr>
+    <tr>
+      <td>${cell(sched.job_name,'JOB')}</td>
+      <td>${cell(sched.floor_or_work_order,'FLOOR OR WORK ORDER')}</td>
+      <td>${cell(sched.finish,'FINISH')}</td>
+      <td>${cell(sched.part_name,'PART NAME')}</td>
+      <td>${cell(sched.sheet_qty,'SHEET QTY')}</td>
+      <td>${cell(sched.tasked,'TASKED')}</td>
+    </tr>
+    <tr><td colspan="6">${cell(sched.comment,'COMMENT')}</td></tr>
+    ${extra.map(([k,v])=>`<tr><td colspan="6"><span class="stc-empty" style="margin-right:6px">${esc(k.toUpperCase())}</span>${esc(v)}</td></tr>`).join('')}
+  </table>`;
 }
 function renderBatchDetail(q){
   q=(q||'').trim().toUpperCase();
@@ -1614,15 +1631,17 @@ async function loadBatchLabelNotes(uniqueId){
 $('mBatchLabelClose').onclick=()=>modal('mBatchLabel',false);
 
 $('batchSearchInp').addEventListener('input',e=>{
-  batchView==='list'?renderBatchList(e.target.value):renderBatchDetail(e.target.value);
+  renderBatchDetail(e.target.value);
 });
 $('bBackBatch').onclick=()=>{
   if(batchView==='detail'){
     batchView='list';batchDetailCache=null;
     $('batchTitle').textContent='Production Schedule';$('batchSub').textContent='';
     $('batchScheduleHeader').innerHTML='';
-    $('batchSearchInp').value='';$('batchSearchInp').placeholder='Search batches…';
-    renderBatchList('');
+    $('batchPicker').value='';
+    $('labelSearchWrap').style.display='none';
+    $('batchSearchInp').value='';
+    $('batchContent').innerHTML='';
   }else{
     clearInterval(batchRefreshTimer);
     show('scrScan');startScanner();

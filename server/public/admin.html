@@ -52,14 +52,15 @@
   .tab-btn{background:none;color:var(--gray-500);font-weight:700;padding:10px 4px;margin-right:24px;border-radius:0;border-bottom:2.5px solid transparent;font-size:14px}
   .tab-btn.active{color:var(--blue-600);border-bottom-color:var(--blue-600)}
   .tab-btn:hover{background:none}
-  .sched-card{cursor:pointer;flex-direction:column;align-items:stretch}
-  .sched-card:hover{border-color:var(--blue-600)}
-  .sched-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-  .sched-bar{height:6px;border-radius:3px;background:var(--gray-200);overflow:hidden;margin-top:8px}
-  .sched-bar-fill{height:100%;background:var(--green-700);border-radius:3px}
-  .fg{margin-bottom:12px}
+  #batchPicker{width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;background:var(--white)}
+  .sched-table{width:100%;border-collapse:collapse;margin:16px 0 12px;table-layout:fixed}
+  .sched-table td{border:1px solid var(--gray-200);padding:10px 12px;font-size:13px;font-weight:600}
+  .sched-table td.stc-batch{font-weight:800;font-size:15px}
+  .sched-table td.stc-progress{font-weight:800;text-align:right}
+  .sched-table input{border:none;background:none;font-size:13px;font-weight:600;width:100%;font-family:inherit;padding:0;color:var(--gray-900);outline:none}
+  .sched-table input::placeholder{color:var(--gray-400);font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.3px}
+  .sched-table input:focus{outline:1.5px solid var(--blue-600);border-radius:4px}
   .fg-label{display:block;font-size:12px;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}
-  .fg-input{width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit}
   .extra-row{display:flex;gap:8px;margin-bottom:6px}
   .extra-row input{flex:1}
   .source-pill{font-size:11px;font-weight:800;padding:3px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:.4px;background:var(--gray-200);color:var(--gray-500)}
@@ -139,8 +140,10 @@
   <div id="tabSchedule" style="display:none">
     <h1>Production Schedule</h1>
     <div class="sub">Job name, work order, target finish, material, and more — one entry per batch. Filled in automatically by the Excel label generator, or added/edited manually here.</div>
-    <div id="scheduleList"></div>
-    <div id="scheduleDetail" style="display:none"></div>
+    <select id="batchPicker" onchange="if(this.value)openScheduleDetail(this.value);else showScheduleEmpty()">
+      <option value="">Select a batch…</option>
+    </select>
+    <div id="scheduleDetail" style="margin-top:16px"></div>
   </div>
 </div>
 <script>
@@ -382,60 +385,69 @@ const SCHEDULE_FIELDS=[
 let scheduleBatches=[];
 
 async function loadScheduleList(){
-  if(!KEY){$('scheduleList').innerHTML='<div class="empty">Enter the admin key above to load.</div>';return;}
+  if(!KEY){$('batchPicker').innerHTML='<option value="">Enter the admin key above to load</option>';return;}
   try{
     const data=await api('/viewer/api/batches');
     scheduleBatches=data.batches||[];
-    renderScheduleList();
-  }catch(e){$('scheduleList').innerHTML='<div class="empty">Could not load — wrong key, or server unreachable.</div>';}
+    renderBatchPicker();
+  }catch(e){$('batchPicker').innerHTML='<option value="">Could not load — wrong key, or server unreachable</option>';}
 }
-function renderScheduleList(){
-  $('scheduleDetail').style.display='none';
-  $('scheduleList').style.display='';
-  if(!scheduleBatches.length){$('scheduleList').innerHTML='<div class="empty">No batches registered yet.</div>';return;}
-  $('scheduleList').innerHTML=scheduleBatches.map(b=>{
-    const pct=b.total?Math.round((b.scanned/b.total)*100):0;
-    const sub=[b.job_name,b.target_finish].filter(Boolean).map(esc).join(' · ');
-    return`<div class="card sched-card" onclick="openScheduleDetail('${esc(b.batch)}')">
-      <div class="sched-top"><div class="name">${esc(b.batch)}</div><div class="meta">${b.scanned}/${b.total} scanned</div></div>
-      ${sub?`<div class="meta">${sub}</div>`:''}
-      <div class="sched-bar"><div class="sched-bar-fill" style="width:${pct}%"></div></div>
-    </div>`;
-  }).join('');
+function renderBatchPicker(){
+  const current=$('batchPicker').value;
+  const options=scheduleBatches.map(b=>`<option value="${esc(b.batch)}">${esc(b.batch)} (${b.scanned}/${b.total})</option>`).join('');
+  $('batchPicker').innerHTML=`<option value="">Select a batch…</option>${options}`;
+  $('batchPicker').value=current; // preserve selection if this was just a refresh
+  if(!current)showScheduleEmpty();
+}
+function showScheduleEmpty(){
+  currentScheduleBatch=null;
+  $('scheduleDetail').innerHTML=scheduleBatches.length?'':'<div class="empty">No batches registered yet.</div>';
 }
 
 let currentScheduleBatch=null,currentExtraFields={};
 
 async function openScheduleDetail(batch){
   currentScheduleBatch=batch;
-  $('scheduleList').style.display='none';
-  $('scheduleDetail').style.display='';
+  $('batchPicker').value=batch;
   $('scheduleDetail').innerHTML='<div class="empty">Loading…</div>';
   try{
     const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
     renderScheduleDetail(batch,data.schedule||{},data.labels||[]);
   }catch(e){$('scheduleDetail').innerHTML='<div class="empty">Could not load this batch.</div>';}
 }
+// The read view (phone app) and this edit view now share the same table
+// layout, matching the physical label sheet's grid look — here every cell
+// is a real input (styled borderless to blend into the table), with the
+// field name as its placeholder so an empty cell still shows what goes there.
 function renderScheduleDetail(batch,sched,labels){
   currentExtraFields=Object.assign({},sched.extra_fields||{});
   const sourcePill=sched.schedule_source?`<span class="source-pill">${esc(sched.schedule_source)}</span>`:'';
   const scannedCount=labels.filter(l=>l.scanned==='Yes').length;
+  const inp=(k,ph)=>`<input id="sf_${k}" placeholder="${esc(ph)}" value="${esc(sched[k]||'')}">`;
   $('scheduleDetail').innerHTML=`
-    <button class="secondary" onclick="renderScheduleList()" style="margin-bottom:14px">&larr; All Batches</button>
-    <div class="card" style="flex-direction:column;align-items:stretch">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div class="name">${esc(batch)}</div>${sourcePill}
-      </div>
-      <div class="meta" style="margin-bottom:10px">${scannedCount}/${labels.length} scanned</div>
-      ${SCHEDULE_FIELDS.map(([k,label])=>`
-        <div class="fg"><label class="fg-label">${esc(label)}</label>
-          <input class="fg-input" id="sf_${k}" value="${esc(sched[k]||'')}"></div>`).join('')}
-      <label class="fg-label" style="margin-top:4px">Extra Fields</label>
-      <div id="extraFieldRows"></div>
-      <button class="secondary" onclick="addExtraFieldRow()" style="align-self:flex-start;margin-bottom:12px">+ Add Field</button>
-      <button onclick="saveSchedule()">Save</button>
-      ${sched.schedule_updated_at?`<div class="meta" style="margin-top:8px">Last updated ${fmt(sched.schedule_updated_at)}${sched.schedule_updated_by?' by '+esc(sched.schedule_updated_by):''}</div>`:''}
-    </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">${sourcePill}</div>
+    <table class="sched-table">
+      <tr>
+        <td class="stc-batch">${esc(batch)}</td>
+        <td>${inp('target_finish','TARGET FINISH')}</td>
+        <td colspan="2">${inp('material','MATERIAL')}</td>
+        <td class="stc-progress">${scannedCount}/${labels.length}</td>
+      </tr>
+      <tr>
+        <td>${inp('job_name','JOB')}</td>
+        <td>${inp('floor_or_work_order','FLOOR OR WORK ORDER')}</td>
+        <td>${inp('finish','FINISH')}</td>
+        <td>${inp('part_name','PART NAME')}</td>
+        <td>${inp('sheet_qty','SHEET QTY')}</td>
+        <td>${inp('tasked','TASKED')}</td>
+      </tr>
+      <tr><td colspan="6">${inp('comment','COMMENT')}</td></tr>
+    </table>
+    <label class="fg-label">Extra Fields</label>
+    <div id="extraFieldRows"></div>
+    <button class="secondary" onclick="addExtraFieldRow()" style="margin-bottom:12px">+ Add Field</button>
+    <button onclick="saveSchedule()">Save</button>
+    ${sched.schedule_updated_at?`<div class="meta" style="margin-top:8px">Last updated ${fmt(sched.schedule_updated_at)}${sched.schedule_updated_by?' by '+esc(sched.schedule_updated_by):''}</div>`:''}
     <h2>Labels in this Batch</h2>
     <div>${labelRowsHtml(labels)}</div>`;
   renderExtraFieldRows();
