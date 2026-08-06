@@ -1,0 +1,13 @@
+{
+  "name": "Matrex Panel Scan",
+  "short_name": "Matrex Scan",
+  "description": "Internal PDF417 panel-scanning tool for Matrex Window Systems",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F5F5F7",
+  "theme_color": "#0071E3",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
