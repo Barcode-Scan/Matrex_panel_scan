@@ -52,7 +52,6 @@
   .tab-btn{background:none;color:var(--gray-500);font-weight:700;padding:10px 4px;margin-right:24px;border-radius:0;border-bottom:2.5px solid transparent;font-size:14px}
   .tab-btn.active{color:var(--blue-600);border-bottom-color:var(--blue-600)}
   .tab-btn:hover{background:none}
-  #batchPicker{width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;background:var(--white)}
   .sched-table{width:100%;border-collapse:collapse;margin:16px 0 12px;table-layout:fixed}
   .sched-table td{border:1px solid var(--gray-200);padding:10px 12px;font-size:13px;font-weight:600}
   .sched-table td.stc-batch{font-weight:800;font-size:15px}
@@ -60,6 +59,20 @@
   .sched-table input{border:none;background:none;font-size:13px;font-weight:600;width:100%;font-family:inherit;padding:0;color:var(--gray-900);outline:none}
   .sched-table input::placeholder{color:var(--gray-400);font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.3px}
   .sched-table input:focus{outline:1.5px solid var(--blue-600);border-radius:4px}
+  .sched-grid{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:16px}
+  .sched-grid th{position:sticky;top:0;background:var(--white);border-bottom:2px solid var(--gray-200);padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;z-index:1}
+  .sched-grid th select{display:block;margin-top:4px;width:100%;font-size:11px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--gray-900);border:1px solid var(--gray-200);border-radius:4px;padding:2px 4px;background:var(--white);font-family:inherit}
+  .sched-grid td{padding:8px 10px;border-bottom:1px solid var(--gray-200);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+  .sched-grid tbody tr{cursor:pointer}
+  .sched-grid tbody tr:hover td{background:var(--bg)}
+  .sched-grid td.gc-batch{font-weight:700}
+  .sched-grid .gc-progress{display:flex;align-items:center;gap:6px;min-width:90px}
+  .sched-grid .gc-progress-track{flex:1;height:5px;border-radius:3px;background:var(--gray-200);overflow:hidden}
+  .sched-grid .gc-progress-fill{height:100%;border-radius:3px}
+  .sched-grid .gc-progress-fill.complete{background:var(--green-700)}
+  .sched-grid .gc-progress-fill.progress{background:var(--amber-700)}
+  .sched-grid .gc-progress-fill.none{background:var(--gray-200)}
+  .sched-grid .gc-count{font-size:11px;font-weight:700;color:var(--gray-500);flex-shrink:0}
   .fg-label{display:block;font-size:12px;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}
   .extra-row{display:flex;gap:8px;margin-bottom:6px}
   .extra-row input{flex:1}
@@ -139,11 +152,28 @@
 
   <div id="tabSchedule" style="display:none">
     <h1>Production Schedule</h1>
-    <div class="sub">Job name, work order, target finish, material, and more — one entry per batch. Filled in automatically by the Excel label generator, or added/edited manually here.</div>
-    <select id="batchPicker" onchange="if(this.value)openScheduleDetail(this.value);else showScheduleEmpty()">
-      <option value="">Select a batch…</option>
-    </select>
-    <div id="scheduleDetail" style="margin-top:16px"></div>
+    <div class="sub">Job name, work order, target finish, material, and more — one row per batch. Filled in automatically by the Excel label generator, or click any row to edit manually. Use the dropdown under a column header to filter by that column.</div>
+    <div style="overflow-x:auto">
+    <table class="sched-grid">
+      <thead>
+        <tr>
+          <th>Job<select id="fJob" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
+          <th>Floor or Work Order<select id="fFloor" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
+          <th>Target Finish<select id="fTargetFinish" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
+          <th>Material<select id="fMaterial" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
+          <th>Finish<select id="fFinish" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
+          <th>Part Name<select id="fPartName" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
+          <th>Batch Name<select id="fBatch" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
+          <th>Part Qty<select id="fStatus" onchange="renderScheduleGrid()"><option value="">All</option><option value="complete">Complete</option><option value="progress">In Progress</option><option value="none">Not Started</option></select></th>
+          <th>Sheet Qty<select id="fSheetQty" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
+          <th>Comment<select id="fComment" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
+          <th>Tasked<select id="fTasked" onchange="renderScheduleGrid()"><option value="">All</option></select></th>
+        </tr>
+      </thead>
+      <tbody id="scheduleTbody"></tbody>
+    </table>
+    </div>
+    <div id="scheduleDetail"></div>
   </div>
 </div>
 <script>
@@ -385,34 +415,73 @@ const SCHEDULE_FIELDS=[
 let scheduleBatches=[];
 
 async function loadScheduleList(){
-  if(!KEY){$('batchPicker').innerHTML='<option value="">Enter the admin key above to load</option>';return;}
+  if(!KEY){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Enter the admin key above to load.</td></tr>';return;}
   try{
     const data=await api('/viewer/api/batches');
     scheduleBatches=data.batches||[];
-    renderBatchPicker();
-  }catch(e){$('batchPicker').innerHTML='<option value="">Could not load — wrong key, or server unreachable</option>';}
+    populateGridFilterOptions();
+    renderScheduleGrid();
+  }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
-function renderBatchPicker(){
-  const current=$('batchPicker').value;
-  const options=scheduleBatches.map(b=>`<option value="${esc(b.batch)}">${esc(b.batch)} (${b.scanned}/${b.total})</option>`).join('');
-  $('batchPicker').innerHTML=`<option value="">Select a batch…</option>${options}`;
-  $('batchPicker').value=current; // preserve selection if this was just a refresh
-  if(!current)showScheduleEmpty();
+const GRID_FILTER_FIELDS=[['fJob','job_name'],['fFloor','floor_or_work_order'],['fTargetFinish','target_finish'],
+  ['fMaterial','material'],['fFinish','finish'],['fPartName','part_name'],['fBatch','batch'],
+  ['fSheetQty','sheet_qty'],['fComment','comment'],['fTasked','tasked']];
+function populateGridFilterOptions(){
+  GRID_FILTER_FIELDS.forEach(([id,key])=>{
+    const values=[...new Set(scheduleBatches.map(b=>b[key]).filter(Boolean))].sort();
+    const current=$(id).value;
+    $(id).innerHTML='<option value="">All</option>'+values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    $(id).value=current;
+  });
 }
-function showScheduleEmpty(){
-  currentScheduleBatch=null;
-  $('scheduleDetail').innerHTML=scheduleBatches.length?'':'<div class="empty">No batches registered yet.</div>';
+// One row per batch, a filter dropdown under every column header (AND'd
+// together) - Part Qty's filter is by completion state instead of raw
+// value, since scanned/total is a computed progress figure, not a stored
+// field. Clicking a row opens the same edit panel used below, without
+// hiding the grid, so switching between batches (or re-filtering) doesn't
+// require navigating away and back.
+function renderScheduleGrid(){
+  let rows=scheduleBatches.filter(b=>{
+    for(const [id,key] of GRID_FILTER_FIELDS){
+      const want=$(id).value;
+      if(want&&(b[key]||'')!==want)return false;
+    }
+    const wantStatus=$('fStatus').value;
+    if(wantStatus){
+      const state=b.total>0&&b.scanned===b.total?'complete':b.scanned>0?'progress':'none';
+      if(state!==wantStatus)return false;
+    }
+    return true;
+  });
+  if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="11" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;return;}
+  $('scheduleTbody').innerHTML=rows.map(b=>{
+    const pct=b.total?Math.round((b.scanned/b.total)*100):0;
+    const state=b.total>0&&b.scanned===b.total?'complete':b.scanned>0?'progress':'none';
+    return`<tr onclick="openScheduleDetail('${esc(b.batch)}')">
+      <td>${esc(b.job_name||'')}</td>
+      <td>${esc(b.floor_or_work_order||'')}</td>
+      <td>${esc(b.target_finish||'')}</td>
+      <td>${esc(b.material||'')}</td>
+      <td>${esc(b.finish||'')}</td>
+      <td>${esc(b.part_name||'')}</td>
+      <td class="gc-batch">${esc(b.batch)}</td>
+      <td><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${b.scanned}/${b.total}</div></div></td>
+      <td>${esc(b.sheet_qty||'')}</td>
+      <td>${esc(b.comment||'')}</td>
+      <td>${esc(b.tasked||'')}</td>
+    </tr>`;
+  }).join('');
 }
 
 let currentScheduleBatch=null,currentExtraFields={};
 
 async function openScheduleDetail(batch){
   currentScheduleBatch=batch;
-  $('batchPicker').value=batch;
   $('scheduleDetail').innerHTML='<div class="empty">Loading…</div>';
   try{
     const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
     renderScheduleDetail(batch,data.schedule||{},data.labels||[]);
+    $('scheduleDetail').scrollIntoView({behavior:'smooth',block:'start'});
   }catch(e){$('scheduleDetail').innerHTML='<div class="empty">Could not load this batch.</div>';}
 }
 // The read view (phone app) and this edit view now share the same table
@@ -425,7 +494,9 @@ function renderScheduleDetail(batch,sched,labels){
   const scannedCount=labels.filter(l=>l.scanned==='Yes').length;
   const inp=(k,ph)=>`<input id="sf_${k}" placeholder="${esc(ph)}" value="${esc(sched[k]||'')}">`;
   $('scheduleDetail').innerHTML=`
-    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">${sourcePill}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <button class="secondary" onclick="$('scheduleDetail').innerHTML=''">&larr; Close</button>${sourcePill}
+    </div>
     <table class="sched-table">
       <tr>
         <td class="stc-batch">${esc(batch)}</td>
