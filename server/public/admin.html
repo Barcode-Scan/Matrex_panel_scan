@@ -10,7 +10,8 @@
     --amber-700:#B54708;--amber-50:#FFFAEB;}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--gray-900);padding:24px}
-  .wrap{max-width:720px;margin:0 auto}
+  .wrap{max-width:720px;margin:0 auto;transition:max-width .15s var(--ease,ease)}
+  .wrap.wide{max-width:none}
   h1{font-size:20px;margin-bottom:4px}
   .sub{font-size:13px;color:var(--gray-500);margin-bottom:20px}
   .keybar{display:flex;gap:8px;margin-bottom:20px}
@@ -59,7 +60,7 @@
   .sched-table input{border:none;background:none;font-size:13px;font-weight:600;width:100%;font-family:inherit;padding:0;color:var(--gray-900);outline:none}
   .sched-table input::placeholder{color:var(--gray-400);font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.3px}
   .sched-table input:focus{outline:1.5px solid var(--blue-600);border-radius:4px}
-  .sched-grid{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:16px}
+  .sched-grid{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:16px;table-layout:auto}
   .sched-grid th{position:sticky;top:0;background:var(--white);border-bottom:2px solid var(--gray-200);padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;z-index:1}
   .colf-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:4px;border:none;background:var(--gray-200);color:var(--gray-500);border-radius:3px;font-size:9px;line-height:1;cursor:pointer;vertical-align:middle}
   .colf-btn.active{background:var(--blue-600);color:#fff}
@@ -74,7 +75,8 @@
   .colf-item input{margin:0;flex-shrink:0}
   .colf-actions{display:flex;gap:8px}
   .colf-actions button{flex:1;padding:7px;font-size:12.5px}
-  .sched-grid td{padding:8px 10px;border-bottom:1px solid var(--gray-200);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+  .sched-grid td{padding:8px 14px;border-bottom:1px solid var(--gray-200);white-space:nowrap}
+  .sched-grid td.gc-comment{white-space:normal;max-width:280px}
   .sched-grid tbody tr{cursor:pointer}
   .sched-grid tbody tr:hover td{background:var(--bg)}
   .sched-grid td.gc-batch{font-weight:700}
@@ -203,6 +205,10 @@ function showTab(name){
   $('tabSchedule').style.display=isOps?'none':'';
   $('tabBtnOps').classList.toggle('active',isOps);
   $('tabBtnSchedule').classList.toggle('active',!isOps);
+  // Operations (device approvals, reporting) reads best narrow and
+  // centered; the schedule grid needs the full window to be usable with
+  // 11 columns, so the outer wrap's width cap only applies to Operations.
+  document.querySelector('.wrap').classList.toggle('wide',!isOps);
   if(!isOps)loadScheduleList();
 }
 
@@ -550,7 +556,7 @@ function renderScheduleGrid(){
       <td class="gc-batch">${esc(b.batch)}</td>
       <td><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${b.scanned}/${b.total}</div></div></td>
       <td>${esc(b.sheet_qty||'')}</td>
-      <td>${esc(b.comment||'')}</td>
+      <td class="gc-comment">${esc(b.comment||'')}</td>
       <td>${esc(b.tasked||'')}</td>
     </tr>`;
   }).join('');
