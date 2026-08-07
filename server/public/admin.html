@@ -607,6 +607,16 @@ async function openScheduleDetail(batch){
     $('scheduleDetail').scrollIntoView({behavior:'smooth',block:'start'});
   }catch(e){$('scheduleDetail').innerHTML='<div class="empty">Could not load this batch.</div>';}
 }
+// Best-effort free text -> yyyy-mm-dd, for feeding an existing stored
+// value into <input type="date">. Returns '' (not an error) if it can't
+// be confidently parsed - the date field just starts blank rather than
+// this ever breaking the page.
+function toISODate(v){
+  if(!v)return'';
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v))return v;
+  const d=new Date(v);
+  return isNaN(d.getTime())?'':d.toISOString().slice(0,10);
+}
 // The read view (phone app) and this edit view now share the same table
 // layout, matching the physical label sheet's grid look — here every cell
 // is a real input (styled borderless to blend into the table), with the
@@ -617,6 +627,14 @@ function renderScheduleDetail(batch,sched,labels){
   const sourcePill=sched.schedule_source?`<span class="source-pill">${esc(sched.schedule_source)}</span>`:'';
   const scannedCount=labels.filter(l=>l.scanned==='Yes').length;
   const inp=(k,ph)=>`<input id="sf_${k}" placeholder="${esc(ph)}" value="${esc(sched[k]||'')}">`;
+  // Target Finish is the one date field here - a real calendar picker
+  // (native <input type="date">, same idea as Excel Online's date-cell
+  // picker) instead of typed text. toISODate best-effort converts
+  // whatever's already stored (may predate this - could be "12/12/2025"
+  // style free text) into the yyyy-mm-dd the date input needs to show a
+  // value at all; if it can't be parsed, the field just starts empty
+  // rather than erroring.
+  const dateInp=`<input id="sf_target_finish" type="date" value="${esc(toISODate(sched.target_finish))}">`;
   $('scheduleDetail').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <button class="secondary" onclick="$('scheduleDetail').innerHTML=''">&larr; Close</button>
@@ -625,7 +643,7 @@ function renderScheduleDetail(batch,sched,labels){
     <table class="sched-table">
       <tr>
         <td class="stc-batch">${esc(batch)}</td>
-        <td>${inp('target_finish','TARGET FINISH')}</td>
+        <td>${dateInp}</td>
         <td colspan="2">${inp('material','MATERIAL')}</td>
         <td class="stc-progress">${scannedCount}/${labels.length}</td>
       </tr>
