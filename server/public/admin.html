@@ -125,7 +125,6 @@
   <div class="tabbar">
     <button class="tab-btn active" id="tabBtnOps" onclick="showTab('ops')">Operations</button>
     <button class="tab-btn" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
-    <button class="tab-btn" id="tabBtnLabels" onclick="showTab('labels')">Batch Labels</button>
   </div>
 
   <div id="tabOperations">
@@ -230,9 +229,12 @@ function showTab(name){
   $('tabOperations').style.display=name==='ops'?'':'none';
   $('tabSchedule').style.display=name==='schedule'?'':'none';
   $('tabLabels').style.display=name==='labels'?'':'none';
+  // No tab button for 'labels' - it only ever opens by clicking a batch
+  // in Production Schedule, not as something you'd click into directly,
+  // so Operations/Production Schedule are the only two that need an
+  // active-state toggle here.
   $('tabBtnOps').classList.toggle('active',name==='ops');
   $('tabBtnSchedule').classList.toggle('active',name==='schedule');
-  $('tabBtnLabels').classList.toggle('active',name==='labels');
   // Operations (device approvals, reporting) reads best narrow and
   // centered; the schedule grid and the labels list both need the full
   // window to be usable, so the outer wrap's width cap only applies to
