@@ -106,7 +106,11 @@
   .icon-btn.icon-danger:hover{background:var(--red-50)}
   .icon-btn.icon-save{color:var(--green-700)}
   .icon-btn.icon-save:hover{background:var(--green-50)}
-  .gc-actions{white-space:nowrap}
+  .ctx-menu{display:none;position:fixed;z-index:60;min-width:150px;background:var(--white);border:1px solid #B7B7B7;border-radius:3px;box-shadow:0 4px 14px rgba(0,0,0,.22);padding:4px 0;font-size:13px}
+  .ctx-menu-item{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;color:var(--gray-900)}
+  .ctx-menu-item:hover{background:#E8F0FE}
+  .ctx-menu-item.danger{color:var(--red-600)}
+  .ctx-menu-item.danger:hover{background:var(--red-50)}
   .gc-input{width:100%;padding:4px 6px;border:1px solid var(--blue-600);border-radius:4px;font-size:12.5px;font-family:inherit;background:var(--white)}
   .extra-row input{flex:1}
   .source-pill{font-size:11px;font-weight:800;padding:3px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:.4px;background:var(--gray-200);color:var(--gray-500)}
@@ -221,6 +225,8 @@
     <button class="secondary" onclick="closeColFilter()">Cancel</button>
   </div>
 </div>
+
+<div class="ctx-menu" id="rowCtxMenu"></div>
 <script>
 const $=id=>document.getElementById(id);
 let KEY=localStorage.getItem('mx_admin_key')||'';
@@ -488,16 +494,16 @@ const GRID_COLUMNS=[
 function renderScheduleHead(){
   $('scheduleHeadRow').innerHTML=GRID_COLUMNS.map(([key,label])=>
     `<th>${esc(label)}<button class="colf-btn" id="colfbtn_${key}" onclick="openColFilter(event,'${key}','${esc(label)}')">&#9660;</button></th>`
-  ).join('')+'<th>Actions</th>';
+  ).join('');
 }
 async function loadScheduleList(){
   if(!$('scheduleHeadRow').children.length)renderScheduleHead();
-  if(!KEY){$('scheduleTbody').innerHTML='<tr><td colspan="12" class="empty">Enter the admin key above to load.</td></tr>';return;}
+  if(!KEY){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Enter the admin key above to load.</td></tr>';return;}
   try{
     const data=await api('/viewer/api/batches');
     scheduleBatches=data.batches||[];
     renderScheduleGrid();
-  }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="12" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
+  }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
 
 // ── AutoFilter (Excel-style: checkbox multi-select per column, search,
@@ -583,7 +589,30 @@ function sortGridBy(asc){
 }
 document.addEventListener('click',e=>{
   if(!e.target.closest('#colFilterPopover')&&!e.target.closest('.colf-btn'))closeColFilter();
+  if(!e.target.closest('#rowCtxMenu'))closeRowContextMenu();
 });
+document.addEventListener('contextmenu',e=>{
+  if(!e.target.closest('tr[data-batch]'))closeRowContextMenu();
+});
+// Right-click a Production Schedule row for Edit/Delete (or Save/Cancel
+// if that row is already mid-edit) - same actions the old Actions column
+// had, just via a context menu instead of always-visible icons.
+function openRowContextMenu(evt,batch){
+  evt.preventDefault();
+  evt.stopPropagation();
+  const editing=editingBatches.has(batch);
+  const menu=$('rowCtxMenu');
+  menu.innerHTML=editing?`
+    <div class="ctx-menu-item" onclick="closeRowContextMenu();saveRowEdit('${esc(batch)}')">${ICON_SAVE} Save</div>
+    <div class="ctx-menu-item" onclick="closeRowContextMenu();cancelRowEdit('${esc(batch)}')">${ICON_CANCEL} Cancel</div>`
+    :`
+    <div class="ctx-menu-item" onclick="closeRowContextMenu();toggleEditRow('${esc(batch)}')">${ICON_EDIT} Edit</div>
+    <div class="ctx-menu-item danger" onclick="closeRowContextMenu();deleteBatchFromGrid('${esc(batch)}')">${ICON_DELETE} Delete</div>`;
+  menu.style.top=evt.clientY+'px';
+  menu.style.left=Math.min(evt.clientX,window.innerWidth-170)+'px';
+  menu.style.display='block';
+}
+function closeRowContextMenu(){$('rowCtxMenu').style.display='none';}
 
 // One row per batch, an Excel-style AutoFilter dropdown on every column
 // header (columns AND together, same as Excel) - Part Qty filters/sorts
@@ -608,26 +637,21 @@ function renderScheduleGrid(){
     const btn=$('colfbtn_'+key);
     if(btn)btn.classList.toggle('active',!!columnFilters[key]);
   });
-  if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="12" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;return;}
+  if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="11" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;return;}
   $('scheduleTbody').innerHTML=rows.map(b=>{
     const pct=b.total?Math.round((b.scanned/b.total)*100):0;
     const state=rowStatus(b);
     const editing=editingBatches.has(b.batch);
     // Editable text field, or a date-type one for target_finish - same
     // upsert-only-what's-present contract as before, just inline in the
-    // grid row now instead of a separate panel.
+    // grid row. Edit/Delete (or Save/Cancel while editing) now live on
+    // the row's right-click menu instead of a dedicated Actions column.
     const field=(key,isDate)=>{
       if(!editing)return esc(b[key]||'');
       const val=isDate?toISODate(b[key]):esc(b[key]||'');
       return`<input class="gc-input" type="${isDate?'date':'text'}" data-field="${key}" value="${val}" onclick="event.stopPropagation()">`;
     };
-    const actions=editing?`
-        <button class="icon-btn icon-save" title="Save" onclick="event.stopPropagation();saveRowEdit('${esc(b.batch)}')">${ICON_SAVE}</button>
-        <button class="icon-btn" title="Cancel" onclick="event.stopPropagation();cancelRowEdit('${esc(b.batch)}')">${ICON_CANCEL}</button>`
-      :`
-        <button class="icon-btn" title="Edit" onclick="event.stopPropagation();toggleEditRow('${esc(b.batch)}')">${ICON_EDIT}</button>
-        <button class="icon-btn icon-danger" title="Delete" onclick="event.stopPropagation();deleteBatchFromGrid('${esc(b.batch)}')">${ICON_DELETE}</button>`;
-    return`<tr data-batch="${esc(b.batch)}" onclick="viewBatchLabels('${esc(b.batch)}')">
+    return`<tr data-batch="${esc(b.batch)}" onclick="viewBatchLabels('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')">
       <td>${field('job_name')}</td>
       <td>${field('floor_or_work_order')}</td>
       <td>${field('target_finish',true)}</td>
@@ -639,7 +663,6 @@ function renderScheduleGrid(){
       <td>${field('sheet_qty')}</td>
       <td class="gc-comment">${field('comment')}</td>
       <td>${field('tasked')}</td>
-      <td class="gc-actions">${actions}</td>
     </tr>`;
   }).join('');
 }
