@@ -187,6 +187,23 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .data-k{color:var(--gray-500);font-size:13px;font-weight:600;min-width:80px;flex-shrink:0}
 .data-v{color:var(--gray-900);font-weight:700}
 .mbtns{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+
+/* DIRECTED SCAN */
+.dir-progress-wrap{margin-bottom:14px}
+.dir-progress-track{height:8px;border-radius:4px;background:var(--gray-200);overflow:hidden}
+.dir-progress-fill{height:100%;background:var(--blue-600);border-radius:4px;transition:width .25s var(--ease)}
+.dir-progress-label{font-size:13px;font-weight:600;color:var(--gray-500);margin-top:6px;text-align:center}
+.dir-expected-card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:var(--r);padding:16px;margin-bottom:14px;box-shadow:var(--shadow-xs)}
+.dir-expected-eyebrow{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--blue-600);display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.dir-expected-name{font-size:24px;font-weight:800;color:var(--gray-900);margin-bottom:6px;word-break:break-word}
+.dir-expected-sub{font-size:15px;color:var(--gray-500)}
+.dir-empty-card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:var(--r);padding:28px 16px;text-align:center;color:var(--gray-500);font-size:15px;line-height:1.5}
+.dir-banner{display:none;border-radius:var(--r);padding:14px 16px;margin-bottom:14px;font-size:17px;font-weight:700;text-align:center;line-height:1.4}
+.dir-banner.show{display:block}
+.dir-banner.ok{background:var(--green-50);color:var(--green-700);border:1.5px solid var(--green-300)}
+.dir-banner.err{background:var(--red-50);color:var(--red-600);border:1.5px solid var(--red-300)}
+.dir-banner.warn{background:var(--amber-50);color:var(--amber-700);border:1.5px solid #F6C453}
+.dir-banner-sub{font-size:13px;font-weight:500;margin-top:4px;opacity:.85}
 .m-confirm{width:100%;border:none;border-radius:var(--pill);padding:16px;font-size:17px;font-weight:600;cursor:pointer;font-family:inherit;background:var(--red-600);color:var(--white);transition:all .16s var(--ease)}
 .m-confirm:active{transform:scale(.98)}
 .m-ok{width:100%;border:none;border-radius:var(--pill);padding:16px;font-size:17px;font-weight:600;cursor:pointer;font-family:inherit;background:var(--blue-600);color:var(--white);box-shadow:var(--shadow-blue);transition:all .16s var(--ease)}
@@ -381,6 +398,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
     </div>
 
 
+    <div id="camSlotFree">
     <div id="cambox">
       <video id="cam" muted playsinline autoplay></video>
       <div id="aim">
@@ -396,6 +414,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
         </svg>
         <span id="camMsg" style="font-size:15px;line-height:1.6;white-space:pre-line">Starting camera…</span>
       </div>
+    </div>
     </div>
 
     <div class="camsize-row" role="group" aria-label="Camera preview size">
@@ -502,6 +521,35 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
   <div id="batchContent" class="page"></div>
 </div>
 
+<!-- DIRECTED SCAN -->
+<div class="screen" id="scrDirected">
+  <div class="topbar">
+    <button class="tb-btn" id="bBackDirected" aria-label="Back" type="button" style="width:auto;padding:0 10px;gap:6px;font-size:16px;font-weight:600">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Back
+    </button>
+    <div><div class="tb-name" style="font-size:16px" id="dirBatchTitle">Directed Scan</div><div class="tb-date" id="dirBatchSub"></div></div>
+    <div style="width:70px"></div>
+  </div>
+  <div class="page">
+    <div class="dir-progress-wrap">
+      <div class="dir-progress-track"><div class="dir-progress-fill" id="dirProgressFill" style="width:0%"></div></div>
+      <div class="dir-progress-label" id="dirProgressLabel">0 of 0 scanned</div>
+    </div>
+
+    <div id="dirExpectedCard" class="dir-expected-card"></div>
+
+    <div id="dirBanner" class="dir-banner"></div>
+
+    <div id="dirCamSlot"></div>
+
+    <div class="btn-row mt12">
+      <button class="btn btn-outline" id="bDirManual" type="button">Manual Entry</button>
+      <button class="btn btn-outline" id="bDirUndo" type="button" disabled>Undo Last Scan</button>
+    </div>
+  </div>
+</div>
+
 <!-- SETTINGS -->
 <div class="screen" id="scrSettings">
   <div class="topbar">
@@ -575,6 +623,8 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 <div class="mbg" id="mBatchAuth"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div class="m-title">Production Schedule Locked</div><div class="m-desc">Enter the production schedule password to continue.</div><div class="fg"><label class="fg-label" for="batchAuthPw">Password</label><div class="f-wrap"><input class="f-input" id="batchAuthPw" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Enter password"><button class="f-eye" id="batchAuthEye" type="button" aria-label="Show password"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div><div class="err-box" id="batchAuthErr">Incorrect password.</div><div class="mbtns"><button class="m-ok" id="batchAuthOk" type="button">Unlock</button><button class="m-cancel" id="batchAuthCancel" type="button">Cancel</button></div></div></div>
 
 <div class="mbg" id="mBatchLabel"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="m-title">Label details</div><div class="data-card" id="mBatchLabelData"></div><div class="sec-hdr" style="margin-top:4px"><span class="sec-title">Notes</span></div><div id="batchLabelNotes" style="margin-bottom:10px"></div><div class="mbtns"><button class="m-ok" id="mBatchLabelClose" type="button">Close</button></div></div></div>
+
+<div class="mbg" id="mDirConfirm"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="m-title">Scan out of order?</div><div class="m-desc" id="mDirConfirmBody"></div><div class="mbtns"><button class="m-ok" id="mDirConfirmYes" type="button">Yes, Scan It</button><button class="m-cancel" id="mDirConfirmNo" type="button">Cancel</button></div></div></div>
 
 <div class="mbg" id="mBatchFilter"><div class="msheet">
   <div class="mhandle"></div>
@@ -654,6 +704,11 @@ const SCAN_COOLDOWN_MS=2000;
 const SAME_CODE_COOLDOWN_MS=2000;
 let lastScanVal='',lastScanTime=0;
 let codeReader=null,controls=null,trackRef=null,torchOn=false;
+// Free-scan and Directed Scan share the one physical camera/zxing engine
+// (only one screen is ever visible at a time, and most phones can't run
+// two camera streams anyway) - this just routes a decoded result to
+// whichever screen's handler is currently active.
+let scanMode='FREE'; // 'FREE' | 'DIRECTED'
 
 // ── DATA ──────────────────────────────────────────────────
 function loadScans(){
@@ -1028,7 +1083,7 @@ async function runWithDevice(deviceId){
         if(!raw)return;
         setEngine('Got scan! Resuming…','ready');
         setTimeout(()=>setEngine('Scanning…','scanning'),1200);
-        handleRaw(raw,'SCAN');
+        scanMode==='DIRECTED'?handleDirectedRaw(raw):handleRaw(raw,'SCAN');
       }
       // NotFoundException fires every frame with no barcode visible —
       // that's normal continuous-scan behavior, not an error to surface.
@@ -1701,7 +1756,8 @@ function scheduleHeaderHtml(batch,sched,scanned,total){
     </tr>
     <tr><td colspan="6">${cell(sched.comment,'COMMENT')}</td></tr>
     ${extra.map(([k,v])=>`<tr><td colspan="6"><span class="stc-empty" style="margin-right:6px">${esc(k.toUpperCase())}</span>${esc(v)}</td></tr>`).join('')}
-  </table>`;
+  </table>
+  <button class="btn btn-solid" style="width:100%;margin:10px 0 4px" type="button" onclick="openDirectedScanScreen('${esc(batch)}')">Start Directed Scan</button>`;
 }
 function renderBatchDetail(q){
   q=(q||'').trim().toUpperCase();
@@ -1716,6 +1772,153 @@ function renderBatchDetail(q){
     return`<div class="bl-row" onclick="openBatchLabelDetail('${esc(l.unique_id)}')"><div class="bl-dot ${dc}"></div><div class="bl-info"><div class="bl-name">${esc(l.tag||l.unique_id)}${notePill}</div><div class="bl-sub">${sub?sub+' · ':''}${esc(statusText)}</div></div></div>`;
   }).join('');
 }
+
+// ── DIRECTED SCAN MODE ─────────────────────────────────────
+// Tells the operator the next expected label instead of free-scan-anything,
+// validating each scan server-side against parts_panel.sequence_no. Kept
+// entirely separate from handleScan/handleRaw/commit (free-scan's own
+// path stays untouched) — only the shared camera engine is reused, routed
+// by the scanMode flag set above.
+let dirBatch=null;
+let dirLastAction=null; // {unique_id} of the most recent successful scan, for one-level undo
+let dirBannerT=null;
+let dirConfirmData=null;
+
+async function directedFetch(path,body){
+  if(!cfg.url)throw new Error('No server configured — set a Receiver URL in Settings first.');
+  const r=await fetch(cfg.url+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,device_id:deviceId,device:cfg.dev}),signal:AbortSignal.timeout(8000)});
+  if(r.status===403){const j=await r.json().catch(()=>({}));throw new Error(j.error||'Device not approved for this server yet');}
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  return r.json();
+}
+
+window.openDirectedScanScreen=function(batch){
+  dirBatch=batch;
+  $('dirBatchTitle').textContent=batch;
+  $('dirBatchSub').textContent='';
+  $('dirBanner').className='dir-banner';
+  $('dirExpectedCard').innerHTML='';
+  $('bDirUndo').disabled=true;
+  dirLastAction=null;
+  show('scrDirected');
+  // Reparent the one shared camera element into this screen's slot —
+  // same physical stream/zxing engine free-scan uses, just displayed in
+  // a different screen while scanMode routes results here instead.
+  $('dirCamSlot').appendChild($('cambox'));
+  scanMode='DIRECTED';
+  startScanner();
+  loadDirectedNext();
+};
+$('bBackDirected').onclick=()=>{
+  stopScanner();
+  scanMode='FREE';
+  $('camSlotFree').appendChild($('cambox')); // hand the camera back to its home screen
+  dirBatch=null;
+  show('scrBatch');
+};
+
+async function loadDirectedNext(){
+  try{
+    renderDirectedState(await directedFetch('/parts/directed/next',{batch:dirBatch}));
+  }catch(e){
+    $('dirExpectedCard').innerHTML='<div class="dir-empty-card">Could not load batch.<br>'+esc(e.message)+'</div>';
+  }
+}
+function renderDirectedState(data){
+  if(data.status==='NO_LINES'){
+    $('dirBatchSub').textContent='';
+    $('dirProgressLabel').textContent='0 of 0 scanned';
+    $('dirProgressFill').style.width='0%';
+    $('dirExpectedCard').innerHTML='<div class="dir-empty-card">This batch has no labels registered yet.</div>';
+    return;
+  }
+  $('dirProgressLabel').textContent=data.scanned+' of '+data.total+' scanned';
+  $('dirProgressFill').style.width=(data.total?Math.round(data.scanned/data.total*100):0)+'%';
+  $('dirBatchSub').textContent=data.scanned+'/'+data.total;
+  if(!data.expected){
+    $('dirExpectedCard').innerHTML='<div class="dir-empty-card">All parts scanned for this batch.</div>';
+    return;
+  }
+  const e=data.expected;
+  const sub=[e.part_type,[e.width,e.height].filter(Boolean).join(' X '),e.qty,e.colour].filter(Boolean).map(esc).join(' · ');
+  $('dirExpectedCard').innerHTML=`<div class="dir-expected-eyebrow"><span>Scan this next</span><span>#${e.sequence_no}${data.total?' of '+data.total:''}</span></div><div class="dir-expected-name">${esc(e.tag||e.unique_id)}</div>${sub?`<div class="dir-expected-sub">${sub}</div>`:''}`;
+}
+function showDirBanner(kind,msg,sub){
+  const el=$('dirBanner');
+  el.className='dir-banner show '+kind;
+  el.innerHTML=esc(msg)+(sub?`<div class="dir-banner-sub">${esc(sub)}</div>`:'');
+  clearTimeout(dirBannerT);
+  dirBannerT=setTimeout(()=>{el.className='dir-banner';},kind==='ok'?1800:3500);
+}
+
+// zxing's continuous decode can fire twice for one physical scan a few
+// frames apart. Separate from shouldAcceptScan's own (much shorter)
+// cooldown, which exists to eventually let a deliberate re-scan through —
+// this just absorbs the double-fire case right at the entry point.
+let dirLastUid=null,dirLastUidTime=0;
+const DIRECTED_DEBOUNCE_MS=1500;
+function handleDirectedRaw(raw){
+  const now=Date.now();
+  if(raw===dirLastUid&&now-dirLastUidTime<DIRECTED_DEBOUNCE_MS)return;
+  dirLastUid=raw;dirLastUidTime=now;
+  directedScan(raw,false);
+}
+async function directedScan(uid,confirm){
+  if(uid.length!==ID_LEN){beep('err');showDirBanner('err','Not a Matrex code','Barcode ignored.');return;}
+  let data;
+  try{
+    data=await directedFetch('/parts/directed/scan',{batch:dirBatch,unique_id:uid,confirm});
+  }catch(e){beep('err');showDirBanner('err','Could not reach server',e.message);return;}
+  switch(data.status){
+    case'OK':case'OK_OUT_OF_ORDER':
+      beep('ok');
+      showDirBanner('ok',(data.tag||data.unique_id)+' scanned',data.status==='OK_OUT_OF_ORDER'?'Scanned out of order — confirmed':'');
+      dirLastAction={unique_id:data.unique_id};
+      $('bDirUndo').disabled=false;
+      renderDirectedState(data);
+      if(data.job_complete)setTimeout(()=>showDirBanner('ok','Batch complete! All parts scanned.'),1900);
+      break;
+    case'OUT_OF_ORDER':
+      beep('err');openDirectedConfirm(data);break;
+    case'DUPLICATE':
+      beep('err');showDirBanner('warn',(data.tag||data.unique_id)+' already scanned','at '+fmtDT(data.scanned_at));break;
+    case'VOIDED':
+      beep('err');showDirBanner('warn',(data.tag||data.unique_id)+' is VOIDED','This part was rejected — do not use it.');break;
+    case'UNKNOWN_UID':
+      beep('err');showDirBanner('err','Unknown code',data.scanned_uid);break;
+    case'JOB_COMPLETE':
+      showDirBanner('ok','Batch already complete');break;
+    case'NO_LINES':
+      showDirBanner('warn','This batch has no labels registered');break;
+  }
+}
+function openDirectedConfirm(data){
+  dirConfirmData=data;
+  const m=data.matched||{},ex=data.expected||{};
+  $('mDirConfirmBody').innerHTML=`This is <strong>${esc(m.tag||m.unique_id)}</strong> (position #${m.sequence_no}) — not the next expected item, <strong>${esc(ex.tag||'')}</strong> (position #${ex.sequence_no||'?'}).<br><br>Scan it anyway and come back to the skipped one later?`;
+  modal('mDirConfirm',true);
+}
+$('mDirConfirmYes').onclick=()=>{
+  modal('mDirConfirm',false);
+  if(dirConfirmData)directedScan(dirConfirmData.matched.unique_id,true);
+  dirConfirmData=null;
+};
+$('mDirConfirmNo').onclick=()=>{modal('mDirConfirm',false);dirConfirmData=null;};
+
+$('bDirUndo').onclick=async()=>{
+  if(!dirLastAction)return;
+  try{
+    await directedFetch('/parts/directed/undo',{unique_id:dirLastAction.unique_id});
+    beep('ok');showDirBanner('ok','Last scan undone');
+    $('bDirUndo').disabled=true;dirLastAction=null;
+    loadDirectedNext();
+  }catch(e){showDirBanner('err','Could not undo',e.message);}
+};
+$('bDirManual').onclick=()=>{
+  const uid=prompt('Enter the 10-character code manually:');
+  if(uid)directedScan(uid.trim().toUpperCase(),false);
+};
+
 window.openBatchLabelDetail=function(uniqueId){
   const l=(batchDetailCache?batchDetailCache.labels:[]).find(x=>x.unique_id===uniqueId);
   if(!l)return;

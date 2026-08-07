@@ -460,10 +460,6 @@ const countDirectedScanned = db.prepare(`
   SELECT COUNT(*) AS c FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
   WHERE pp.batch = ? AND pi.scanned = 'Yes'
 `);
-const countDirectedPending = db.prepare(`
-  SELECT COUNT(*) AS c FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
-  WHERE pp.batch = ? AND pi.scanned = 'No' AND pi.void = 'No'
-`);
 function formatDirectedLine(row) {
   if (!row) return null;
   const { unique_id, sequence_no, tag, part_type, width, height, qty, colour, project, floor } = row;
@@ -528,16 +524,32 @@ app.post('/parts/directed/scan', deviceGate, (req, res) => {
 
   const now = new Date().toISOString();
   markScanned.run({ now, device_id: device_id || null, unique_id: line.unique_id });
-  // markScanned already committed above, so this count already excludes
-  // the line just scanned — no extra "- 1" needed here.
-  const remaining = countDirectedPending.get(b).c;
+  // Recomputed fresh after the write above, so the client gets the new
+  // next-expected item and progress in this same response - no second
+  // round-trip needed just to find out what's next.
+  const newNext = getNextExpectedLine.get(b);
   res.json({
     ok: true,
     status: line.unique_id === next.unique_id ? 'OK' : 'OK_OUT_OF_ORDER',
     ...formatDirectedLine(line),
     scanned_at: now,
-    job_complete: remaining <= 0
+    total: countDirectedTotal.get(b).c,
+    scanned: countDirectedScanned.get(b).c,
+    expected: formatDirectedLine(newNext),
+    job_complete: !newNext
   });
+});
+
+// One level of undo for the Directed Scan screen — mistakes happen, and
+// without this every one requires going into the data directly to fix.
+// Not batch-scoped (just clears the scanned flag on parts_index, same
+// state a fresh label starts in); the client only ever offers this for
+// the single most recent scan in its own session.
+app.post('/parts/directed/undo', deviceGate, (req, res) => {
+  const uid = String((req.body && req.body.unique_id) || '').trim();
+  if (!uid) return res.status(400).json({ ok: false, error: 'unique_id required' });
+  db.prepare("UPDATE parts_index SET scanned='No', scanned_at=NULL, scanned_by_device=NULL WHERE unique_id=?").run(uid);
+  res.json({ ok: true });
 });
 
 // ── DEFECT / NOTES LOG — append-only, one row per note, never
