@@ -122,11 +122,11 @@
 <body>
 <div class="wrap">
   <div class="tabbar">
-    <button class="tab-btn active" id="tabBtnOps" onclick="showTab('ops')">Operations</button>
-    <button class="tab-btn" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
+    <button class="tab-btn active" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
+    <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
   </div>
 
-  <div id="tabOperations">
+  <div id="tabOperations" style="display:none">
   <h1>Device Approvals</h1>
   <div class="sub">Only approved devices can write scans to the server. New phones show up here as Pending.</div>
   <div class="keybar">
@@ -183,7 +183,7 @@
   <div id="repNotes"></div>
   </div>
 
-  <div id="tabSchedule" style="display:none">
+  <div id="tabSchedule">
     <h1>Production Schedule</h1>
     <div class="sub">Job name, work order, target finish, material, and more — one row per batch. Filled in automatically by the Excel label generator, or click any row to edit manually. Click a column header's arrow to filter or sort it, same as Excel's AutoFilter — filters on different columns combine (AND).</div>
     <div style="overflow-x:auto">
@@ -229,6 +229,23 @@ $('key').value=KEY;
 function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();}
 
 // ── TABS ─────────────────────────────────────────────────────
+// Production Schedule is the landing view now, open to whoever has the
+// page URL; Operations (device approvals, part lookup, reporting) sits
+// behind the same casual-deterrent password already used for the phone
+// app's Production Schedule tab (BATCH_PASSWORD in index.html) - not
+// real security, matches this project's existing pattern, and doesn't
+// replace the real admin key Operations' own data calls still require.
+const OPS_PASSWORD='3090MWS';
+let opsUnlocked=false;
+function goToOperations(){
+  if(!opsUnlocked){
+    const pw=prompt('Enter the Operations password:');
+    if(pw===null)return;
+    if(pw!==OPS_PASSWORD){alert('Incorrect password.');return;}
+    opsUnlocked=true;
+  }
+  showTab('ops');
+}
 function showTab(name){
   $('tabOperations').style.display=name==='ops'?'':'none';
   $('tabSchedule').style.display=name==='schedule'?'':'none';
@@ -290,6 +307,7 @@ function copyTunnelUrl(){
 
 load();
 loadTunnelUrl();
+loadScheduleList();
 setInterval(load,4000);
 setInterval(loadTunnelUrl,10000);
 
