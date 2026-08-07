@@ -16,6 +16,14 @@
   .sub{font-size:13px;color:var(--gray-500);margin-bottom:20px}
   .keybar{display:flex;gap:8px;margin-bottom:20px}
   input{flex:1;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit}
+  /* The rule above targets text inputs, but `input` with no type qualifier
+     also matches checkboxes - flex:1 was making every checkbox grow to
+     match its label's width (both had flex:1, so they split the row
+     50/50), and the padding/border/border-radius were making it look like
+     a small text box instead of a checkbox. This is a real, separate bug
+     fix, not a spacing tweak - fixed size, no growth, no inherited
+     text-input chrome. */
+  input[type="checkbox"]{flex:0 0 auto;width:14px;height:14px;padding:0;border:1px solid #767676;border-radius:2px;margin:0}
   button{padding:10px 16px;border-radius:8px;border:none;background:var(--blue-600);color:#fff;font-weight:600;cursor:pointer;font-size:13px;font-family:inherit}
   button.secondary{background:var(--gray-200);color:var(--gray-900)}
   button.danger{background:var(--red-50);color:var(--red-600)}
