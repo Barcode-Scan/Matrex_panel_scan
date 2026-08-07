@@ -476,6 +476,11 @@ let colfKey=null,colfLabel=null,colfPending=new Set();
 
 function openColFilter(evt,key,label){
   evt.stopPropagation();
+  const pop=$('colFilterPopover');
+  if(pop.style.display==='block'&&colfKey===key){
+    closeColFilter();  // same button clicked again while its own popover is open - toggle closed
+    return;
+  }
   colfKey=key;colfLabel=label;
   const values=uniqueValuesFor(key);
   colfPending=new Set(columnFilters[key]?[...columnFilters[key]]:values);
@@ -483,7 +488,6 @@ function openColFilter(evt,key,label){
   renderColFilterList();
   $('colfClearItem').classList.toggle('disabled',!columnFilters[key]);
   const r=evt.currentTarget.getBoundingClientRect();
-  const pop=$('colFilterPopover');
   pop.style.top=(r.bottom+4)+'px';
   pop.style.left=Math.min(r.left,window.innerWidth-260)+'px';
   pop.style.display='block';
@@ -492,11 +496,19 @@ function renderColFilterList(){
   const q=$('colfSearch').value.trim().toLowerCase();
   const values=uniqueValuesFor(colfKey).filter(v=>(colfKey==='status'?statusLabel(v):v).toLowerCase().includes(q));
   const allChecked=values.length>0&&values.every(v=>colfPending.has(v));
+  // Inline styles here are deliberate, not just class-based - this row
+  // layout (checkbox flush left, label immediately beside it) kept
+  // breaking under a class-only approach, so every alignment-relevant
+  // property is repeated inline where nothing else in the page can
+  // override it.
+  const rowStyle='display:flex;flex-direction:row;justify-content:flex-start;align-items:center;width:100%;text-align:left';
+  const cbStyle='margin:0;flex-shrink:0';
+  const lblStyle='margin-left:8px;text-align:left;flex:1';
   $('colfList').innerHTML=`
-    <label class="colf-item colf-all"><input type="checkbox" ${allChecked?'checked':''} onchange="toggleAllColf(this.checked)"> (Select All)</label>
+    <label class="colf-item colf-all" style="${rowStyle}"><input type="checkbox" style="${cbStyle}" ${allChecked?'checked':''} onchange="toggleAllColf(this.checked)"><span style="${lblStyle}">(Select All)</span></label>
     ${values.map(v=>{
       const label=colfKey==='status'?statusLabel(v):esc(v);
-      return`<label class="colf-item"><input type="checkbox" ${colfPending.has(v)?'checked':''} onchange="toggleColfValue('${esc(v)}',this.checked)"> ${label}</label>`;
+      return`<label class="colf-item" style="${rowStyle}"><input type="checkbox" style="${cbStyle}" ${colfPending.has(v)?'checked':''} onchange="toggleColfValue('${esc(v)}',this.checked)"><span style="${lblStyle}">${label}</span></label>`;
     }).join('')}`;
 }
 function toggleAllColf(checked){
