@@ -101,7 +101,7 @@
   .sched-grid .gc-progress-fill.progress{background:var(--amber-700)}
   .sched-grid .gc-progress-fill.none{background:var(--gray-200)}
   .sched-grid .gc-count{font-size:11px;font-weight:700;color:var(--gray-500);flex-shrink:0}
-  .icon-btn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:none;border-radius:4px;background:var(--gray-100);color:var(--gray-700);cursor:pointer;margin-right:4px}
+  .icon-btn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:none;border-radius:4px;background:var(--gray-100);color:var(--gray-700);cursor:pointer;margin-right:4px;font-size:15px;line-height:1;font-family:"Segoe UI Symbol","Segoe UI Emoji",Arial,sans-serif}
   .icon-btn:hover{background:var(--gray-200)}
   .icon-btn.icon-danger{color:var(--red-600)}
   .icon-btn.icon-danger:hover{background:var(--red-50)}
@@ -629,10 +629,13 @@ function toISODate(v){
   return isNaN(d.getTime())?'':d.toISOString().slice(0,10);
 }
 
-const ICON_EDIT='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
-const ICON_DELETE='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
-const ICON_SAVE='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-const ICON_CANCEL='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+// Plain text glyphs instead of hand-written SVG paths - a typo in path
+// data renders as nothing at all with no error, which is exactly what
+// happened here; a text character can't silently fail to render like that.
+const ICON_EDIT='&#9998;';   // ✎ pencil
+const ICON_DELETE='&#128465;'; // 🗑 wastebasket
+const ICON_SAVE='&#10003;';  // ✓ check mark
+const ICON_CANCEL='&#10005;'; // ✕ multiplication x
 
 // Batches currently in inline-edit mode (their grid row shows inputs
 // instead of plain text). A row's own Edit/Save icons toggle membership.
