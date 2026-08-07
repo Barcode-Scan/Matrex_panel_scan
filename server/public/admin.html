@@ -101,8 +101,14 @@
   .sched-grid .gc-progress-fill.progress{background:var(--amber-700)}
   .sched-grid .gc-progress-fill.none{background:var(--gray-200)}
   .sched-grid .gc-count{font-size:11px;font-weight:700;color:var(--gray-500);flex-shrink:0}
-  .fg-label{display:block;font-size:12px;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}
-  .extra-row{display:flex;gap:8px;margin-bottom:6px}
+  .icon-btn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:none;border-radius:4px;background:var(--gray-100);color:var(--gray-700);cursor:pointer;margin-right:4px}
+  .icon-btn:hover{background:var(--gray-200)}
+  .icon-btn.icon-danger{color:var(--red-600)}
+  .icon-btn.icon-danger:hover{background:var(--red-50)}
+  .icon-btn.icon-save{color:var(--green-700)}
+  .icon-btn.icon-save:hover{background:var(--green-50)}
+  .gc-actions{white-space:nowrap}
+  .gc-input{width:100%;padding:4px 6px;border:1px solid var(--blue-600);border-radius:4px;font-size:12.5px;font-family:inherit;background:var(--white)}
   .extra-row input{flex:1}
   .source-pill{font-size:11px;font-weight:800;padding:3px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:.4px;background:var(--gray-200);color:var(--gray-500)}
   .bl-row{display:flex;align-items:center;gap:12px;background:var(--white);border:1.5px solid var(--gray-200);border-radius:10px;padding:10px 12px;margin-bottom:6px}
@@ -456,16 +462,16 @@ const GRID_COLUMNS=[
 function renderScheduleHead(){
   $('scheduleHeadRow').innerHTML=GRID_COLUMNS.map(([key,label])=>
     `<th>${esc(label)}<button class="colf-btn" id="colfbtn_${key}" onclick="openColFilter(event,'${key}','${esc(label)}')">&#9660;</button></th>`
-  ).join('');
+  ).join('')+'<th>Actions</th>';
 }
 async function loadScheduleList(){
   if(!$('scheduleHeadRow').children.length)renderScheduleHead();
-  if(!KEY){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Enter the admin key above to load.</td></tr>';return;}
+  if(!KEY){$('scheduleTbody').innerHTML='<tr><td colspan="12" class="empty">Enter the admin key above to load.</td></tr>';return;}
   try{
     const data=await api('/viewer/api/batches');
     scheduleBatches=data.batches||[];
     renderScheduleGrid();
-  }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
+  }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="12" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
 
 // ── AutoFilter (Excel-style: checkbox multi-select per column, search,
@@ -576,37 +582,42 @@ function renderScheduleGrid(){
     const btn=$('colfbtn_'+key);
     if(btn)btn.classList.toggle('active',!!columnFilters[key]);
   });
-  if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="11" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;return;}
+  if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="12" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;return;}
   $('scheduleTbody').innerHTML=rows.map(b=>{
     const pct=b.total?Math.round((b.scanned/b.total)*100):0;
     const state=rowStatus(b);
-    return`<tr onclick="openScheduleDetail('${esc(b.batch)}')">
-      <td>${esc(b.job_name||'')}</td>
-      <td>${esc(b.floor_or_work_order||'')}</td>
-      <td>${esc(b.target_finish||'')}</td>
-      <td>${esc(b.material||'')}</td>
-      <td>${esc(b.finish||'')}</td>
-      <td>${esc(b.part_name||'')}</td>
+    const editing=editingBatches.has(b.batch);
+    // Editable text field, or a date-type one for target_finish - same
+    // upsert-only-what's-present contract as before, just inline in the
+    // grid row now instead of a separate panel.
+    const field=(key,isDate)=>{
+      if(!editing)return esc(b[key]||'');
+      const val=isDate?toISODate(b[key]):esc(b[key]||'');
+      return`<input class="gc-input" type="${isDate?'date':'text'}" data-field="${key}" value="${val}" onclick="event.stopPropagation()">`;
+    };
+    const actions=editing?`
+        <button class="icon-btn icon-save" title="Save" onclick="event.stopPropagation();saveRowEdit('${esc(b.batch)}')">${ICON_SAVE}</button>
+        <button class="icon-btn" title="Cancel" onclick="event.stopPropagation();cancelRowEdit('${esc(b.batch)}')">${ICON_CANCEL}</button>`
+      :`
+        <button class="icon-btn" title="Edit" onclick="event.stopPropagation();toggleEditRow('${esc(b.batch)}')">${ICON_EDIT}</button>
+        <button class="icon-btn icon-danger" title="Delete" onclick="event.stopPropagation();deleteBatchFromGrid('${esc(b.batch)}')">${ICON_DELETE}</button>`;
+    return`<tr data-batch="${esc(b.batch)}" onclick="viewBatchLabels('${esc(b.batch)}')">
+      <td>${field('job_name')}</td>
+      <td>${field('floor_or_work_order')}</td>
+      <td>${field('target_finish',true)}</td>
+      <td>${field('material')}</td>
+      <td>${field('finish')}</td>
+      <td>${field('part_name')}</td>
       <td class="gc-batch">${esc(b.batch)}</td>
       <td><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${b.scanned}/${b.total}</div></div></td>
-      <td>${esc(b.sheet_qty||'')}</td>
-      <td class="gc-comment">${esc(b.comment||'')}</td>
-      <td>${esc(b.tasked||'')}</td>
+      <td>${field('sheet_qty')}</td>
+      <td class="gc-comment">${field('comment')}</td>
+      <td>${field('tasked')}</td>
+      <td class="gc-actions">${actions}</td>
     </tr>`;
   }).join('');
 }
 
-let currentScheduleBatch=null,currentExtraFields={},currentScheduleLabels=[];
-
-async function openScheduleDetail(batch){
-  currentScheduleBatch=batch;
-  $('scheduleDetail').innerHTML='<div class="empty">Loading…</div>';
-  try{
-    const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
-    renderScheduleDetail(batch,data.schedule||{},data.labels||[]);
-    $('scheduleDetail').scrollIntoView({behavior:'smooth',block:'start'});
-  }catch(e){$('scheduleDetail').innerHTML='<div class="empty">Could not load this batch.</div>';}
-}
 // Best-effort free text -> yyyy-mm-dd, for feeding an existing stored
 // value into <input type="date">. Returns '' (not an error) if it can't
 // be confidently parsed - the date field just starts blank rather than
@@ -617,81 +628,79 @@ function toISODate(v){
   const d=new Date(v);
   return isNaN(d.getTime())?'':d.toISOString().slice(0,10);
 }
-// The read view (phone app) and this edit view now share the same table
-// layout, matching the physical label sheet's grid look — here every cell
-// is a real input (styled borderless to blend into the table), with the
-// field name as its placeholder so an empty cell still shows what goes there.
-function renderScheduleDetail(batch,sched,labels){
-  currentExtraFields=Object.assign({},sched.extra_fields||{});
-  currentScheduleLabels=labels;
-  const sourcePill=sched.schedule_source?`<span class="source-pill">${esc(sched.schedule_source)}</span>`:'';
-  const scannedCount=labels.filter(l=>l.scanned==='Yes').length;
-  const inp=(k,ph)=>`<input id="sf_${k}" placeholder="${esc(ph)}" value="${esc(sched[k]||'')}">`;
-  // Target Finish is the one date field here - a real calendar picker
-  // (native <input type="date">, same idea as Excel Online's date-cell
-  // picker) instead of typed text. toISODate best-effort converts
-  // whatever's already stored (may predate this - could be "12/12/2025"
-  // style free text) into the yyyy-mm-dd the date input needs to show a
-  // value at all; if it can't be parsed, the field just starts empty
-  // rather than erroring.
-  const dateInp=`<input id="sf_target_finish" type="date" value="${esc(toISODate(sched.target_finish))}">`;
-  $('scheduleDetail').innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <button class="secondary" onclick="$('scheduleDetail').innerHTML=''">&larr; Close</button>
-      <div style="display:flex;gap:8px;align-items:center">${sourcePill}<button class="danger-solid" onclick="deleteBatch()">Delete Batch</button></div>
-    </div>
-    <table class="sched-table">
-      <tr>
-        <td class="stc-batch">${esc(batch)}</td>
-        <td>${dateInp}</td>
-        <td colspan="2">${inp('material','MATERIAL')}</td>
-        <td class="stc-progress">${scannedCount}/${labels.length}</td>
-      </tr>
-      <tr>
-        <td>${inp('job_name','JOB')}</td>
-        <td>${inp('floor_or_work_order','FLOOR OR WORK ORDER')}</td>
-        <td>${inp('finish','FINISH')}</td>
-        <td>${inp('part_name','PART NAME')}</td>
-        <td>${inp('sheet_qty','SHEET QTY')}</td>
-        <td>${inp('tasked','TASKED')}</td>
-      </tr>
-      <tr><td colspan="6">${inp('comment','COMMENT')}</td></tr>
-    </table>
-    <label class="fg-label">Extra Fields</label>
-    <div id="extraFieldRows"></div>
-    <button class="secondary" onclick="addExtraFieldRow()" style="margin-bottom:12px">+ Add Field</button>
-    <button onclick="saveSchedule()">Save</button>
-    ${sched.schedule_updated_at?`<div class="meta" style="margin-top:8px">Last updated ${fmt(sched.schedule_updated_at)}${sched.schedule_updated_by?' by '+esc(sched.schedule_updated_by):''}</div>`:''}
-    <h2>Labels in this Batch</h2>
-    <div>${labelRowsHtml(labels)}</div>`;
-  renderExtraFieldRows();
+
+const ICON_EDIT='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+const ICON_DELETE='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+const ICON_SAVE='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const ICON_CANCEL='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+// Batches currently in inline-edit mode (their grid row shows inputs
+// instead of plain text). A row's own Edit/Save icons toggle membership.
+let editingBatches=new Set();
+
+function toggleEditRow(batch){editingBatches.add(batch);renderScheduleGrid();}
+function cancelRowEdit(batch){editingBatches.delete(batch);renderScheduleGrid();}
+
+// Reads every .gc-input in that batch's row (identified via data-batch,
+// since batch names are unique) and saves in one call - same upsert
+// endpoint as before. extra_fields is deliberately omitted from the body
+// now that there's no UI for it; the backend only overwrites fields that
+// are actually present, so any extra_fields set before this change stays
+// intact even though nothing here can edit it anymore.
+async function saveRowEdit(batch){
+  const row=document.querySelector(`tr[data-batch="${CSS.escape(batch)}"]`);
+  if(!row)return;
+  const body={};
+  row.querySelectorAll('.gc-input').forEach(inp=>{body[inp.dataset.field]=inp.value.trim();});
+  try{
+    await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'POST',body:JSON.stringify(body)});
+    editingBatches.delete(batch);
+    await loadScheduleList();
+  }catch(e){alert('Could not save — check the admin key and try again.');}
 }
+
 // Permanently deletes the batch: every registered part in it, their notes
 // and scan-log entries, and the schedule row itself. Allowed even with
 // scanned parts (per the "warn but don't block" choice for this feature -
 // this is for cleaning up mistaken/test batches) - but requires typing the
 // exact batch name first, and the warning text says plainly how many parts
 // have already been scanned when that's the case, so it's never a surprise.
-async function deleteBatch(){
-  const total=currentScheduleLabels.length;
-  const scannedCount=currentScheduleLabels.filter(l=>l.scanned==='Yes').length;
-  let warning=`This permanently deletes batch "${currentScheduleBatch}" and all ${total} registered part(s) in it. This cannot be undone.`;
+async function deleteBatchFromGrid(batch){
+  const b=scheduleBatches.find(x=>x.batch===batch);
+  const total=b?b.total:0,scannedCount=b?b.scanned:0;
+  let warning=`This permanently deletes batch "${batch}" and all ${total} registered part(s) in it. This cannot be undone.`;
   if(scannedCount>0){
     warning+=`\n\nWARNING: ${scannedCount} of ${total} part(s) in this batch have ALREADY BEEN SCANNED. Deleting will permanently lose that scan history.`;
   }
-  warning+=`\n\nType the batch name exactly to confirm:\n${currentScheduleBatch}`;
+  warning+=`\n\nType the batch name exactly to confirm:\n${batch}`;
   const typed=prompt(warning);
   if(typed===null)return;
-  if(typed!==currentScheduleBatch){alert('Batch name did not match — nothing deleted.');return;}
+  if(typed!==batch){alert('Batch name did not match — nothing deleted.');return;}
   try{
-    await api('/admin/api/schedule/'+encodeURIComponent(currentScheduleBatch),{method:'DELETE'});
-    $('scheduleDetail').innerHTML='';
+    await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'DELETE'});
+    editingBatches.delete(batch);
     await loadScheduleList();
   }catch(e){alert('Could not delete — check the admin key and try again.');}
 }
-// Same read-only per-label view the phone app's Production Schedule
-// drill-down shows (project/floor/type/size/qty/colour + scan status) -
-// admin sees the same picture, just alongside the editable fields above.
+
+// Read-only: clicking anywhere on a row that isn't an icon/input shows
+// just its per-label scan status (same view the phone app's Production
+// Schedule drill-down shows) - editing/deleting now live on the row's own
+// icons instead of a shared detail panel.
+async function viewBatchLabels(batch){
+  $('scheduleDetail').innerHTML='<div class="empty">Loading…</div>';
+  try{
+    const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
+    $('scheduleDetail').innerHTML=`
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <button class="secondary" onclick="$('scheduleDetail').innerHTML=''">&larr; Close</button>
+        <div class="name">${esc(batch)}</div>
+      </div>
+      <h2>Labels in this Batch</h2>
+      <div>${labelRowsHtml(data.labels||[])}</div>`;
+    $('scheduleDetail').scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){$('scheduleDetail').innerHTML='<div class="empty">Could not load this batch.</div>';}
+}
 function labelRowsHtml(labels){
   if(!labels.length)return'<div class="empty">No labels in this batch.</div>';
   return labels.map(l=>{
@@ -700,40 +709,6 @@ function labelRowsHtml(labels){
     const sub=[l.project,l.floor,l.part_type,[l.width,l.height].filter(Boolean).join(' X '),l.qty,l.colour].filter(Boolean).map(esc).join(' · ');
     return`<div class="bl-row"><div class="bl-dot ${dc}"></div><div class="bl-info"><div class="bl-name">${esc(l.tag||l.unique_id)}</div><div class="bl-sub">${sub?sub+' · ':''}${esc(statusText)}</div></div></div>`;
   }).join('');
-}
-function renderExtraFieldRows(){
-  const keys=Object.keys(currentExtraFields);
-  $('extraFieldRows').innerHTML=keys.map(k=>`
-    <div class="extra-row">
-      <input placeholder="Field name" value="${esc(k)}" onchange="renameExtraField('${esc(k)}',this.value)">
-      <input placeholder="Value" value="${esc(currentExtraFields[k])}" onchange="currentExtraFields['${esc(k)}']=this.value">
-      <button class="danger" onclick="removeExtraField('${esc(k)}')">Remove</button>
-    </div>`).join('');
-}
-function addExtraFieldRow(){
-  let n=1,key='Field '+n;
-  while(currentExtraFields.hasOwnProperty(key)){n++;key='Field '+n;}
-  currentExtraFields[key]='';
-  renderExtraFieldRows();
-}
-function renameExtraField(oldKey,newKey){
-  newKey=newKey.trim();
-  if(!newKey||newKey===oldKey)return;
-  const v=currentExtraFields[oldKey];
-  delete currentExtraFields[oldKey];
-  currentExtraFields[newKey]=v;
-  renderExtraFieldRows();
-}
-function removeExtraField(key){delete currentExtraFields[key];renderExtraFieldRows();}
-
-async function saveSchedule(){
-  const body={extra_fields:currentExtraFields};
-  SCHEDULE_FIELDS.forEach(([k])=>{body[k]=$('sf_'+k).value.trim();});
-  try{
-    await api('/admin/api/schedule/'+encodeURIComponent(currentScheduleBatch),{method:'POST',body:JSON.stringify(body)});
-    await loadScheduleList();
-    openScheduleDetail(currentScheduleBatch);
-  }catch(e){alert('Could not save — check the admin key and try again.');}
 }
 </script>
 </body>
