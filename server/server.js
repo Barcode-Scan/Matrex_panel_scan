@@ -437,6 +437,109 @@ app.post('/parts/match', deviceGate, (req, res) => {
   res.json({ ok: true, status: 'MATCHED_NEW', ...fields, scanned_at: now, scanned_by_device: device_id || '', note_count });
 });
 
+// ── DIRECTED SCAN MODE — sequence-aware scanning for a batch, on top of
+// the same parts_index/parts_panel data /parts/match already uses (no new
+// tables). "Next expected" is always the lowest sequence_no among that
+// batch's lines that are neither scanned nor voided — a voided line is
+// implicitly skipped, it never blocks the sequence. There's no separate
+// "skipped" state: scanning out of order just leaves the earlier pending
+// line(s) as pending, so they resurface as "next expected" again later —
+// self-healing instead of needing a status to track intentional skips.
+const getNextExpectedLine = db.prepare(`
+  SELECT pp.* FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
+  WHERE pp.batch = ? AND pi.scanned = 'No' AND pi.void = 'No'
+  ORDER BY pp.sequence_no ASC LIMIT 1
+`);
+const getDirectedLine = db.prepare(`
+  SELECT pp.*, pi.scanned, pi.void, pi.scanned_at, pi.scanned_by_device
+  FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
+  WHERE pp.batch = ? AND pp.unique_id = ?
+`);
+const countDirectedTotal = db.prepare('SELECT COUNT(*) AS c FROM parts_panel WHERE batch = ?');
+const countDirectedScanned = db.prepare(`
+  SELECT COUNT(*) AS c FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
+  WHERE pp.batch = ? AND pi.scanned = 'Yes'
+`);
+const countDirectedPending = db.prepare(`
+  SELECT COUNT(*) AS c FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
+  WHERE pp.batch = ? AND pi.scanned = 'No' AND pi.void = 'No'
+`);
+function formatDirectedLine(row) {
+  if (!row) return null;
+  const { unique_id, sequence_no, tag, part_type, width, height, qty, colour, project, floor } = row;
+  return { unique_id, sequence_no, tag, part_type, width, height, qty, colour, project, floor };
+}
+
+// What the Directed Scan screen loads before any scan happens — the
+// expected-item card plus progress, so JOB_LOADED has something to show
+// immediately instead of waiting on a first scan attempt. POST (not GET)
+// to match deviceGate, which reads device_id from the body like every
+// other device-gated route in this file.
+app.post('/parts/directed/next', deviceGate, (req, res) => {
+  const b = String((req.body && req.body.batch) || '').trim();
+  if (!b) return res.status(400).json({ ok: false, error: 'batch required' });
+
+  const total = countDirectedTotal.get(b).c;
+  if (!total) return res.json({ ok: true, status: 'NO_LINES', total: 0, scanned: 0, expected: null });
+
+  const scanned = countDirectedScanned.get(b).c;
+  const next = getNextExpectedLine.get(b);
+  res.json({
+    ok: true,
+    status: next ? 'AWAITING_SCAN' : 'JOB_COMPLETE',
+    total, scanned,
+    expected: formatDirectedLine(next)
+  });
+});
+
+app.post('/parts/directed/scan', deviceGate, (req, res) => {
+  const { batch, unique_id, device_id, confirm } = req.body || {};
+  const b = String(batch || '').trim();
+  const uid = String(unique_id || '').trim();
+  if (!b) return res.status(400).json({ ok: false, error: 'batch required' });
+  if (!uid) return res.status(400).json({ ok: false, error: 'unique_id required' });
+
+  const next = getNextExpectedLine.get(b);
+  if (!next) {
+    const total = countDirectedTotal.get(b).c;
+    return res.json({ ok: true, status: total ? 'JOB_COMPLETE' : 'NO_LINES', scanned_uid: uid, expected: null });
+  }
+
+  const line = getDirectedLine.get(b, uid);
+  if (!line) {
+    return res.json({ ok: true, status: 'UNKNOWN_UID', scanned_uid: uid, expected: formatDirectedLine(next) });
+  }
+  if (line.void === 'Yes') {
+    return res.json({ ok: true, status: 'VOIDED', ...formatDirectedLine(line), expected: formatDirectedLine(next) });
+  }
+  if (line.scanned === 'Yes') {
+    return res.json({
+      ok: true, status: 'DUPLICATE', ...formatDirectedLine(line),
+      scanned_at: line.scanned_at, expected: formatDirectedLine(next)
+    });
+  }
+
+  // Pending, but not the lowest pending sequence_no — out of order. Report
+  // it and stop; only commit the write once the operator explicitly taps
+  // confirm (never auto-skip, matching what was asked for).
+  if (line.unique_id !== next.unique_id && !confirm) {
+    return res.json({ ok: true, status: 'OUT_OF_ORDER', matched: formatDirectedLine(line), expected: formatDirectedLine(next) });
+  }
+
+  const now = new Date().toISOString();
+  markScanned.run({ now, device_id: device_id || null, unique_id: line.unique_id });
+  // markScanned already committed above, so this count already excludes
+  // the line just scanned — no extra "- 1" needed here.
+  const remaining = countDirectedPending.get(b).c;
+  res.json({
+    ok: true,
+    status: line.unique_id === next.unique_id ? 'OK' : 'OK_OUT_OF_ORDER',
+    ...formatDirectedLine(line),
+    scanned_at: now,
+    job_complete: remaining <= 0
+  });
+});
+
 // ── DEFECT / NOTES LOG — append-only, one row per note, never
 // overwritten. Same underlying insert/list logic for both the phone
 // (device-gated) and the admin dashboard (admin-key gated); only the
