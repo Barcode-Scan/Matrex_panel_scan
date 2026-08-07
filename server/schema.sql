@@ -101,7 +101,8 @@ CREATE TABLE IF NOT EXISTS parts_panel (
   height        TEXT,
   qty           TEXT,
   colour        TEXT,
-  generated_on  TEXT
+  generated_on  TEXT,
+  sequence_no   INTEGER  -- directed-scan order within its batch; defaults to registration order, admin-editable
 );
 
 -- ── PRODUCTION SCHEDULE — one row per batch, batch-level metadata that

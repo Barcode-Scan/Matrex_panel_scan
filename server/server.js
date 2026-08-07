@@ -225,11 +225,12 @@ const insertPartsIndex = db.prepare(`
   ON CONFLICT(unique_id) DO NOTHING
 `);
 const insertPartsPanel = db.prepare(`
-  INSERT INTO parts_panel (unique_id, batch, sheet_name, project, floor, tag, part_type, width, height, qty, colour, generated_on)
-  VALUES (@unique_id, @batch, @sheet_name, @project, @floor, @tag, @part_type, @width, @height, @qty, @colour, @generated_on)
+  INSERT INTO parts_panel (unique_id, batch, sheet_name, project, floor, tag, part_type, width, height, qty, colour, generated_on, sequence_no)
+  VALUES (@unique_id, @batch, @sheet_name, @project, @floor, @tag, @part_type, @width, @height, @qty, @colour, @generated_on, @sequence_no)
   ON CONFLICT(unique_id) DO NOTHING
 `);
 const getPartsIndexRow = db.prepare('SELECT unique_id FROM parts_index WHERE unique_id = ?');
+const getMaxSequenceNo = db.prepare('SELECT COALESCE(MAX(sequence_no),0) AS m FROM parts_panel WHERE batch IS ?');
 
 // ── PRODUCTION SCHEDULE — batch-level metadata (job name, work order,
 // target finish, material, finish, part name, sheet qty, comment, tasked),
@@ -305,17 +306,20 @@ app.post('/parts/panel/register', requireIngest, (req, res) => {
 
   const now = new Date().toISOString();
   let inserted = 0, alreadyExisted = 0, skipped = 0;
+  const nextSeq = {}; // batch -> next sequence_no, seeded from current max on first use in this call
 
   db.exec('BEGIN');
   try {
     for (const row of rows) {
       const uid = String(row.unique_id || '').trim();
       if (!uid || uid.length > 50) { skipped++; continue; }
+      const rowBatch = row.batch || batch || null;
       const existed = !!getPartsIndexRow.get(uid);
       insertPartsIndex.run({ unique_id: uid, now });
+      if (!(rowBatch in nextSeq)) nextSeq[rowBatch] = getMaxSequenceNo.get(rowBatch).m;
       insertPartsPanel.run({
         unique_id: uid,
-        batch: row.batch || batch || null,
+        batch: rowBatch,
         sheet_name: row.sheet_name || null,
         project: row.project || null,
         floor: row.floor || null,
@@ -325,7 +329,8 @@ app.post('/parts/panel/register', requireIngest, (req, res) => {
         height: row.height || null,
         qty: row.qty || null,
         colour: row.colour || null,
-        generated_on: row.generated_on || null
+        generated_on: row.generated_on || null,
+        sequence_no: existed ? null : ++nextSeq[rowBatch]
       });
       if (existed) alreadyExisted++; else inserted++;
     }

@@ -25,5 +25,24 @@ ensureColumn('scans', 'match_status', 'TEXT');
 ensureColumn('parts_index', 'voided_at', 'TEXT');
 ensureColumn('parts_index', 'voided_by_device', 'TEXT');
 ensureColumn('part_notes', 'action', "TEXT NOT NULL DEFAULT 'NOTE'");
+ensureColumn('parts_panel', 'sequence_no', 'INTEGER');
+// Index depends on sequence_no, so it's created here (after ensureColumn
+// guarantees the column exists) rather than in schema.sql — CREATE TABLE
+// IF NOT EXISTS is a no-op on an already-existing table, so a CREATE INDEX
+// baked into schema.sql referencing this column would fail on any DB that
+// predates the column (as it did in production on first deploy of this).
+db.exec('CREATE INDEX IF NOT EXISTS idx_parts_panel_batch_seq ON parts_panel(batch, sequence_no)');
+
+// One-time backfill for rows registered before sequence_no existed — orders
+// each batch by rowid (its original registration order), same default the
+// register endpoint now assigns going forward. No-op once every row has a
+// value, so safe to run on every boot.
+db.exec(`
+  UPDATE parts_panel SET sequence_no = (
+    SELECT COUNT(*) FROM parts_panel p2
+    WHERE p2.batch IS parts_panel.batch AND p2.rowid <= parts_panel.rowid
+  )
+  WHERE sequence_no IS NULL
+`);
 
 module.exports = db;
