@@ -307,7 +307,6 @@ function copyTunnelUrl(){
 
 load();
 loadTunnelUrl();
-loadScheduleList();
 setInterval(load,4000);
 setInterval(loadTunnelUrl,10000);
 
@@ -779,6 +778,16 @@ function labelRowsHtml(labels){
     return`<div class="bl-row"><div class="bl-dot ${dc}"></div><div class="bl-info"><div class="bl-name">${esc(l.tag||l.unique_id)}</div><div class="bl-sub">${sub?sub+' · ':''}${esc(statusText)}</div></div></div>`;
   }).join('');
 }
+
+// Production Schedule is the landing tab now, so its grid needs to load
+// immediately - this has to be the last line in the script, not grouped
+// with the other startup calls near the top, because it depends on
+// GRID_COLUMNS and the other consts/functions defined further down the
+// file (a `const` isn't usable before its own declaration line runs,
+// unlike a function declaration - calling this too early silently threw
+// and left the grid empty until something re-triggered it, e.g. clicking
+// the tab).
+loadScheduleList();
 </script>
 </body>
 </html>
