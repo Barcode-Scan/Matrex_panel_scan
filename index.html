@@ -204,6 +204,9 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .dir-banner.err{background:var(--red-50);color:var(--red-600);border:1.5px solid var(--red-300)}
 .dir-banner.warn{background:var(--amber-50);color:var(--amber-700);border:1.5px solid #F6C453}
 .dir-banner-sub{font-size:13px;font-weight:500;margin-top:4px;opacity:.85}
+.dir-sync-pill{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--amber-700);background:var(--amber-50);border:1.5px solid #F6C453;border-radius:var(--pill);padding:6px 12px;margin-bottom:14px;width:fit-content}
+.dir-sync-pill.warn{color:var(--red-600);background:var(--red-50);border-color:var(--red-300)}
+.dir-sync-dot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pulse .9s infinite}
 .m-confirm{width:100%;border:none;border-radius:var(--pill);padding:16px;font-size:17px;font-weight:600;cursor:pointer;font-family:inherit;background:var(--red-600);color:var(--white);transition:all .16s var(--ease)}
 .m-confirm:active{transform:scale(.98)}
 .m-ok{width:100%;border:none;border-radius:var(--pill);padding:16px;font-size:17px;font-weight:600;cursor:pointer;font-family:inherit;background:var(--blue-600);color:var(--white);box-shadow:var(--shadow-blue);transition:all .16s var(--ease)}
@@ -536,6 +539,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       <div class="dir-progress-track"><div class="dir-progress-fill" id="dirProgressFill" style="width:0%"></div></div>
       <div class="dir-progress-label" id="dirProgressLabel">0 of 0 scanned</div>
     </div>
+    <div id="dirSyncPill" class="dir-sync-pill" style="display:none"></div>
 
     <div id="dirExpectedCard" class="dir-expected-card"></div>
 
@@ -664,7 +668,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 */
 
 const PASSWORD='M@trex';
-const LS={scans:d=>'mx_scans_'+d,cfg:'mx_cfg',lastUp:'mx_lastup',camSize:'mx_camsize',login:'mx_login',synced:d=>'mx_synced_'+d,deviceId:'mx_device_id'};
+const LS={scans:d=>'mx_scans_'+d,cfg:'mx_cfg',lastUp:'mx_lastup',camSize:'mx_camsize',login:'mx_login',synced:d=>'mx_synced_'+d,deviceId:'mx_device_id',dirQueue:'mx_dir_queue',dirCache:'mx_dir_cache'};
 const LOGIN_TTL_MS=30*24*60*60*1000; // stay signed in for 30 days on this phone
 
 const $=id=>document.getElementById(id);
@@ -1780,9 +1784,14 @@ function renderBatchDetail(q){
 // path stays untouched) — only the shared camera engine is reused, routed
 // by the scanMode flag set above.
 let dirBatch=null;
-let dirLastAction=null; // {unique_id} of the most recent successful scan, for one-level undo
+let dirLastAction=null; // {unique_id,queued} of the most recent successful scan, for one-level undo
 let dirBannerT=null;
 let dirConfirmData=null;
+// Offline fallback source of truth: this batch's labels, cached locally
+// (in memory + localStorage) so scanning can continue without a live
+// connection. Refreshed from the server whenever reachable; scans made
+// while offline update it optimistically and queue for later sync.
+let dirLines=[];
 
 async function directedFetch(path,body){
   if(!cfg.url)throw new Error('No server configured — set a Receiver URL in Settings first.');
@@ -1790,6 +1799,47 @@ async function directedFetch(path,body){
   if(r.status===403){const j=await r.json().catch(()=>({}));throw new Error(j.error||'Device not approved for this server yet');}
   if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json();
+}
+function getDirQueue(){return lsGet(LS.dirQueue)||[];}
+function setDirQueue(q){lsSet(LS.dirQueue,q);}
+function persistDirLines(){if(dirBatch)lsSet(LS.dirCache,{batch:dirBatch,lines:dirLines});}
+function localNextExpected(){
+  return dirLines.filter(l=>l.scanned!=='Yes'&&l.void!=='Yes').sort((a,b)=>(a.sequence_no||0)-(b.sequence_no||0))[0]||null;
+}
+function syncDirLineLocal(uid,scannedYes){
+  const line=dirLines.find(l=>l.unique_id===uid);
+  if(line){line.scanned=scannedYes?'Yes':'No';persistDirLines();}
+}
+const DIR_QUEUE_WARN=100;
+function updateDirSyncPill(){
+  const n=getDirQueue().length;
+  const el=$('dirSyncPill');
+  if(!el)return;
+  if(!n){el.style.display='none';return;}
+  el.style.display='flex';
+  el.className='dir-sync-pill'+(n>=DIR_QUEUE_WARN?' warn':'');
+  el.innerHTML=`<span class="dir-sync-dot"></span>${n} scan${n===1?'':'s'} pending sync`+(n>=DIR_QUEUE_WARN?' — find connectivity soon':'');
+}
+
+// Prefers the batch detail screen's already-fetched labels when they're
+// for this same batch (skips a redundant request); otherwise asks fresh.
+// Either way this becomes the offline fallback once loaded. Falls back to
+// whatever was cached from a previous online visit if this fails outright
+// (e.g. opening this batch for the first time while already offline).
+async function loadDirLines(batch){
+  try{
+    let labels;
+    if(batchDetailCache&&batchDetailCache.batch===batch&&batchDetailCache.labels){
+      labels=batchDetailCache.labels;
+    }else{
+      labels=(await viewerFetch('/viewer/api/batches/'+encodeURIComponent(batch))).labels;
+    }
+    dirLines=labels.slice().sort((a,b)=>(a.sequence_no||0)-(b.sequence_no||0));
+    persistDirLines();
+  }catch(e){
+    const cached=lsGet(LS.dirCache);
+    dirLines=(cached&&cached.batch===batch)?cached.lines:[];
+  }
 }
 
 window.openDirectedScanScreen=function(batch){
@@ -1807,7 +1857,10 @@ window.openDirectedScanScreen=function(batch){
   $('dirCamSlot').appendChild($('cambox'));
   scanMode='DIRECTED';
   startScanner();
+  loadDirLines(batch);
   loadDirectedNext();
+  updateDirSyncPill();
+  maybeFlushDirQueue();
 };
 $('bBackDirected').onclick=()=>{
   stopScanner();
@@ -1821,7 +1874,14 @@ async function loadDirectedNext(){
   try{
     renderDirectedState(await directedFetch('/parts/directed/next',{batch:dirBatch}));
   }catch(e){
-    $('dirExpectedCard').innerHTML='<div class="dir-empty-card">Could not load batch.<br>'+esc(e.message)+'</div>';
+    // Can't reach the server for the authoritative view — fall back to
+    // whatever's in the local cache instead of leaving the screen blank.
+    if(dirLines.length){
+      const next=localNextExpected();
+      renderDirectedState({status:next?'AWAITING_SCAN':'JOB_COMPLETE',total:dirLines.length,scanned:dirLines.filter(l=>l.scanned==='Yes').length,expected:next});
+    }else{
+      $('dirExpectedCard').innerHTML='<div class="dir-empty-card">Could not load batch.<br>'+esc(e.message)+'</div>';
+    }
   }
 }
 function renderDirectedState(data){
@@ -1865,18 +1925,25 @@ function handleDirectedRaw(raw){
 }
 async function directedScan(uid,confirm){
   if(uid.length!==ID_LEN){beep('err');showDirBanner('err','Not a Matrex code','Barcode ignored.');return;}
+  if(!navigator.onLine){localDirectedScan(uid,confirm);return;}
   let data;
   try{
     data=await directedFetch('/parts/directed/scan',{batch:dirBatch,unique_id:uid,confirm});
-  }catch(e){beep('err');showDirBanner('err','Could not reach server',e.message);return;}
+  }catch(e){
+    // navigator.onLine said we're connected but the request still failed
+    // (spotty warehouse WiFi) — don't lose the scan, queue it instead.
+    localDirectedScan(uid,confirm);return;
+  }
   switch(data.status){
     case'OK':case'OK_OUT_OF_ORDER':
       beep('ok');
       showDirBanner('ok',(data.tag||data.unique_id)+' scanned',data.status==='OK_OUT_OF_ORDER'?'Scanned out of order — confirmed':'');
-      dirLastAction={unique_id:data.unique_id};
+      dirLastAction={unique_id:data.unique_id,queued:false};
       $('bDirUndo').disabled=false;
       renderDirectedState(data);
+      syncDirLineLocal(data.unique_id,true); // keep the offline cache current as a byproduct
       if(data.job_complete)setTimeout(()=>showDirBanner('ok','Batch complete! All parts scanned.'),1900);
+      maybeFlushDirQueue(); // opportunistic — in case anything was still queued from earlier
       break;
     case'OUT_OF_ORDER':
       beep('err');openDirectedConfirm(data);break;
@@ -1892,6 +1959,40 @@ async function directedScan(uid,confirm){
       showDirBanner('warn','This batch has no labels registered');break;
   }
 }
+
+// Same validation the server does (§ getNextExpectedLine/getDirectedLine
+// in server.js), mirrored here against the cached label list, for when
+// there's no connection to ask the live endpoint at all. Anything
+// accepted here queues via queueDirScan and reconciles with the server
+// once back online — including the case where someone else scanned the
+// same line on another device in the meantime (surfaced as a duplicate
+// during flush, never silently overwritten).
+function localDirectedScan(uid,confirm){
+  if(!dirLines.length){
+    beep('err');showDirBanner('err','No offline data for this batch','Open this batch once while online first.');return;
+  }
+  const next=localNextExpected();
+  if(!next){showDirBanner('ok','Batch already complete (offline)');return;}
+  const line=dirLines.find(l=>l.unique_id===uid);
+  if(!line){beep('err');showDirBanner('err','Unknown code',uid+' — offline, using cached data');return;}
+  if(line.void==='Yes'){beep('err');showDirBanner('warn',(line.tag||line.unique_id)+' is VOIDED','Offline — cached data');return;}
+  if(line.scanned==='Yes'){beep('err');showDirBanner('warn',(line.tag||line.unique_id)+' already scanned','Offline — cached data');return;}
+  if(line.unique_id!==next.unique_id&&!confirm){
+    openDirectedConfirm({matched:line,expected:next,_offline:true});return;
+  }
+  line.scanned='Yes';persistDirLines();
+  const q=getDirQueue();
+  q.push({qid:uuid(),batch:dirBatch,unique_id:uid,confirm:!!confirm,ts:new Date().toISOString()});
+  setDirQueue(q);
+  updateDirSyncPill();
+  beep('ok');
+  showDirBanner('ok',(line.tag||line.unique_id)+' scanned','Offline — will sync when back online');
+  dirLastAction={unique_id:uid,queued:true};
+  $('bDirUndo').disabled=false;
+  const newNext=localNextExpected();
+  renderDirectedState({scanned:dirLines.filter(l=>l.scanned==='Yes').length,total:dirLines.length,expected:newNext});
+}
+
 function openDirectedConfirm(data){
   dirConfirmData=data;
   const m=data.matched||{},ex=data.expected||{};
@@ -1900,15 +2001,32 @@ function openDirectedConfirm(data){
 }
 $('mDirConfirmYes').onclick=()=>{
   modal('mDirConfirm',false);
-  if(dirConfirmData)directedScan(dirConfirmData.matched.unique_id,true);
+  if(dirConfirmData){
+    const uid=dirConfirmData.matched.unique_id;
+    dirConfirmData._offline?localDirectedScan(uid,true):directedScan(uid,true);
+  }
   dirConfirmData=null;
 };
 $('mDirConfirmNo').onclick=()=>{modal('mDirConfirm',false);dirConfirmData=null;};
 
 $('bDirUndo').onclick=async()=>{
   if(!dirLastAction)return;
+  const uid=dirLastAction.unique_id;
+  if(dirLastAction.queued){
+    // Never left this device — just drop it from the queue and revert
+    // the local cache, no network round-trip needed.
+    setDirQueue(getDirQueue().filter(i=>!(i.unique_id===uid&&i.batch===dirBatch)));
+    syncDirLineLocal(uid,false);
+    beep('ok');showDirBanner('ok','Last scan undone (offline)');
+    $('bDirUndo').disabled=true;dirLastAction=null;
+    updateDirSyncPill();
+    const newNext=localNextExpected();
+    renderDirectedState({scanned:dirLines.filter(l=>l.scanned==='Yes').length,total:dirLines.length,expected:newNext});
+    return;
+  }
   try{
-    await directedFetch('/parts/directed/undo',{unique_id:dirLastAction.unique_id});
+    await directedFetch('/parts/directed/undo',{unique_id:uid});
+    syncDirLineLocal(uid,false);
     beep('ok');showDirBanner('ok','Last scan undone');
     $('bDirUndo').disabled=true;dirLastAction=null;
     loadDirectedNext();
@@ -1918,6 +2036,42 @@ $('bDirManual').onclick=()=>{
   const uid=prompt('Enter the 10-character code manually:');
   if(uid)directedScan(uid.trim().toUpperCase(),false);
 };
+
+// ── DIRECTED SCAN OFFLINE QUEUE — flush ──────────────────────
+// Fires on reconnect and opportunistically after every online scan/screen
+// entry. Each item is replayed through the exact same live endpoint a
+// normal online scan uses, so the conflict case (another device already
+// scanned that line while this one was offline) is handled automatically:
+// the server returns DUPLICATE instead of overwriting, and that's
+// surfaced to the operator rather than silently dropped.
+let dirFlushing=false;
+async function maybeFlushDirQueue(){
+  if(dirFlushing||!navigator.onLine||!cfg.url)return;
+  const queue=getDirQueue();
+  if(!queue.length)return;
+  dirFlushing=true;
+  let synced=0,conflicts=0;
+  const remaining=[];
+  for(const item of queue){
+    if(!navigator.onLine){remaining.push(item);continue;} // stop early rather than waiting out a timeout per item
+    try{
+      const data=await directedFetch('/parts/directed/scan',{batch:item.batch,unique_id:item.unique_id,confirm:item.confirm});
+      if(data.status==='DUPLICATE')conflicts++;
+      synced++;
+      if(item.batch===dirBatch)renderDirectedState(data); // keep the visible screen in sync if it's still open
+    }catch(e){
+      remaining.push(item); // still unreachable — keep it queued, retry next time
+    }
+  }
+  setDirQueue(remaining);
+  dirFlushing=false;
+  updateDirSyncPill();
+  if(synced)showDirBanner(conflicts?'warn':'ok',
+    synced+' queued scan'+(synced===1?'':'s')+' synced'+(conflicts?', '+conflicts+' were duplicates':''),
+    conflicts?'Someone else scanned '+(conflicts===1?'that item':'those items')+' first — check the batch.':'');
+  if(dirBatch)loadDirLines(dirBatch); // resync the offline cache to the server's now-authoritative state
+}
+window.addEventListener('online',maybeFlushDirQueue);
 
 window.openBatchLabelDetail=function(uniqueId){
   const l=(batchDetailCache?batchDetailCache.labels:[]).find(x=>x.unique_id===uniqueId);
@@ -2004,7 +2158,7 @@ function beep(k){
 }
 
 // ── BOOT ───────────────────────────────────────────────────
-loadScans();renderAll();scheduleMidnightUpload();checkAuth();
+loadScans();renderAll();scheduleMidnightUpload();checkAuth();maybeFlushDirQueue();
 if('serviceWorker' in navigator && isSecure())navigator.serviceWorker.register('sw.js').catch(()=>{});
 if(cfg.url){registerDevice();reconcileUnverified();}
 </script>

@@ -704,7 +704,7 @@ app.get('/viewer/api/batches', requireViewer, (req, res) => {
 app.get('/viewer/api/batches/:batch', requireViewer, (req, res) => {
   const rows = db.prepare(`
     SELECT pi.unique_id, pp.tag, pp.project, pp.floor, pp.part_type,
-           pp.width, pp.height, pp.qty, pp.colour,
+           pp.width, pp.height, pp.qty, pp.colour, pp.sequence_no,
            pi.scanned, pi.scanned_at, pi.scanned_by_device,
            pi.void, pi.voided_at,
            (SELECT COUNT(*) FROM part_notes pn WHERE pn.unique_id = pi.unique_id) AS note_count
