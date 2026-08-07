@@ -10,8 +10,7 @@
     --amber-700:#B54708;--amber-50:#FFFAEB;}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--gray-900);padding:24px}
-  .wrap{max-width:720px;margin:0 auto;transition:max-width .15s var(--ease,ease)}
-  .wrap.wide{max-width:none}
+  .wrap{max-width:none;margin:0 auto}
   h1{font-size:20px;margin-bottom:4px}
   .sub{font-size:13px;color:var(--gray-500);margin-bottom:20px}
   .keybar{display:flex;gap:8px;margin-bottom:20px}
@@ -240,11 +239,6 @@ function showTab(name){
   // active-state toggle here.
   $('tabBtnOps').classList.toggle('active',name==='ops');
   $('tabBtnSchedule').classList.toggle('active',name==='schedule');
-  // Operations (device approvals, reporting) reads best narrow and
-  // centered; the schedule grid and the labels list both need the full
-  // window to be usable, so the outer wrap's width cap only applies to
-  // Operations.
-  document.querySelector('.wrap').classList.toggle('wide',name!=='ops');
   if(name==='schedule')loadScheduleList();
 }
 
