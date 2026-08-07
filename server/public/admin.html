@@ -198,8 +198,13 @@
   </div>
 
   <div id="tabLabels" style="display:none">
-    <h1 id="labelsTitle">Batch Labels</h1>
-    <div class="sub" id="labelsSub">Click a batch in Production Schedule to see its labels here.</div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div>
+        <h1 id="labelsTitle">Batch Labels</h1>
+        <div class="sub" id="labelsSub">Click a batch in Production Schedule to see its labels here.</div>
+      </div>
+      <div id="labelsFilterBar" style="display:flex;gap:8px;flex-shrink:0"></div>
+    </div>
     <div id="labelsContent"></div>
   </div>
 </div>
@@ -705,21 +710,53 @@ async function deleteBatchFromGrid(batch){
 // built from that batch's own production-schedule row (job/target
 // finish/material/finish/part name/tasked) so there's context for which
 // batch this is without having to flip back to Production Schedule.
+let currentBatchLabels=[];
+let labelFilters={part_type:'',scanned:''};
+
 async function viewBatchLabels(batch){
   showTab('labels');
   $('labelsTitle').textContent=batch;
   $('labelsSub').textContent='Loading…';
+  $('labelsFilterBar').innerHTML='';
   $('labelsContent').innerHTML='<div class="empty">Loading…</div>';
+  labelFilters={part_type:'',scanned:''};
   try{
     const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
     const sched=data.schedule||{};
     const line=[sched.job_name,sched.target_finish,sched.material,sched.finish,sched.part_name,sched.tasked].filter(Boolean).join(' · ');
     $('labelsSub').textContent=line||'No production schedule details for this batch yet.';
-    $('labelsContent').innerHTML=labelRowsHtml(data.labels||[]);
+    currentBatchLabels=data.labels||[];
+    renderLabelFilterBar();
+    renderFilteredLabels();
   }catch(e){
     $('labelsSub').textContent='';
     $('labelsContent').innerHTML='<div class="empty">Could not load this batch.</div>';
   }
+}
+// Type options come from whatever part_type values actually appear in
+// this batch (varies per batch, so built fresh each time rather than
+// hardcoded); Scanned is a fixed two-state choice, same "Yes"/"No" the
+// server already uses for parts_index.scanned. Both live in the
+// top-right corner of the header, and combine (AND) same as the grid's
+// column filters.
+function renderLabelFilterBar(){
+  const types=[...new Set(currentBatchLabels.map(l=>l.part_type).filter(Boolean))].sort();
+  $('labelsFilterBar').innerHTML=`
+    <select id="filtLabelType" onchange="labelFilters.part_type=this.value;renderFilteredLabels()">
+      <option value="">All Types</option>
+      ${types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}
+    </select>
+    <select id="filtLabelScanned" onchange="labelFilters.scanned=this.value;renderFilteredLabels()">
+      <option value="">Scanned &amp; Not Scanned</option>
+      <option value="Yes">Scanned</option>
+      <option value="No">Not Scanned</option>
+    </select>`;
+}
+function renderFilteredLabels(){
+  let rows=currentBatchLabels;
+  if(labelFilters.part_type)rows=rows.filter(l=>(l.part_type||'')===labelFilters.part_type);
+  if(labelFilters.scanned)rows=rows.filter(l=>l.scanned===labelFilters.scanned);
+  $('labelsContent').innerHTML=rows.length?labelRowsHtml(rows):'<div class="empty">No matches.</div>';
 }
 function labelRowsHtml(labels){
   if(!labels.length)return'<div class="empty">No labels in this batch.</div>';
