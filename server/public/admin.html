@@ -125,6 +125,7 @@
   <div class="tabbar">
     <button class="tab-btn active" id="tabBtnOps" onclick="showTab('ops')">Operations</button>
     <button class="tab-btn" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
+    <button class="tab-btn" id="tabBtnLabels" onclick="showTab('labels')">Batch Labels</button>
   </div>
 
   <div id="tabOperations">
@@ -195,7 +196,12 @@
       <tbody id="scheduleTbody"></tbody>
     </table>
     </div>
-    <div id="scheduleDetail"></div>
+  </div>
+
+  <div id="tabLabels" style="display:none">
+    <h1 id="labelsTitle">Batch Labels</h1>
+    <div class="sub" id="labelsSub">Click a batch in Production Schedule to see its labels here.</div>
+    <div id="labelsContent"></div>
   </div>
 </div>
 
@@ -221,16 +227,18 @@ function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key'
 
 // ── TABS ─────────────────────────────────────────────────────
 function showTab(name){
-  const isOps=name==='ops';
-  $('tabOperations').style.display=isOps?'':'none';
-  $('tabSchedule').style.display=isOps?'none':'';
-  $('tabBtnOps').classList.toggle('active',isOps);
-  $('tabBtnSchedule').classList.toggle('active',!isOps);
+  $('tabOperations').style.display=name==='ops'?'':'none';
+  $('tabSchedule').style.display=name==='schedule'?'':'none';
+  $('tabLabels').style.display=name==='labels'?'':'none';
+  $('tabBtnOps').classList.toggle('active',name==='ops');
+  $('tabBtnSchedule').classList.toggle('active',name==='schedule');
+  $('tabBtnLabels').classList.toggle('active',name==='labels');
   // Operations (device approvals, reporting) reads best narrow and
-  // centered; the schedule grid needs the full window to be usable with
-  // 11 columns, so the outer wrap's width cap only applies to Operations.
-  document.querySelector('.wrap').classList.toggle('wide',!isOps);
-  if(!isOps)loadScheduleList();
+  // centered; the schedule grid and the labels list both need the full
+  // window to be usable, so the outer wrap's width cap only applies to
+  // Operations.
+  document.querySelector('.wrap').classList.toggle('wide',name!=='ops');
+  if(name==='schedule')loadScheduleList();
 }
 
 async function api(path,opts){
@@ -690,19 +698,26 @@ async function deleteBatchFromGrid(batch){
 // just its per-label scan status (same view the phone app's Production
 // Schedule drill-down shows) - editing/deleting now live on the row's own
 // icons instead of a shared detail panel.
+// Opens as its own tab now (not a panel under the grid) - header follows
+// the same <h1>/.sub pattern every other tab uses, with the sub-line
+// built from that batch's own production-schedule row (job/target
+// finish/material/finish/part name/tasked) so there's context for which
+// batch this is without having to flip back to Production Schedule.
 async function viewBatchLabels(batch){
-  $('scheduleDetail').innerHTML='<div class="empty">Loading…</div>';
+  showTab('labels');
+  $('labelsTitle').textContent=batch;
+  $('labelsSub').textContent='Loading…';
+  $('labelsContent').innerHTML='<div class="empty">Loading…</div>';
   try{
     const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
-    $('scheduleDetail').innerHTML=`
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <button class="secondary" onclick="$('scheduleDetail').innerHTML=''">&larr; Close</button>
-        <div class="name">${esc(batch)}</div>
-      </div>
-      <h2>Labels in this Batch</h2>
-      <div>${labelRowsHtml(data.labels||[])}</div>`;
-    $('scheduleDetail').scrollIntoView({behavior:'smooth',block:'start'});
-  }catch(e){$('scheduleDetail').innerHTML='<div class="empty">Could not load this batch.</div>';}
+    const sched=data.schedule||{};
+    const line=[sched.job_name,sched.target_finish,sched.material,sched.finish,sched.part_name,sched.tasked].filter(Boolean).join(' · ');
+    $('labelsSub').textContent=line||'No production schedule details for this batch yet.';
+    $('labelsContent').innerHTML=labelRowsHtml(data.labels||[]);
+  }catch(e){
+    $('labelsSub').textContent='';
+    $('labelsContent').innerHTML='<div class="empty">Could not load this batch.</div>';
+  }
 }
 function labelRowsHtml(labels){
   if(!labels.length)return'<div class="empty">No labels in this batch.</div>';
