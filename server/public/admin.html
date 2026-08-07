@@ -316,6 +316,11 @@ load();
 loadTunnelUrl();
 setInterval(load,4000);
 setInterval(loadTunnelUrl,10000);
+// Keeps the Production Schedule grid live for a supervisor watching it on
+// a second device while operators scan, without a manual refresh - same
+// cadence as the Operations device list above. Guarded inside
+// loadScheduleList() so it never clobbers an in-progress row edit.
+setInterval(loadScheduleList,4000);
 
 // ── PART LOOKUP + NOTES ─────────────────────────────────────
 const NOTE_CATEGORIES=[
@@ -500,6 +505,11 @@ function renderScheduleHead(){
 async function loadScheduleList(){
   if(!$('scheduleHeadRow').children.length)renderScheduleHead();
   if(!KEY){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Enter the admin key above to load.</td></tr>';return;}
+  // Skip while a row is mid-edit - a background refresh replaces the grid's
+  // innerHTML wholesale, which would silently wipe out whatever's typed
+  // into that row's inputs before it's saved. Resumes on its own within
+  // one poll interval of Save/Cancel, no explicit resume needed.
+  if(editingBatches.size)return;
   try{
     const data=await api('/viewer/api/batches');
     scheduleBatches=data.batches||[];
