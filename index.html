@@ -926,6 +926,17 @@ $('camSizeSlider').addEventListener('input',e=>{
 $('camSizeSlider').addEventListener('change',()=>lsSet(LS.camSize,camSize));
 
 // ── TORCH ─────────────────────────────────────────────────
+// Checked as soon as a track is available (not just after a failed tap) so
+// the button is hidden outright on hardware/browsers that never support it
+// (all of iOS Safari, plus some Android/Chrome combos) rather than showing
+// a control that visibly does nothing when tapped. capabilities().torch
+// being true is still only a claim, not a guarantee - toggleTorch's own
+// catch is the backstop for a device that lies about it.
+function updateTorchAvailability(){
+  let supported=false;
+  try{supported=!!(trackRef&&trackRef.getCapabilities&&trackRef.getCapabilities().torch);}catch(e){}
+  $('torchBtn').style.display=supported?'':'none';
+}
 async function toggleTorch(){
   if(!trackRef)return;
   try{
@@ -933,7 +944,7 @@ async function toggleTorch(){
     await trackRef.applyConstraints({advanced:[{torch:torchOn}]});
     $('torchBtn').textContent=torchOn?'Torch ON':'Torch';
     $('torchBtn').style.background=torchOn?'rgba(255,200,0,.7)':'rgba(0,0,0,.5)';
-  }catch(e){$('torchBtn').textContent='No torch';}
+  }catch(e){$('torchBtn').textContent='No torch';torchOn=false;}
 }
 $('torchBtn').addEventListener('click',toggleTorch);
 
@@ -1131,7 +1142,7 @@ async function runWithDevice(deviceId){
 
     if(previewElem.srcObject){
       const tracks=previewElem.srcObject.getVideoTracks();
-      if(tracks[0])trackRef=tracks[0];
+      if(tracks[0]){trackRef=tracks[0];updateTorchAvailability();}
     }
   }catch(e){
     setCamMsg('Camera error: '+e.message,true);
