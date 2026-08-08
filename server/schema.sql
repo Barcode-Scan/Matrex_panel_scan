@@ -21,7 +21,9 @@ CREATE TABLE IF NOT EXISTS scans (
   flag          TEXT,
   raw           TEXT,
   mode          TEXT NOT NULL DEFAULT 'FREE',  -- 'FREE' | 'DIRECTED' - which scanning flow this came from
-  batch         TEXT   -- production batch, populated for DIRECTED rows (parts_panel.batch)
+  batch         TEXT,  -- production batch, populated for DIRECTED rows (parts_panel.batch)
+  acknowledged  TEXT NOT NULL DEFAULT 'No',  -- 'Yes' | 'No' - supervisor triage on the admin Exception Queue
+  acknowledged_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_scans_date   ON scans(date);

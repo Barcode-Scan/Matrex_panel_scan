@@ -28,6 +28,8 @@ ensureColumn('part_notes', 'action', "TEXT NOT NULL DEFAULT 'NOTE'");
 ensureColumn('parts_panel', 'sequence_no', 'INTEGER');
 ensureColumn('scans', 'mode', "TEXT NOT NULL DEFAULT 'FREE'");
 ensureColumn('scans', 'batch', 'TEXT');
+ensureColumn('scans', 'acknowledged', "TEXT NOT NULL DEFAULT 'No'");
+ensureColumn('scans', 'acknowledged_at', 'TEXT');
 // Index depends on sequence_no, so it's created here (after ensureColumn
 // guarantees the column exists) rather than in schema.sql — CREATE TABLE
 // IF NOT EXISTS is a no-op on an already-existing table, so a CREATE INDEX

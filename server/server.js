@@ -723,6 +723,44 @@ app.get('/admin/api/report/notes', requireAdmin, (req, res) => {
   res.json({ ok: true, rows });
 });
 
+// ── EXCEPTION QUEUE — every scan that wasn't a clean match, from either
+// scanning flow (mode distinguishes them). Capped to the most recent 500
+// so the payload stays bounded; acknowledged is a lightweight triage flag,
+// not a resolution workflow - supervisors use it to mark "seen", nothing
+// more.
+const OK_STATUSES = ['MATCHED_NEW', 'OK', 'OK_OUT_OF_ORDER'];
+app.get('/admin/api/exceptions', requireAdmin, (req, res) => {
+  const placeholders = OK_STATUSES.map(() => '?').join(',');
+  const rows = db.prepare(`
+    SELECT scan_id, scanned_at, device, device_id, unique_id, match_status,
+           part_name, mode, batch, method, acknowledged, acknowledged_at
+    FROM scans
+    WHERE match_status IS NULL OR match_status NOT IN (${placeholders})
+    ORDER BY scanned_at DESC LIMIT 500
+  `).all(...OK_STATUSES);
+  res.json({ ok: true, exceptions: rows });
+});
+app.post('/admin/api/exceptions/:scanId/ack', requireAdmin, (req, res) => {
+  db.prepare("UPDATE scans SET acknowledged='Yes', acknowledged_at=? WHERE scan_id=?")
+    .run(new Date().toISOString(), req.params.scanId);
+  res.json({ ok: true });
+});
+
+// ── DEVICE ACTIVITY — last actual scan per approved device (not just last
+// Settings-save/registration, which devices.last_seen tracks) so an idle
+// handheld shows up even if the app itself has been open and "seen" the
+// whole time without anyone scanning anything with it.
+app.get('/admin/api/device-activity', requireAdmin, (req, res) => {
+  const rows = db.prepare(`
+    SELECT d.device_id, d.device_name,
+           (SELECT MAX(scanned_at) FROM scans s WHERE s.device_id = d.device_id) AS last_scan_at
+    FROM devices d
+    WHERE d.status = 'APPROVED'
+    ORDER BY last_scan_at DESC
+  `).all();
+  res.json({ ok: true, devices: rows });
+});
+
 // ── BATCH STATUS — read-only, viewer-key gated. Powers the phone app's
 // Batch Status tab: pick a batch, see every label's real-time status. Pure
 // join of parts_panel (write-once from Excel) + parts_index (the only

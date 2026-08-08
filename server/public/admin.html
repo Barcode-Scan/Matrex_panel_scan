@@ -34,6 +34,8 @@
   .pill.PENDING{background:var(--amber-50);color:var(--amber-700)}
   .pill.APPROVED{background:var(--green-50);color:var(--green-700)}
   .pill.REVOKED{background:var(--red-50);color:var(--red-600)}
+  .pill.ACTIVE{background:var(--green-50);color:var(--green-700)}
+  .pill.IDLE{background:var(--red-50);color:var(--red-600)}
   .acts{margin-left:auto;display:flex;gap:6px}
   .empty{color:var(--gray-500);font-size:13px;padding:20px;text-align:center}
   h2{font-size:16px;margin:28px 0 4px}
@@ -154,6 +156,10 @@
   </div>
   <div id="list"></div>
 
+  <h2>Device Activity</h2>
+  <div class="sub">Last actual scan per approved device — a device idle 15+ minutes while otherwise approved is flagged, in case a handheld is frozen or forgotten somewhere.</div>
+  <div id="deviceActivityList"></div>
+
   <h2>Part Lookup</h2>
   <div class="sub">Look up any registered part by its 10-character unique ID, view its notes, or add one.</div>
   <div class="keybar">
@@ -161,6 +167,13 @@
     <button onclick="lookupPart()">Search</button>
   </div>
   <div id="partResult"></div>
+
+  <h2>Exception Queue</h2>
+  <div class="sub">Every scan that wasn't a clean match — duplicates, voids, unknown codes, out-of-order attempts — from either scanning mode. Acknowledge to mark reviewed; this doesn't fix anything, just clears it from the "needs a look" list.</div>
+  <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--gray-500);margin-bottom:10px;cursor:pointer">
+    <input type="checkbox" id="excHideAck" checked onchange="renderExceptions()">Hide acknowledged
+  </label>
+  <div id="exceptionList"></div>
 
   <h2>Reporting</h2>
   <div class="sub">Live counts from the registry, scan log, and notes/defects.</div>
@@ -233,7 +246,7 @@ const $=id=>document.getElementById(id);
 let KEY=localStorage.getItem('mx_admin_key')||'';
 $('key').value=KEY;
 
-function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();}
+function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();}
 
 // ── TABS ─────────────────────────────────────────────────────
 // Production Schedule is the landing view now, open to whoever has the
@@ -295,6 +308,62 @@ async function act(id,action){await api(`/admin/api/devices/${encodeURIComponent
 function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function fmt(iso){return iso?new Date(iso).toLocaleString():'—';}
 
+// ── DEVICE ACTIVITY ──────────────────────────────────────────
+const IDLE_THRESHOLD_MIN=15;
+async function loadDeviceActivity(){
+  if(!KEY){$('deviceActivityList').innerHTML='<div class="empty">Enter the admin key to see device activity.</div>';return;}
+  try{
+    const data=await api('/admin/api/device-activity');
+    renderDeviceActivity(data.devices||[]);
+  }catch(e){$('deviceActivityList').innerHTML='<div class="empty">Wrong key, or server unreachable.</div>';}
+}
+function renderDeviceActivity(devices){
+  if(!devices.length){$('deviceActivityList').innerHTML='<div class="empty">No approved devices yet.</div>';return;}
+  const now=Date.now();
+  $('deviceActivityList').innerHTML=devices.map(d=>{
+    const lastMs=d.last_scan_at?new Date(d.last_scan_at).getTime():null;
+    const idleMin=lastMs?Math.round((now-lastMs)/60000):null;
+    const isIdle=idleMin===null||idleMin>=IDLE_THRESHOLD_MIN;
+    return`<div class="card">
+      <div>
+        <div class="name">${esc(d.device_name||'(unnamed)')}</div>
+        <div class="meta">${esc(d.device_id)} · last scan ${d.last_scan_at?fmt(d.last_scan_at):'never'}</div>
+      </div>
+      <span class="pill ${isIdle?'IDLE':'ACTIVE'}">${idleMin===null?'No scans yet':idleMin+' min idle'}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── EXCEPTION QUEUE ───────────────────────────────────────────
+let exceptionCache=[];
+async function loadExceptions(){
+  if(!KEY){$('exceptionList').innerHTML='<div class="empty">Enter the admin key to see exceptions.</div>';return;}
+  try{
+    const data=await api('/admin/api/exceptions');
+    exceptionCache=data.exceptions||[];
+    renderExceptions();
+  }catch(e){$('exceptionList').innerHTML='<div class="empty">Wrong key, or server unreachable.</div>';}
+}
+function renderExceptions(){
+  const hideAck=$('excHideAck').checked;
+  const rows=hideAck?exceptionCache.filter(r=>r.acknowledged!=='Yes'):exceptionCache;
+  if(!rows.length){$('exceptionList').innerHTML='<div class="empty">No exceptions'+(hideAck?' to review':'')+'.</div>';return;}
+  $('exceptionList').innerHTML=rows.map(r=>`
+    <div class="card">
+      <div>
+        <div class="name">${esc(r.part_name||r.unique_id||'(unknown)')} <span style="color:var(--gray-500);font-weight:600">${esc(r.match_status||'')}</span></div>
+        <div class="meta">${esc(r.device||r.device_id||'')} · ${r.mode==='DIRECTED'?'Directed':'Free'} scan (${esc(r.method||'?')})${r.batch?' · batch '+esc(r.batch):''} · ${fmt(r.scanned_at)}</div>
+      </div>
+      ${r.acknowledged==='Yes'
+        ?'<span class="pill APPROVED">Acknowledged</span>'
+        :`<button class="secondary" onclick="ackException('${esc(r.scan_id)}')">Acknowledge</button>`}
+    </div>`).join('');
+}
+async function ackException(scanId){
+  await api('/admin/api/exceptions/'+encodeURIComponent(scanId)+'/ack',{method:'POST'});
+  loadExceptions();
+}
+
 // ── TUNNEL URL — reads the same file watchdog.ps1 keeps current, so this
 // is always accurate even though the URL itself changes on its own.
 let lastTunnelUrl=null;
@@ -314,6 +383,8 @@ function copyTunnelUrl(){
 
 load();
 loadTunnelUrl();
+loadDeviceActivity();
+loadExceptions();
 setInterval(load,4000);
 setInterval(loadTunnelUrl,10000);
 // Keeps the Production Schedule grid live for a supervisor watching it on
@@ -321,6 +392,10 @@ setInterval(loadTunnelUrl,10000);
 // cadence as the Operations device list above. Guarded inside
 // loadScheduleList() so it never clobbers an in-progress row edit.
 setInterval(loadScheduleList,4000);
+// Lower-urgency monitoring views - a slower poll is plenty and keeps
+// these from competing with the device-approval/schedule refreshes above.
+setInterval(loadDeviceActivity,10000);
+setInterval(loadExceptions,10000);
 
 // ── PART LOOKUP + NOTES ─────────────────────────────────────
 const NOTE_CATEGORIES=[
