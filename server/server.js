@@ -152,11 +152,11 @@ const upsertScan = db.prepare(`
   INSERT INTO scans (
     scan_id, date, scanned_at, received_at, device, device_id, unique_id, match_status,
     batch_sheet, project, floor, part_type, part_name, size, qty, colour,
-    skid, method, flag, raw
+    skid, method, flag, raw, mode, batch
   ) VALUES (
     @scan_id, @date, @scanned_at, @received_at, @device, @device_id, @unique_id, @match_status,
     @batch_sheet, @project, @floor, @part_type, @part_name, @size, @qty, @colour,
-    @skid, @method, @flag, @raw
+    @skid, @method, @flag, @raw, @mode, @batch
   )
   ON CONFLICT(scan_id) DO UPDATE SET
     skid=@skid, flag=@flag, match_status=@match_status
@@ -195,7 +195,9 @@ app.post('/upload', deviceGate, (req, res) => {
         skid: row.skid || null,
         method: row.method || null,
         flag: row.flag || null,
-        raw: row.raw || null
+        raw: row.raw || null,
+        mode: 'FREE',
+        batch: null
       });
     }
   }
@@ -466,6 +468,40 @@ function formatDirectedLine(row) {
   return { unique_id, sequence_no, tag, part_type, width, height, qty, colour, project, floor };
 }
 
+// Every directed-scan attempt gets its own row in the same scans table
+// free-scan already writes to (mode='DIRECTED' distinguishes them) - so
+// admin Reports and the exception queue see this activity without a
+// parallel audit path to keep in sync. line is null for UNKNOWN_UID,
+// where there's nothing registered to pull details from.
+function logDirectedScanEvent(batch, uid, status, line, device_id, device, input_method) {
+  const now = new Date().toISOString();
+  const size = line ? [line.width, line.height].filter(Boolean).join(' X ') : '';
+  upsertScan.run({
+    scan_id: require('crypto').randomUUID(),
+    date: now.slice(0, 10),
+    scanned_at: now,
+    received_at: now,
+    device: device || null,
+    device_id: device_id || null,
+    unique_id: line ? line.unique_id : uid,
+    match_status: status,
+    batch_sheet: null,
+    project: line ? line.project : null,
+    floor: line ? line.floor : null,
+    part_type: line ? line.part_type : null,
+    part_name: line ? (line.tag || line.unique_id) : uid,
+    size: size || null,
+    qty: line ? line.qty : null,
+    colour: line ? line.colour : null,
+    skid: null,
+    method: input_method === 'MANUAL' ? 'MANUAL' : 'SCAN',
+    flag: status === 'OK' || status === 'OK_OUT_OF_ORDER' ? null : status,
+    raw: uid,
+    mode: 'DIRECTED',
+    batch
+  });
+}
+
 // What the Directed Scan screen loads before any scan happens — the
 // expected-item card plus progress, so JOB_LOADED has something to show
 // immediately instead of waiting on a first scan attempt. POST (not GET)
@@ -489,7 +525,7 @@ app.post('/parts/directed/next', deviceGate, (req, res) => {
 });
 
 app.post('/parts/directed/scan', deviceGate, (req, res) => {
-  const { batch, unique_id, device_id, confirm } = req.body || {};
+  const { batch, unique_id, device_id, device, confirm, input_method } = req.body || {};
   const b = String(batch || '').trim();
   const uid = String(unique_id || '').trim();
   if (!b) return res.status(400).json({ ok: false, error: 'batch required' });
@@ -498,17 +534,22 @@ app.post('/parts/directed/scan', deviceGate, (req, res) => {
   const next = getNextExpectedLine.get(b);
   if (!next) {
     const total = countDirectedTotal.get(b).c;
-    return res.json({ ok: true, status: total ? 'JOB_COMPLETE' : 'NO_LINES', scanned_uid: uid, expected: null });
+    const status = total ? 'JOB_COMPLETE' : 'NO_LINES';
+    if (total) logDirectedScanEvent(b, uid, status, null, device_id, device, input_method);
+    return res.json({ ok: true, status, scanned_uid: uid, expected: null });
   }
 
   const line = getDirectedLine.get(b, uid);
   if (!line) {
+    logDirectedScanEvent(b, uid, 'UNKNOWN_UID', null, device_id, device, input_method);
     return res.json({ ok: true, status: 'UNKNOWN_UID', scanned_uid: uid, expected: formatDirectedLine(next) });
   }
   if (line.void === 'Yes') {
+    logDirectedScanEvent(b, uid, 'VOIDED', line, device_id, device, input_method);
     return res.json({ ok: true, status: 'VOIDED', ...formatDirectedLine(line), expected: formatDirectedLine(next) });
   }
   if (line.scanned === 'Yes') {
+    logDirectedScanEvent(b, uid, 'DUPLICATE', line, device_id, device, input_method);
     return res.json({
       ok: true, status: 'DUPLICATE', ...formatDirectedLine(line),
       scanned_at: line.scanned_at, expected: formatDirectedLine(next)
@@ -519,18 +560,21 @@ app.post('/parts/directed/scan', deviceGate, (req, res) => {
   // it and stop; only commit the write once the operator explicitly taps
   // confirm (never auto-skip, matching what was asked for).
   if (line.unique_id !== next.unique_id && !confirm) {
+    logDirectedScanEvent(b, uid, 'OUT_OF_ORDER', line, device_id, device, input_method);
     return res.json({ ok: true, status: 'OUT_OF_ORDER', matched: formatDirectedLine(line), expected: formatDirectedLine(next) });
   }
 
   const now = new Date().toISOString();
   markScanned.run({ now, device_id: device_id || null, unique_id: line.unique_id });
+  const status = line.unique_id === next.unique_id ? 'OK' : 'OK_OUT_OF_ORDER';
+  logDirectedScanEvent(b, uid, status, line, device_id, device, input_method);
   // Recomputed fresh after the write above, so the client gets the new
   // next-expected item and progress in this same response - no second
   // round-trip needed just to find out what's next.
   const newNext = getNextExpectedLine.get(b);
   res.json({
     ok: true,
-    status: line.unique_id === next.unique_id ? 'OK' : 'OK_OUT_OF_ORDER',
+    status,
     ...formatDirectedLine(line),
     scanned_at: now,
     total: countDirectedTotal.get(b).c,

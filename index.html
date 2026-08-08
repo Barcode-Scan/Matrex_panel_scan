@@ -1934,18 +1934,18 @@ function handleDirectedRaw(raw){
   const now=Date.now();
   if(raw===dirLastUid&&now-dirLastUidTime<DIRECTED_DEBOUNCE_MS)return;
   dirLastUid=raw;dirLastUidTime=now;
-  directedScan(raw,false);
+  directedScan(raw,false,'SCAN');
 }
-async function directedScan(uid,confirm){
+async function directedScan(uid,confirm,inputMethod){
   if(uid.length!==ID_LEN){beep('err');showDirBanner('err','Not a Matrex code','Barcode ignored.');return;}
-  if(!navigator.onLine){localDirectedScan(uid,confirm);return;}
+  if(!navigator.onLine){localDirectedScan(uid,confirm,inputMethod);return;}
   let data;
   try{
-    data=await directedFetch('/parts/directed/scan',{batch:dirBatch,unique_id:uid,confirm});
+    data=await directedFetch('/parts/directed/scan',{batch:dirBatch,unique_id:uid,confirm,input_method:inputMethod});
   }catch(e){
     // navigator.onLine said we're connected but the request still failed
     // (spotty warehouse WiFi) — don't lose the scan, queue it instead.
-    localDirectedScan(uid,confirm);return;
+    localDirectedScan(uid,confirm,inputMethod);return;
   }
   switch(data.status){
     case'OK':case'OK_OUT_OF_ORDER':
@@ -1959,7 +1959,7 @@ async function directedScan(uid,confirm){
       maybeFlushDirQueue(); // opportunistic — in case anything was still queued from earlier
       break;
     case'OUT_OF_ORDER':
-      beep('err');openDirectedConfirm(data);break;
+      beep('err');openDirectedConfirm({...data,inputMethod});break;
     case'DUPLICATE':
       beep('err');showDirBanner('warn',(data.tag||data.unique_id)+' already scanned','at '+fmtDT(data.scanned_at));break;
     case'VOIDED':
@@ -1980,7 +1980,7 @@ async function directedScan(uid,confirm){
 // once back online — including the case where someone else scanned the
 // same line on another device in the meantime (surfaced as a duplicate
 // during flush, never silently overwritten).
-function localDirectedScan(uid,confirm){
+function localDirectedScan(uid,confirm,inputMethod){
   if(!dirLines.length){
     beep('err');showDirBanner('err','No offline data for this batch','Open this batch once while online first.');return;
   }
@@ -1991,11 +1991,11 @@ function localDirectedScan(uid,confirm){
   if(line.void==='Yes'){beep('err');showDirBanner('warn',(line.tag||line.unique_id)+' is VOIDED','Offline — cached data');return;}
   if(line.scanned==='Yes'){beep('err');showDirBanner('warn',(line.tag||line.unique_id)+' already scanned','Offline — cached data');return;}
   if(line.unique_id!==next.unique_id&&!confirm){
-    openDirectedConfirm({matched:line,expected:next,_offline:true});return;
+    openDirectedConfirm({matched:line,expected:next,_offline:true,inputMethod});return;
   }
   line.scanned='Yes';persistDirLines();
   const q=getDirQueue();
-  q.push({qid:uuid(),batch:dirBatch,unique_id:uid,confirm:!!confirm,ts:new Date().toISOString()});
+  q.push({qid:uuid(),batch:dirBatch,unique_id:uid,confirm:!!confirm,input_method:inputMethod,ts:new Date().toISOString()});
   setDirQueue(q);
   updateDirSyncPill();
   beep('ok');
@@ -2015,8 +2015,8 @@ function openDirectedConfirm(data){
 $('mDirConfirmYes').onclick=()=>{
   modal('mDirConfirm',false);
   if(dirConfirmData){
-    const uid=dirConfirmData.matched.unique_id;
-    dirConfirmData._offline?localDirectedScan(uid,true):directedScan(uid,true);
+    const uid=dirConfirmData.matched.unique_id,im=dirConfirmData.inputMethod;
+    dirConfirmData._offline?localDirectedScan(uid,true,im):directedScan(uid,true,im);
   }
   dirConfirmData=null;
 };
@@ -2047,7 +2047,7 @@ $('bDirUndo').onclick=async()=>{
 };
 $('bDirManual').onclick=()=>{
   const uid=prompt('Enter the 10-character code manually:');
-  if(uid)directedScan(uid.trim().toUpperCase(),false);
+  if(uid)directedScan(uid.trim().toUpperCase(),false,'MANUAL');
 };
 
 // ── DIRECTED SCAN OFFLINE QUEUE — flush ──────────────────────
@@ -2068,7 +2068,7 @@ async function maybeFlushDirQueue(){
   for(const item of queue){
     if(!navigator.onLine){remaining.push(item);continue;} // stop early rather than waiting out a timeout per item
     try{
-      const data=await directedFetch('/parts/directed/scan',{batch:item.batch,unique_id:item.unique_id,confirm:item.confirm});
+      const data=await directedFetch('/parts/directed/scan',{batch:item.batch,unique_id:item.unique_id,confirm:item.confirm,input_method:item.input_method});
       if(data.status==='DUPLICATE')conflicts++;
       synced++;
       if(item.batch===dirBatch)renderDirectedState(data); // keep the visible screen in sync if it's still open

@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS scans (
   skid          TEXT,
   method        TEXT,
   flag          TEXT,
-  raw           TEXT
+  raw           TEXT,
+  mode          TEXT NOT NULL DEFAULT 'FREE',  -- 'FREE' | 'DIRECTED' - which scanning flow this came from
+  batch         TEXT   -- production batch, populated for DIRECTED rows (parts_panel.batch)
 );
 
 CREATE INDEX IF NOT EXISTS idx_scans_date   ON scans(date);
