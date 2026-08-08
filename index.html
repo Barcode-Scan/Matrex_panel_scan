@@ -26,6 +26,22 @@
   --shadow-lg:0 20px 50px rgba(29,29,31,.16),0 4px 14px rgba(29,29,31,.08);
   --shadow-blue:0 8px 20px rgba(0,113,227,.28);
 }
+/* HIGH-GLARE / DARK MODE — redefines the same tokens every existing rule
+   already references via var(--x), so this is the only place a dark
+   palette needs to be defined; nothing else in the file needs to change.
+   Doubles as a bright-sunlight mode, not just low-light: pure black
+   background gives the highest contrast against direct glare, same
+   reason outdoor equipment displays default to this over a washed-out
+   white screen. */
+:root.dark{
+  --white:#1C1C1E;--bg:#000000;--gray-100:#1C1C1E;--gray-200:#38383A;
+  --gray-300:#48484A;--gray-500:#98989D;--gray-700:#D1D1D6;--gray-900:#F5F5F7;
+  --blue-50:#0A2540;--blue-100:#0F3A66;--blue-600:#3B9EFF;--blue-700:#5CAEFF;
+  --red-50:#3A0E0C;--red-300:#8A3530;--red-600:#FF6B60;
+  --green-50:#0C3320;--green-300:#2E8C5C;--green-700:#34D399;
+  --amber-50:#3A2A08;--amber-700:#F5A623;
+}
+:root.dark #scrLock{background:radial-gradient(120% 100% at 50% -10%,#1C1C1E 0%,#000000 45%,#000000 100%)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg);color:var(--gray-900);
   font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Segoe UI',Helvetica,Arial,sans-serif;
@@ -599,6 +615,11 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       <div class="s-row"><span class="s-k">Scanner engine</span><span class="s-v" id="setEng">—</span></div>
       <div class="s-row"><span class="s-k">Server</span><span id="setSrv" class="chip chip-off"><span></span>Not configured</span></div>
     </div>
+    <div class="s-sec">Display</div>
+    <div class="s-card">
+      <div class="s-row"><span class="s-k">High-glare / Dark mode</span><label class="s-switch"><input type="checkbox" id="setDarkMode"><span class="s-switch-track"></span></label></div>
+      <div class="s-row" style="border-bottom:none"><span class="s-k" style="font-size:13px">Pure black background, boosted contrast — for direct sunlight or a dark floor</span></div>
+    </div>
     <div class="s-sec">Feedback</div>
     <div class="s-card">
       <div class="s-row"><span class="s-k">Scan sounds</span><label class="s-switch"><input type="checkbox" id="setSoundOn"><span class="s-switch-track"></span></label></div>
@@ -681,7 +702,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 */
 
 const PASSWORD='M@trex';
-const LS={scans:d=>'mx_scans_'+d,cfg:'mx_cfg',lastUp:'mx_lastup',camSize:'mx_camsize',login:'mx_login',synced:d=>'mx_synced_'+d,deviceId:'mx_device_id',dirQueue:'mx_dir_queue',dirCache:'mx_dir_cache',muteAudio:'mx_mute_audio',activeDirBatch:'mx_active_dir_batch',viewerKey:'mx_viewer_key'};
+const LS={scans:d=>'mx_scans_'+d,cfg:'mx_cfg',lastUp:'mx_lastup',camSize:'mx_camsize',login:'mx_login',synced:d=>'mx_synced_'+d,deviceId:'mx_device_id',dirQueue:'mx_dir_queue',dirCache:'mx_dir_cache',muteAudio:'mx_mute_audio',activeDirBatch:'mx_active_dir_batch',viewerKey:'mx_viewer_key',darkMode:'mx_dark_mode'};
 const LOGIN_TTL_MS=30*24*60*60*1000; // stay signed in for 30 days on this phone
 
 const $=id=>document.getElementById(id);
@@ -1359,9 +1380,13 @@ function openSettingsScreen(){
   stopScanner(); // camera has no business running while the user isn't on the scan screen
   $('setUrl').value=cfg.url;$('setDev').value=cfg.dev;$('setFilePrefix').value=cfg.filePrefix||'Matrex_Scans';$('connRes').textContent='';refreshSettings();checkMixedWarn();show('scrSettings');
   $('setSoundOn').checked=!isAudioMuted();
+  $('setDarkMode').checked=!!lsGet(LS.darkMode);
 }
 $('setUrl').addEventListener('input',checkMixedWarn);
 $('setSoundOn').addEventListener('change',e=>{lsSet(LS.muteAudio,!e.target.checked);});
+function applyDarkMode(on){document.documentElement.classList.toggle('dark',!!on);}
+applyDarkMode(lsGet(LS.darkMode)); // restore on every boot, before the user ever opens Settings
+$('setDarkMode').addEventListener('change',e=>{lsSet(LS.darkMode,e.target.checked);applyDarkMode(e.target.checked);});
 function trySettingsAuth(){
   const v=$('setAuthPw').value.trim();
   if(v===SETTINGS_PASSWORD){
