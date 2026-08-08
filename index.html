@@ -681,7 +681,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 */
 
 const PASSWORD='M@trex';
-const LS={scans:d=>'mx_scans_'+d,cfg:'mx_cfg',lastUp:'mx_lastup',camSize:'mx_camsize',login:'mx_login',synced:d=>'mx_synced_'+d,deviceId:'mx_device_id',dirQueue:'mx_dir_queue',dirCache:'mx_dir_cache',muteAudio:'mx_mute_audio'};
+const LS={scans:d=>'mx_scans_'+d,cfg:'mx_cfg',lastUp:'mx_lastup',camSize:'mx_camsize',login:'mx_login',synced:d=>'mx_synced_'+d,deviceId:'mx_device_id',dirQueue:'mx_dir_queue',dirCache:'mx_dir_cache',muteAudio:'mx_mute_audio',activeDirBatch:'mx_active_dir_batch',viewerKey:'mx_viewer_key'};
 const LOGIN_TTL_MS=30*24*60*60*1000; // stay signed in for 30 days on this phone
 
 const $=id=>document.getElementById(id);
@@ -1584,7 +1584,12 @@ $('bBackList').onclick=()=>{show('scrScan');startScanner();};
 // device with the receiver URL configured — the password IS the API
 // credential, nothing extra to store.
 const BATCH_PASSWORD='3090MWS';
-let viewerKey='';
+// Persisted (not just a runtime unlock) so a rehydrated Directed Scan
+// session can also refresh its offline fallback cache from the server
+// on reload, instead of only ever falling back to whatever was already
+// cached before the crash/refresh. Not a real secret either way - it's
+// a plaintext constant in this same file.
+let viewerKey=lsGet(LS.viewerKey)||'';
 let batchView='list'; // 'list' | 'detail'
 let batchListCache=[];
 let batchDetailCache=null; // {batch, labels}
@@ -1612,7 +1617,7 @@ function tryBatchAuth(){
     setTimeout(()=>{$('batchAuthErr').classList.remove('on');},3000);
   }
 }
-$('bBatch').onclick=()=>{viewerKey=BATCH_PASSWORD;openBatchStatusScreen();};
+$('bBatch').onclick=()=>{viewerKey=BATCH_PASSWORD;lsSet(LS.viewerKey,viewerKey);openBatchStatusScreen();};
 $('batchAuthOk').onclick=tryBatchAuth;
 $('batchAuthPw').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();tryBatchAuth();}});
 $('batchAuthCancel').onclick=()=>modal('mBatchAuth',false);
@@ -1859,6 +1864,7 @@ async function loadDirLines(batch){
 
 window.openDirectedScanScreen=function(batch){
   dirBatch=batch;
+  lsSet(LS.activeDirBatch,batch); // survives a refresh/crash - see enterScanScreen() at boot
   $('dirBatchTitle').textContent=batch;
   $('dirBatchSub').textContent='';
   $('dirBanner').className='dir-banner';
@@ -1882,6 +1888,7 @@ $('bBackDirected').onclick=()=>{
   scanMode='FREE';
   $('camSlotFree').appendChild($('cambox')); // hand the camera back to its home screen
   dirBatch=null;
+  lsSet(LS.activeDirBatch,null); // explicit "switch job" - don't rehydrate back into this batch next launch
   show('scrBatch');
 };
 
@@ -1957,7 +1964,7 @@ async function directedScan(uid,confirm,inputMethod){
       $('bDirUndo').disabled=false;
       renderDirectedState(data);
       syncDirLineLocal(data.unique_id,true); // keep the offline cache current as a byproduct
-      if(data.job_complete)setTimeout(()=>showDirBanner('ok','Batch complete! All parts scanned.'),1900);
+      if(data.job_complete){lsSet(LS.activeDirBatch,null);setTimeout(()=>showDirBanner('ok','Batch complete! All parts scanned.'),1900);}
       maybeFlushDirQueue(); // opportunistic — in case anything was still queued from earlier
       break;
     case'OUT_OF_ORDER':
@@ -2154,7 +2161,7 @@ function tryUnlock(){
     .replace(/＠/g,'@');
   if(v===PASSWORD){
     lsSet(LS.login,{exp:Date.now()+LOGIN_TTL_MS});$('pwErr').classList.remove('on');$('pwInput').classList.remove('err');
-    show('scrScan');startScanner();
+    enterScanScreen();
   }else{
     $('pwInput').classList.add('err');
     $('pwErr').textContent='Incorrect password. Tap the eye icon to check what you typed.';
@@ -2164,7 +2171,17 @@ function tryUnlock(){
 }
 function checkAuth(){
   const l=lsGet(LS.login);
-  (l&&l.exp>Date.now())?(show('scrScan'),startScanner()):show('scrLock');
+  (l&&l.exp>Date.now())?enterScanScreen():show('scrLock');
+}
+// Cheap Android WebViews reload unexpectedly mid-job - only the active
+// batch's *identifier* is persisted (never scan history or position),
+// so on rehydration the state machine always rebuilds from the server's
+// current line statuses, not from anything that could've gone stale if
+// another device progressed the same batch while this one was reloading.
+function enterScanScreen(){
+  const activeBatch=lsGet(LS.activeDirBatch);
+  if(activeBatch)openDirectedScanScreen(activeBatch);
+  else{show('scrScan');startScanner();}
 }
 $('bLock').onclick=()=>{
   localStorage.removeItem(LS.login);stopScanner();show('scrLock');
