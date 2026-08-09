@@ -108,6 +108,12 @@
   .sched-grid td{padding:8px 14px;border-bottom:1px solid var(--gray-200);white-space:nowrap}
   .sched-grid td.gc-comment{white-space:normal;max-width:280px}
   .sched-grid tbody tr{cursor:pointer}
+  .sched-grid tbody tr.risk-red td{background:#FEF3F2}
+  .sched-grid tbody tr.risk-red{box-shadow:inset 4px 0 0 var(--red-600)}
+  .sched-grid tbody tr.risk-yellow td{background:#FFFAEB}
+  .sched-grid tbody tr.risk-yellow{box-shadow:inset 4px 0 0 var(--amber-700)}
+  .sched-grid tbody tr.risk-green td{background:#F0FDF4}
+  .sched-grid tbody tr.risk-green{box-shadow:inset 4px 0 0 var(--green-700)}
   .sched-grid tbody tr:hover td{background:#E8F0FE}
   .sched-grid td.gc-batch{font-weight:700}
   .sched-grid .gc-progress{display:flex;align-items:center;gap:6px;min-width:90px}
@@ -148,6 +154,7 @@
     <button class="tab-btn" id="tabBtnWeekly" onclick="showTab('weekly')">Weekly Schedule</button>
     <button class="tab-btn" id="tabBtnMaterial" onclick="showTab('material')">Material Demand</button>
     <button class="tab-btn" id="tabBtnStalled" onclick="showTab('stalled')">Stalled Batches</button>
+    <button class="tab-btn" id="tabBtnRisk" onclick="showTab('risk')">At Risk</button>
     <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
   </div>
 
@@ -276,6 +283,12 @@
     </div>
     <div id="stalledList"></div>
   </div>
+
+  <div id="tabRisk" style="display:none">
+    <h1>At Risk</h1>
+    <div class="sub">Batches that are behind pace or overdue — under 20% complete with 70%+ of the time to Target Finish already gone, or past Target Finish and still incomplete. Same red rows as Production Schedule, surfaced here on their own.</div>
+    <div id="riskList"></div>
+  </div>
 </div>
 
 <div class="colf-pop" id="colFilterPopover">
@@ -326,6 +339,7 @@ function showTab(name){
   $('tabWeeklyDetail').style.display=name==='weeklyDetail'?'':'none';
   $('tabMaterial').style.display=name==='material'?'':'none';
   $('tabStalled').style.display=name==='stalled'?'':'none';
+  $('tabRisk').style.display=name==='risk'?'':'none';
   // No tab button for 'labels'/'weeklyDetail' - both only ever open by
   // clicking into something else (a batch row, a week card), not as
   // something you'd click into directly.
@@ -334,10 +348,12 @@ function showTab(name){
   $('tabBtnWeekly').classList.toggle('active',name==='weekly'||name==='weeklyDetail');
   $('tabBtnMaterial').classList.toggle('active',name==='material');
   $('tabBtnStalled').classList.toggle('active',name==='stalled');
+  $('tabBtnRisk').classList.toggle('active',name==='risk');
   if(name==='schedule')loadScheduleList();
   if(name==='weekly')renderWeeklySchedule();
   if(name==='material')renderMaterialDemand();
   if(name==='stalled')renderStalledBatches();
+  if(name==='risk')renderAtRisk();
 }
 
 async function api(path,opts){
@@ -653,6 +669,7 @@ async function loadScheduleList(){
     renderWeeklySchedule(); // keeps Weekly Schedule (and an open week's detail) live off the same poll
     renderMaterialDemand();
     renderStalledBatches();
+    renderAtRisk();
   }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
 
@@ -843,6 +860,28 @@ $('stalledThreshold').addEventListener('input',e=>{
   renderStalledBatches();
 });
 
+// ── AT RISK — the auto-escalation panel the spec asks for: same computeRisk()
+// used to color Production Schedule rows, filtered to just 'red' and sorted
+// worst-first (most overdue, or least complete with the least time left).
+function renderAtRisk(){
+  const atRisk=scheduleBatches
+    .map(b=>({b,risk:computeRisk(b)}))
+    .filter(r=>r.risk&&r.risk.level==='red')
+    .sort((a,b)=>a.risk.daysRemaining-b.risk.daysRemaining);
+  if(!atRisk.length){$('riskList').innerHTML='<div class="empty">Nothing at risk right now.</div>';return;}
+  $('riskList').innerHTML=atRisk.map(({b,risk})=>{
+    const sub=[b.job_name,b.material,b.floor_or_work_order].filter(Boolean).map(esc).join(' · ');
+    const dueText=risk.daysRemaining<0?Math.abs(risk.daysRemaining)+' day'+(Math.abs(risk.daysRemaining)===1?'':'s')+' overdue':risk.daysRemaining+' day'+(risk.daysRemaining===1?'':'s')+' left';
+    return`<div class="card" onclick="viewBatchLabels('${esc(b.batch)}')" style="cursor:pointer">
+      <div>
+        <div class="name">${esc(b.batch)}</div>
+        <div class="meta">${sub}${sub?' · ':''}${b.scanned}/${b.total} scanned (${Math.round(risk.completionPct)}%) · Due ${esc(b.target_finish)} · ${dueText}</div>
+      </div>
+      <span class="pill notstarted">At Risk</span>
+    </div>`;
+  }).join('');
+}
+
 // ── AutoFilter (Excel-style: checkbox multi-select per column, search,
 // sort A-Z/Z-A from the same dropdown, columns AND together) ──────────
 function rowStatus(b){return b.total>0&&b.scanned===b.total?'complete':b.scanned>0?'progress':'none';}
@@ -956,6 +995,35 @@ function closeRowContextMenu(){$('rowCtxMenu').style.display='none';}
 // by completion state since scanned/total is computed, not stored.
 // Clicking a row opens the same edit panel used below, without hiding
 // the grid, so switching batches (or re-filtering) never loses context.
+// ── DEADLINE & RISK — red/yellow/green per batch, comparing completion %
+// against how much of the allotted time (added_at -> target_finish) has
+// elapsed. Suggested thresholds from the spec, kept as named constants so
+// they're easy to retune without hunting through the logic below. A
+// complete batch or one with no Target Finish date isn't "at risk" of
+// anything - both return null (no color, excluded from the At Risk tab).
+const RISK_RED_COMPLETION_MAX=20;    // red if under this % complete...
+const RISK_RED_TIME_ELAPSED_MIN=70;  // ...and at least this much of the time is gone
+function computeRisk(b){
+  if(b.total>0&&b.scanned===b.total)return null;
+  const targetIso=toISODate(b.target_finish);
+  if(!targetIso)return null;
+  const target=new Date(targetIso+'T00:00:00');
+  const now=new Date();now.setHours(0,0,0,0);
+  const addedIso=toISODate(b.added_at)||targetIso;
+  const added=new Date(addedIso+'T00:00:00');
+  const msPerDay=86400000;
+  const daysRemaining=Math.round((target-now)/msPerDay);
+  const totalDays=Math.round((target-added)/msPerDay);
+  const completionPct=b.total>0?(b.scanned/b.total)*100:0;
+  const elapsedPct=totalDays>0?Math.min(100,Math.max(0,((totalDays-daysRemaining)/totalDays)*100)):(daysRemaining<=0?100:0);
+  let level;
+  if(daysRemaining<0)level='red'; // already overdue and incomplete - worst case regardless of %
+  else if(completionPct<RISK_RED_COMPLETION_MAX&&elapsedPct>=RISK_RED_TIME_ELAPSED_MIN)level='red';
+  else if(completionPct<elapsedPct)level='yellow'; // used more time than work done - behind pace
+  else level='green'; // on pace or ahead
+  return{level,completionPct,elapsedPct,daysRemaining};
+}
+
 function renderScheduleGrid(){
   let rows=scheduleBatches.filter(b=>{
     for(const key in columnFilters){
@@ -988,7 +1056,8 @@ function renderScheduleGrid(){
       const val=isDate?toISODate(b[key]):esc(b[key]||'');
       return`<input class="gc-input" type="${isDate?'date':'text'}" data-field="${key}" value="${val}" onclick="event.stopPropagation()">`;
     };
-    return`<tr data-batch="${esc(b.batch)}" onclick="viewBatchLabels('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')">
+    const risk=computeRisk(b);
+    return`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}" onclick="viewBatchLabels('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')">
       <td>${field('job_name')}</td>
       <td>${field('floor_or_work_order')}</td>
       <td>${field('target_finish',true)}</td>
