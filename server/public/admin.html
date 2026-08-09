@@ -155,6 +155,7 @@
     <button class="tab-btn" id="tabBtnMaterial" onclick="showTab('material')">Material Demand</button>
     <button class="tab-btn" id="tabBtnStalled" onclick="showTab('stalled')">Stalled Batches</button>
     <button class="tab-btn" id="tabBtnRisk" onclick="showTab('risk')">At Risk</button>
+    <button class="tab-btn" id="tabBtnYield" onclick="showTab('yieldTab')">Throughput &amp; Yield</button>
     <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
   </div>
 
@@ -289,6 +290,27 @@
     <div class="sub">Batches that are behind pace or overdue — under 20% complete with 70%+ of the time to Target Finish already gone, or past Target Finish and still incomplete. Same red rows as Production Schedule, surfaced here on their own.</div>
     <div id="riskList"></div>
   </div>
+
+  <div id="tabYield" style="display:none">
+    <h1>Throughput &amp; Yield Analytics</h1>
+    <div class="sub">Completed-batch cycle time and completion rate by Material, Finish, and Job, plus Sheet Qty vs. parts-produced yield by Material. Cycle time and yield figures only include batches that have actually finished — there's nothing to measure on ones still in progress.</div>
+
+    <h2>Completion Rate &amp; Cycle Time by Material</h2>
+    <div id="throughputMaterial"></div>
+
+    <h2>Completion Rate &amp; Cycle Time by Finish</h2>
+    <div id="throughputFinish"></div>
+
+    <h2>Cycle Time by Job</h2>
+    <div id="throughputJob"></div>
+
+    <h2>Cycle Time by Floor</h2>
+    <div id="throughputFloor"></div>
+
+    <h2>Sheet-to-Part Yield by Material</h2>
+    <div class="sub" style="margin-bottom:12px">Parts produced (registered labels) per Sheet Qty consumed. A material trending down over time may point to scrap/waste worth investigating.</div>
+    <div id="yieldByMaterial"></div>
+  </div>
 </div>
 
 <div class="colf-pop" id="colFilterPopover">
@@ -340,6 +362,7 @@ function showTab(name){
   $('tabMaterial').style.display=name==='material'?'':'none';
   $('tabStalled').style.display=name==='stalled'?'':'none';
   $('tabRisk').style.display=name==='risk'?'':'none';
+  $('tabYield').style.display=name==='yieldTab'?'':'none';
   // No tab button for 'labels'/'weeklyDetail' - both only ever open by
   // clicking into something else (a batch row, a week card), not as
   // something you'd click into directly.
@@ -349,11 +372,13 @@ function showTab(name){
   $('tabBtnMaterial').classList.toggle('active',name==='material');
   $('tabBtnStalled').classList.toggle('active',name==='stalled');
   $('tabBtnRisk').classList.toggle('active',name==='risk');
+  $('tabBtnYield').classList.toggle('active',name==='yieldTab');
   if(name==='schedule')loadScheduleList();
   if(name==='weekly')renderWeeklySchedule();
   if(name==='material')renderMaterialDemand();
   if(name==='stalled')renderStalledBatches();
   if(name==='risk')renderAtRisk();
+  if(name==='yieldTab')renderThroughputYield();
 }
 
 async function api(path,opts){
@@ -671,6 +696,7 @@ async function loadScheduleList(){
     renderMaterialDemand();
     renderStalledBatches();
     renderAtRisk();
+    renderThroughputYield();
   }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
 
@@ -843,6 +869,73 @@ function renderMaterialDemand(){
       </div>
     </div>`;
   }).join('');
+}
+
+// ── THROUGHPUT & YIELD ANALYTICS — completed-batch-only metrics (nothing
+// to measure on a batch that hasn't finished). Cycle time is
+// last_scanned_at - added_at for a complete batch: the timestamp of its
+// final scan doubles as its completion time, so no new "completed_at"
+// column is needed - both endpoints it's built from already exist.
+function cycleTimeDays(b){
+  if(!(b.total>0&&b.scanned===b.total))return null;
+  if(!b.added_at||!b.last_scanned_at)return null;
+  const start=new Date(b.added_at),end=new Date(b.last_scanned_at);
+  if(isNaN(start.getTime())||isNaN(end.getTime()))return null;
+  return Math.max(0,(end-start)/86400000);
+}
+function throughputRows(keyFn){
+  const groups={};
+  scheduleBatches.forEach(b=>{
+    const key=keyFn(b)||'(none specified)';
+    const g=groups[key]=groups[key]||{total:0,completed:0,cycleTimes:[]};
+    g.total++;
+    if(rowStatus(b)==='complete'){
+      g.completed++;
+      const ct=cycleTimeDays(b);
+      if(ct!==null)g.cycleTimes.push(ct);
+    }
+  });
+  return Object.keys(groups).sort().map(key=>{
+    const g=groups[key];
+    const rate=g.total?Math.round(g.completed/g.total*100):0;
+    const avgCt=g.cycleTimes.length?(g.cycleTimes.reduce((a,c)=>a+c,0)/g.cycleTimes.length).toFixed(1):'—';
+    return[key,g.total,g.completed,rate+'%',avgCt];
+  });
+}
+function cycleTimeOnlyRows(keyFn){
+  const groups={};
+  scheduleBatches.forEach(b=>{
+    if(rowStatus(b)!=='complete')return;
+    const ct=cycleTimeDays(b);
+    if(ct===null)return;
+    const key=keyFn(b)||'(none specified)';
+    (groups[key]=groups[key]||[]).push(ct);
+  });
+  return Object.keys(groups).sort().map(key=>{
+    const times=groups[key];
+    const avg=(times.reduce((a,c)=>a+c,0)/times.length).toFixed(1);
+    return[key,times.length,avg];
+  });
+}
+function renderThroughputYield(){
+  $('throughputMaterial').innerHTML=tbl(['Material','Total Batches','Completed','Completion Rate','Avg Cycle Time (days)'],throughputRows(b=>b.material));
+  $('throughputFinish').innerHTML=tbl(['Finish','Total Batches','Completed','Completion Rate','Avg Cycle Time (days)'],throughputRows(b=>b.finish));
+  $('throughputJob').innerHTML=tbl(['Job','Completed Batches','Avg Cycle Time (days)'],cycleTimeOnlyRows(b=>b.job_name));
+  $('throughputFloor').innerHTML=tbl(['Floor / Work Order','Completed Batches','Avg Cycle Time (days)'],cycleTimeOnlyRows(b=>b.floor_or_work_order));
+
+  const yGroups={};
+  scheduleBatches.forEach(b=>{
+    const sheetQty=parseQty(b.sheet_qty);
+    if(sheetQty===null||sheetQty<=0)return; // can't compute a yield ratio without a real sheet qty
+    const key=b.material||'(No Material Specified)';
+    const g=yGroups[key]=yGroups[key]||{sheets:0,parts:0,batches:0};
+    g.sheets+=sheetQty;g.parts+=b.total;g.batches++;
+  });
+  const yieldRows=Object.keys(yGroups).sort().map(m=>{
+    const g=yGroups[m];
+    return[m,g.batches,g.sheets,g.parts,(g.parts/g.sheets).toFixed(2)];
+  });
+  $('yieldByMaterial').innerHTML=tbl(['Material','Batches','Sheet Qty Consumed','Parts Produced','Parts per Sheet'],yieldRows);
 }
 
 // ── STALLED BATCHES (Bottleneck Detection) — another read-only lens on
