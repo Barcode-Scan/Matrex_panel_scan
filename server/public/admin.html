@@ -54,6 +54,9 @@
   .job-progress{display:flex;align-items:center;gap:8px;width:100%}
   .job-progress-track{flex:1;height:6px;border-radius:3px;background:var(--gray-200);overflow:hidden}
   .job-progress-fill{height:100%;border-radius:3px;background:var(--blue-600)}
+  #toastContainer{position:fixed;top:16px;right:16px;z-index:100;display:flex;flex-direction:column;gap:8px;max-width:320px}
+  .toast{background:var(--white);border:1.5px solid var(--green-700);border-left-width:5px;border-radius:10px;padding:12px 14px;box-shadow:0 8px 24px rgba(16,24,40,.12);font-size:14px;font-weight:600;color:var(--gray-900);animation:toastIn .2s ease-out}
+  @keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
   .acts{margin-left:auto;display:flex;gap:6px}
   .empty{color:var(--gray-500);font-size:13px;padding:20px;text-align:center}
   h2{font-size:16px;margin:28px 0 4px}
@@ -151,6 +154,7 @@
 </style>
 </head>
 <body>
+<div id="toastContainer"></div>
 <div class="wrap">
   <div class="tabbar">
     <button class="tab-btn active" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
@@ -161,6 +165,7 @@
     <button class="tab-btn" id="tabBtnYield" onclick="showTab('yieldTab')">Throughput &amp; Yield</button>
     <button class="tab-btn" id="tabBtnJobs" onclick="showTab('jobs')">Job Summary</button>
     <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
+    <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()" style="margin-left:auto">&#128276; Enable Desktop Alerts</button>
   </div>
 
   <div id="tabOperations" style="display:none">
@@ -511,6 +516,7 @@ function copyTunnelUrl(){
   navigator.clipboard.writeText(lastTunnelUrl).catch(()=>{});
 }
 
+if(window.Notification&&Notification.permission==='granted')$('bEnableAlerts').textContent='🔔 Alerts Enabled';
 load();
 loadTunnelUrl();
 loadDeviceActivity();
@@ -726,6 +732,7 @@ async function loadScheduleList(){
     renderAtRisk();
     renderThroughputYield();
     renderJobSummary();
+    checkCompletionAlerts();
   }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
 
@@ -1046,6 +1053,48 @@ function renderJobDetail(job){
   }).join('');
 }
 $('bBackJobDetail').onclick=()=>{currentJobKey=null;showTab('jobs');};
+
+// ── 100%-COMPLETION ALERT (Phase 7, partial) — the rest of Phase 7
+// ("Panel Scan Integration Hooks") is either already true today (scan
+// progress already updates Production Schedule live - there was never a
+// separate system to integrate with) or explicitly ruled out
+// (auto-generating the next Batch Name/Work Order - no reliable naming
+// convention to build against). This is just the "batch hits 100%,
+// ready for QC/shipping" notification.
+//
+// Tracks each batch's completion state across polls and fires only on a
+// genuine transition into 100% - never on page load for batches that
+// were already complete before this tab was open, which is why the
+// first pass just records a baseline and alerts nothing.
+let knownCompletion={};
+let completionAlertPrimed=false;
+function checkCompletionAlerts(){
+  scheduleBatches.forEach(b=>{
+    const isComplete=b.total>0&&b.scanned===b.total;
+    if(completionAlertPrimed&&isComplete&&knownCompletion[b.batch]===false)fireCompletionAlert(b);
+    knownCompletion[b.batch]=isComplete;
+  });
+  completionAlertPrimed=true;
+}
+function fireCompletionAlert(b){
+  showToast('✓ '+b.batch+' hit 100% — ready for QC/shipping');
+  if(window.Notification&&Notification.permission==='granted'){
+    try{new Notification('Batch Complete',{body:b.batch+' — ready for QC/shipping'});}catch(e){}
+  }
+}
+function showToast(msg){
+  const el=document.createElement('div');
+  el.className='toast';
+  el.textContent=msg;
+  $('toastContainer').appendChild(el);
+  setTimeout(()=>el.remove(),8000);
+}
+function enableCompletionNotifications(){
+  if(!window.Notification){alert('Desktop notifications are not supported in this browser.');return;}
+  Notification.requestPermission().then(perm=>{
+    $('bEnableAlerts').textContent=perm==='granted'?'🔔 Alerts Enabled':'🔔 Enable Desktop Alerts';
+  });
+}
 
 // ── STALLED BATCHES (Bottleneck Detection) — another read-only lens on
 // scheduleBatches. "Idle since" is last_scanned_at (added to the batches
