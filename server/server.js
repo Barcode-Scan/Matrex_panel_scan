@@ -771,7 +771,8 @@ app.get('/viewer/api/batches', requireViewer, (req, res) => {
     SELECT pp.batch, COUNT(*) AS total,
            SUM(pi.scanned='Yes') AS scanned,
            SUM(pi.void='Yes') AS voided,
-           MIN(pi.created_at) AS added_at
+           MIN(pi.created_at) AS added_at,
+           MAX(pi.scanned_at) AS last_scanned_at
     FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
     WHERE pp.batch IS NOT NULL AND pp.batch != ''
     GROUP BY pp.batch ORDER BY added_at DESC
