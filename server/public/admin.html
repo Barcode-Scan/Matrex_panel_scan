@@ -51,6 +51,9 @@
   .week-card-badge.overdue{color:var(--red-600);background:#FEE4E2}
   .week-card-count{font-size:13px;color:var(--gray-500)}
   .week-card-sub{font-size:12px;color:var(--gray-500);margin-top:2px}
+  .job-progress{display:flex;align-items:center;gap:8px;width:100%}
+  .job-progress-track{flex:1;height:6px;border-radius:3px;background:var(--gray-200);overflow:hidden}
+  .job-progress-fill{height:100%;border-radius:3px;background:var(--blue-600)}
   .acts{margin-left:auto;display:flex;gap:6px}
   .empty{color:var(--gray-500);font-size:13px;padding:20px;text-align:center}
   h2{font-size:16px;margin:28px 0 4px}
@@ -156,6 +159,7 @@
     <button class="tab-btn" id="tabBtnStalled" onclick="showTab('stalled')">Stalled Batches</button>
     <button class="tab-btn" id="tabBtnRisk" onclick="showTab('risk')">At Risk</button>
     <button class="tab-btn" id="tabBtnYield" onclick="showTab('yieldTab')">Throughput &amp; Yield</button>
+    <button class="tab-btn" id="tabBtnJobs" onclick="showTab('jobs')">Job Summary</button>
     <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
   </div>
 
@@ -311,6 +315,26 @@
     <div class="sub" style="margin-bottom:12px">Parts produced (registered labels) per Sheet Qty consumed. A material trending down over time may point to scrap/waste worth investigating.</div>
     <div id="yieldByMaterial"></div>
   </div>
+
+  <div id="tabJobSummary" style="display:none">
+    <h1>Job Summary</h1>
+    <div class="sub">Every batch rolled up to one overall completion % per Job — for reporting without digging through individual batch rows. Click a Job for its floor-by-floor breakdown.</div>
+    <div id="jobSummaryList"></div>
+  </div>
+
+  <div id="tabJobDetail" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div>
+        <h1 id="jobDetailTitle">Job</h1>
+        <div class="sub" id="jobDetailSub"></div>
+      </div>
+      <button class="secondary" id="bBackJobDetail">&larr; All Jobs</button>
+    </div>
+    <h2>By Floor / Work Order</h2>
+    <div id="jobDetailFloors"></div>
+    <h2>Batches</h2>
+    <div id="jobDetailBatches"></div>
+  </div>
 </div>
 
 <div class="colf-pop" id="colFilterPopover">
@@ -363,9 +387,11 @@ function showTab(name){
   $('tabStalled').style.display=name==='stalled'?'':'none';
   $('tabRisk').style.display=name==='risk'?'':'none';
   $('tabYield').style.display=name==='yieldTab'?'':'none';
-  // No tab button for 'labels'/'weeklyDetail' - both only ever open by
-  // clicking into something else (a batch row, a week card), not as
-  // something you'd click into directly.
+  $('tabJobSummary').style.display=name==='jobs'?'':'none';
+  $('tabJobDetail').style.display=name==='jobDetail'?'':'none';
+  // No tab button for 'labels'/'weeklyDetail'/'jobDetail' - all three only
+  // ever open by clicking into something else, not as something you'd
+  // click into directly.
   $('tabBtnOps').classList.toggle('active',name==='ops');
   $('tabBtnSchedule').classList.toggle('active',name==='schedule');
   $('tabBtnWeekly').classList.toggle('active',name==='weekly'||name==='weeklyDetail');
@@ -373,12 +399,14 @@ function showTab(name){
   $('tabBtnStalled').classList.toggle('active',name==='stalled');
   $('tabBtnRisk').classList.toggle('active',name==='risk');
   $('tabBtnYield').classList.toggle('active',name==='yieldTab');
+  $('tabBtnJobs').classList.toggle('active',name==='jobs'||name==='jobDetail');
   if(name==='schedule')loadScheduleList();
   if(name==='weekly')renderWeeklySchedule();
   if(name==='material')renderMaterialDemand();
   if(name==='stalled')renderStalledBatches();
   if(name==='risk')renderAtRisk();
   if(name==='yieldTab')renderThroughputYield();
+  if(name==='jobs')renderJobSummary();
 }
 
 async function api(path,opts){
@@ -697,6 +725,7 @@ async function loadScheduleList(){
     renderStalledBatches();
     renderAtRisk();
     renderThroughputYield();
+    renderJobSummary();
   }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
 
@@ -937,6 +966,86 @@ function renderThroughputYield(){
   });
   $('yieldByMaterial').innerHTML=tbl(['Material','Batches','Sheet Qty Consumed','Parts Produced','Parts per Sheet'],yieldRows);
 }
+
+// ── JOB SUMMARY (Job-Level Rollups) — every batch under a Job rolled up
+// to one overall completion %, with a floor-by-floor breakdown for multi-
+// floor jobs. For reporting without digging through individual batch
+// rows. Same list->detail tab pattern as Weekly Schedule.
+let currentJobKey=null;
+function groupByJob(){
+  const groups={};
+  scheduleBatches.forEach(b=>{
+    const key=b.job_name||'(No Job Specified)';
+    (groups[key]=groups[key]||[]).push(b);
+  });
+  return groups;
+}
+function sumProgress(items){
+  const scanned=items.reduce((a,b)=>a+(b.scanned||0),0);
+  const total=items.reduce((a,b)=>a+(b.total||0),0);
+  return{scanned,total,pct:total?Math.round(scanned/total*100):0};
+}
+function progressPillClass(pct){return pct>=100?'done':pct>0?'working':'notstarted';}
+function renderJobSummary(){
+  const groups=groupByJob();
+  const jobs=Object.keys(groups).sort();
+  if(!jobs.length){$('jobSummaryList').innerHTML='<div class="empty">No batches in Production Schedule yet.</div>';return;}
+  $('jobSummaryList').innerHTML=jobs.map(j=>{
+    const items=groups[j];
+    const{scanned,total,pct}=sumProgress(items);
+    const floors=[...new Set(items.map(b=>b.floor_or_work_order).filter(Boolean))];
+    return`<div class="card" style="align-items:flex-start;flex-direction:column;gap:6px;cursor:pointer" onclick="openJobDetail('${esc(j)}')">
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+        <div class="name" style="font-size:16px">${esc(j)}</div>
+        <span class="pill ${progressPillClass(pct)}">${pct}% complete</span>
+      </div>
+      <div class="job-progress"><div class="job-progress-track"><div class="job-progress-fill" style="width:${pct}%"></div></div></div>
+      <div class="meta">${items.length} batch${items.length===1?'':'es'} · ${scanned}/${total} scanned${floors.length?' · '+floors.length+' floor'+(floors.length===1?'':'s')+': '+esc(floors.join(', ')):''}</div>
+    </div>`;
+  }).join('');
+  if(currentJobKey)renderJobDetail(currentJobKey); // keep an already-open job's detail live too
+}
+function openJobDetail(job){
+  currentJobKey=job;
+  showTab('jobDetail');
+  renderJobDetail(job);
+}
+function renderJobDetail(job){
+  const items=groupByJob()[job]||[];
+  $('jobDetailTitle').textContent=job;
+  const{scanned,total,pct}=sumProgress(items);
+  $('jobDetailSub').textContent=items.length+' batch'+(items.length===1?'':'es')+' · '+scanned+'/'+total+' scanned ('+pct+'% complete)';
+
+  const floorGroups={};
+  items.forEach(b=>{
+    const key=b.floor_or_work_order||'(No Floor / Work Order Specified)';
+    (floorGroups[key]=floorGroups[key]||[]).push(b);
+  });
+  $('jobDetailFloors').innerHTML=Object.keys(floorGroups).sort().map(f=>{
+    const fitems=floorGroups[f];
+    const fp=sumProgress(fitems);
+    return`<div class="card" style="align-items:flex-start;flex-direction:column;gap:6px">
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+        <div class="name" style="font-size:15px">${esc(f)}</div>
+        <span class="pill ${progressPillClass(fp.pct)}">${fp.pct}%</span>
+      </div>
+      <div class="job-progress"><div class="job-progress-track"><div class="job-progress-fill" style="width:${fp.pct}%"></div></div></div>
+      <div class="meta">${fitems.length} batch${fitems.length===1?'':'es'} · ${fp.scanned}/${fp.total} scanned</div>
+    </div>`;
+  }).join('');
+
+  $('jobDetailBatches').innerHTML=items.map(b=>{
+    const bp=sumProgress([b]);
+    return`<div class="card" onclick="viewBatchLabels('${esc(b.batch)}')" style="cursor:pointer">
+      <div>
+        <div class="name">${esc(b.batch)}</div>
+        <div class="meta">${esc(b.floor_or_work_order||'(no floor specified)')} · ${bp.scanned}/${bp.total} scanned</div>
+      </div>
+      <span class="pill ${progressPillClass(bp.pct)}">${bp.pct}%</span>
+    </div>`;
+  }).join('');
+}
+$('bBackJobDetail').onclick=()=>{currentJobKey=null;showTab('jobs');};
 
 // ── STALLED BATCHES (Bottleneck Detection) — another read-only lens on
 // scheduleBatches. "Idle since" is last_scanned_at (added to the batches
