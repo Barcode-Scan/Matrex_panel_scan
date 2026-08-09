@@ -36,6 +36,18 @@
   .pill.REVOKED{background:var(--red-50);color:var(--red-600)}
   .pill.ACTIVE{background:var(--green-50);color:var(--green-700)}
   .pill.IDLE{background:var(--red-50);color:var(--red-600)}
+  .pill.done{background:var(--green-50);color:var(--green-700)}
+  .pill.working{background:var(--amber-50);color:var(--amber-700)}
+  .pill.notstarted{background:var(--red-50);color:var(--red-600)}
+  .week-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+  .week-card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:12px;padding:16px;cursor:pointer;transition:box-shadow .15s}
+  .week-card:hover{box-shadow:0 4px 14px rgba(16,24,40,.08)}
+  .week-card.current{border-color:var(--blue-600);box-shadow:0 0 0 1px var(--blue-600)}
+  .week-card.unscheduled{border-style:dashed}
+  .week-card-range{font-weight:700;font-size:15px;color:var(--gray-900);margin-bottom:4px}
+  .week-card-badge{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--blue-600);background:#EEF2FF;padding:2px 8px;border-radius:100px;margin-bottom:6px}
+  .week-card-count{font-size:13px;color:var(--gray-500)}
+  .week-card-sub{font-size:12px;color:var(--gray-500);margin-top:2px}
   .acts{margin-left:auto;display:flex;gap:6px}
   .empty{color:var(--gray-500);font-size:13px;padding:20px;text-align:center}
   h2{font-size:16px;margin:28px 0 4px}
@@ -130,6 +142,7 @@
 <div class="wrap">
   <div class="tabbar">
     <button class="tab-btn active" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
+    <button class="tab-btn" id="tabBtnWeekly" onclick="showTab('weekly')">Weekly Schedule</button>
     <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
   </div>
 
@@ -224,6 +237,23 @@
     </div>
     <div id="labelsContent"></div>
   </div>
+
+  <div id="tabWeekly" style="display:none">
+    <h1>Weekly Schedule</h1>
+    <div class="sub">Every Production Schedule batch, grouped by the week its Target Finish date falls in. Click a week to see its batches.</div>
+    <div id="weeklyList"></div>
+  </div>
+
+  <div id="tabWeeklyDetail" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div>
+        <h1 id="weeklyDetailTitle">Week</h1>
+        <div class="sub" id="weeklyDetailSub"></div>
+      </div>
+      <button class="secondary" id="bBackWeeklyDetail">&larr; All Weeks</button>
+    </div>
+    <div id="weeklyDetailList"></div>
+  </div>
 </div>
 
 <div class="colf-pop" id="colFilterPopover">
@@ -270,13 +300,16 @@ function showTab(name){
   $('tabOperations').style.display=name==='ops'?'':'none';
   $('tabSchedule').style.display=name==='schedule'?'':'none';
   $('tabLabels').style.display=name==='labels'?'':'none';
-  // No tab button for 'labels' - it only ever opens by clicking a batch
-  // in Production Schedule, not as something you'd click into directly,
-  // so Operations/Production Schedule are the only two that need an
-  // active-state toggle here.
+  $('tabWeekly').style.display=name==='weekly'?'':'none';
+  $('tabWeeklyDetail').style.display=name==='weeklyDetail'?'':'none';
+  // No tab button for 'labels'/'weeklyDetail' - both only ever open by
+  // clicking into something else (a batch row, a week card), not as
+  // something you'd click into directly.
   $('tabBtnOps').classList.toggle('active',name==='ops');
   $('tabBtnSchedule').classList.toggle('active',name==='schedule');
+  $('tabBtnWeekly').classList.toggle('active',name==='weekly'||name==='weeklyDetail');
   if(name==='schedule')loadScheduleList();
+  if(name==='weekly')renderWeeklySchedule();
 }
 
 async function api(path,opts){
@@ -589,8 +622,90 @@ async function loadScheduleList(){
     const data=await api('/viewer/api/batches');
     scheduleBatches=data.batches||[];
     renderScheduleGrid();
+    renderWeeklySchedule(); // keeps Weekly Schedule (and an open week's detail) live off the same poll
   }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
+
+// ── WEEKLY SCHEDULE — a read-only lens on the same scheduleBatches array
+// the main grid already polls every 4s (no separate fetch, no new backend
+// endpoint). Groups by the Monday-start calendar week each batch's Target
+// Finish date falls in; batches with no parseable date land in a single
+// "No Target Finish Date" bucket instead of being dropped. Editing still
+// only happens from Production Schedule itself - this is purely a
+// different way to look at the same data.
+let currentWeekKey=null;
+function weekKeyFor(dateStr){
+  const iso=toISODate(dateStr);
+  if(!iso)return null;
+  const d=new Date(iso+'T00:00:00');
+  const day=d.getDay(); // 0=Sun..6=Sat
+  d.setDate(d.getDate()+(day===0?-6:1-day)); // back up to that week's Monday
+  return d.toISOString().slice(0,10);
+}
+function weekLabel(mondayKey){
+  const start=new Date(mondayKey+'T00:00:00');
+  const end=new Date(start);end.setDate(start.getDate()+6);
+  const f=d=>d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  return`${f(start)} – ${f(end)}, ${start.getFullYear()}`;
+}
+function groupByWeek(){
+  const groups={};
+  scheduleBatches.forEach(b=>{
+    const key=weekKeyFor(b.target_finish)||'unscheduled';
+    (groups[key]=groups[key]||[]).push(b);
+  });
+  return groups;
+}
+function statusPillClass(v){return v==='complete'?'done':v==='progress'?'working':'notstarted';}
+function renderWeeklySchedule(){
+  const groups=groupByWeek();
+  const weekKeys=Object.keys(groups).filter(k=>k!=='unscheduled').sort();
+  const unscheduled=groups.unscheduled||[];
+  if(!weekKeys.length&&!unscheduled.length){$('weeklyList').innerHTML='<div class="empty">No batches in Production Schedule yet.</div>';}
+  else{
+    const thisWeek=weekKeyFor(new Date().toISOString().slice(0,10));
+    let html='<div class="week-grid">'+weekKeys.map(k=>{
+      const items=groups[k];
+      const done=items.filter(b=>rowStatus(b)==='complete').length;
+      return`<div class="week-card${k===thisWeek?' current':''}" onclick="openWeekDetail('${k}')">
+        ${k===thisWeek?'<div class="week-card-badge">This Week</div>':''}
+        <div class="week-card-range">${weekLabel(k)}</div>
+        <div class="week-card-count">${items.length} batch${items.length===1?'':'es'}</div>
+        <div class="week-card-sub">${done} of ${items.length} complete</div>
+      </div>`;
+    }).join('');
+    if(unscheduled.length){
+      html+=`<div class="week-card unscheduled" onclick="openWeekDetail('unscheduled')">
+        <div class="week-card-range">No Target Finish Date</div>
+        <div class="week-card-count">${unscheduled.length} batch${unscheduled.length===1?'':'es'}</div>
+      </div>`;
+    }
+    $('weeklyList').innerHTML=html+'</div>';
+  }
+  if(currentWeekKey)renderWeekDetail(currentWeekKey); // keep an already-open week's detail live too
+}
+function openWeekDetail(key){
+  currentWeekKey=key;
+  showTab('weeklyDetail');
+  renderWeekDetail(key);
+}
+function renderWeekDetail(key){
+  const items=(groupByWeek()[key])||[];
+  $('weeklyDetailTitle').textContent=key==='unscheduled'?'No Target Finish Date':weekLabel(key);
+  $('weeklyDetailSub').textContent=items.length+' batch'+(items.length===1?'':'es');
+  if(!items.length){$('weeklyDetailList').innerHTML='<div class="empty">No batches.</div>';return;}
+  $('weeklyDetailList').innerHTML=items.map(b=>{
+    const sub=[b.job_name,b.material,b.finish,b.tasked].filter(Boolean).map(esc).join(' · ');
+    return`<div class="card" onclick="viewBatchLabels('${esc(b.batch)}')" style="cursor:pointer">
+      <div>
+        <div class="name">${esc(b.batch)}</div>
+        <div class="meta">${sub}${b.target_finish?' · Due '+esc(b.target_finish):''}</div>
+      </div>
+      <span class="pill ${statusPillClass(rowStatus(b))}">${b.scanned}/${b.total}</span>
+    </div>`;
+  }).join('');
+}
+$('bBackWeeklyDetail').onclick=()=>{currentWeekKey=null;showTab('weekly');};
 
 // ── AutoFilter (Excel-style: checkbox multi-select per column, search,
 // sort A-Z/Z-A from the same dropdown, columns AND together) ──────────
