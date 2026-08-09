@@ -662,11 +662,16 @@ function groupByWeek(){
 function statusPillClass(v){return v==='complete'?'done':v==='progress'?'working':'notstarted';}
 function renderWeeklySchedule(){
   const groups=groupByWeek();
+  const thisWeek=weekKeyFor(new Date().toISOString().slice(0,10));
+  // Always give the current week a card, even with nothing due in it -
+  // otherwise "This Week" (the green landmark everything else is judged
+  // against) silently disappears the moment no batch happens to have a
+  // Target Finish date inside it, which is exactly what was happening.
+  if(!groups[thisWeek])groups[thisWeek]=[];
   const weekKeys=Object.keys(groups).filter(k=>k!=='unscheduled').sort();
   const unscheduled=groups.unscheduled||[];
   if(!weekKeys.length&&!unscheduled.length){$('weeklyList').innerHTML='<div class="empty">No batches in Production Schedule yet.</div>';}
   else{
-    const thisWeek=weekKeyFor(new Date().toISOString().slice(0,10));
     // Current week always reads green regardless of progress (it's not
     // "overdue" yet, it's just where we are). A past week only reads red
     // once it's actually overdue - if everything in it got done on time
@@ -682,7 +687,7 @@ function renderWeeklySchedule(){
         ${badge}
         <div class="week-card-range">${weekLabel(k)}</div>
         <div class="week-card-count">${items.length} batch${items.length===1?'':'es'}</div>
-        <div class="week-card-sub">${done} of ${items.length} complete</div>
+        <div class="week-card-sub">${items.length?done+' of '+items.length+' complete':'Nothing due this week'}</div>
       </div>`;
     }).join('');
     if(unscheduled.length){
