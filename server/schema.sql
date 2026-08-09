@@ -135,3 +135,15 @@ CREATE TABLE IF NOT EXISTS production_schedule (
   updated_at          TEXT,
   updated_by          TEXT
 );
+
+-- ── MATERIAL STOCK — the minimal manual on-hand-qty input Phase 4 (Cross-
+-- Job Material Conflict Detection) needs, not a real inventory system: one
+-- row per material name (matching production_schedule.material free-text
+-- values), admin-editable from the Material Demand tab, cross-referenced
+-- against the same open-batch Sheet Qty totals Phase 1 already computes.
+CREATE TABLE IF NOT EXISTS material_stock (
+  material     TEXT PRIMARY KEY,
+  on_hand_qty  REAL NOT NULL DEFAULT 0,
+  updated_at   TEXT,
+  updated_by   TEXT
+);

@@ -311,7 +311,7 @@ const $=id=>document.getElementById(id);
 let KEY=localStorage.getItem('mx_admin_key')||'';
 $('key').value=KEY;
 
-function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();}
+function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();loadMaterialStock();}
 
 // ── TABS ─────────────────────────────────────────────────────
 // Production Schedule is the landing view now, open to whoever has the
@@ -462,6 +462,7 @@ load();
 loadTunnelUrl();
 loadDeviceActivity();
 loadExceptions();
+loadMaterialStock();
 setInterval(load,4000);
 setInterval(loadTunnelUrl,10000);
 // Keeps the Production Schedule grid live for a supervisor watching it on
@@ -789,6 +790,30 @@ function groupByMaterial(){
   });
   return groups;
 }
+// ── MATERIAL STOCK (Cross-Job Material Conflict Detection, Phase 4) —
+// manual on-hand qty per material, loaded once (not on the 4s poll - it
+// only changes when someone edits it, not from scan activity) and cross-
+// referenced against Phase 1's own open-batch Sheet Qty totals so a
+// shortfall surfaces right where the demand is already shown, rather than
+// as a separate disconnected view.
+let materialStockCache={};
+async function loadMaterialStock(){
+  if(!KEY)return;
+  try{
+    const data=await api('/admin/api/material-stock');
+    materialStockCache={};
+    (data.stock||[]).forEach(s=>{materialStockCache[s.material]=s.on_hand_qty;});
+    renderMaterialDemand();
+  }catch(e){/* leave last-known cache showing rather than blank it on a transient error */}
+}
+async function saveMaterialStock(material,value){
+  const qty=parseFloat(value);
+  if(isNaN(qty))return;
+  materialStockCache[material]=qty; // optimistic - re-render immediately, don't wait on the round-trip
+  renderMaterialDemand();
+  try{await api('/admin/api/material-stock/'+encodeURIComponent(material),{method:'POST',body:JSON.stringify({on_hand_qty:qty})});}
+  catch(e){/* stays in the cache either way - worst case a stale value until the next successful save */}
+}
 function renderMaterialDemand(){
   const groups=groupByMaterial();
   const materials=Object.keys(groups).sort();
@@ -798,13 +823,24 @@ function renderMaterialDemand(){
     let total=0,unparsed=0;
     items.forEach(b=>{const q=parseQty(b.sheet_qty);q===null?unparsed++:total+=q;});
     const jobs=[...new Set(items.map(b=>b.job_name).filter(Boolean))].sort();
+    const onHand=materialStockCache.hasOwnProperty(m)?materialStockCache[m]:null;
+    const shortfall=onHand!==null?total-onHand:null;
+    const conflict=shortfall!==null&&shortfall>0;
     return`<div class="card" style="align-items:flex-start;flex-direction:column;gap:6px">
-      <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:center;gap:8px;flex-wrap:wrap">
         <div class="name" style="font-size:16px">${esc(m)}</div>
-        <span class="pill working">${items.length} open batch${items.length===1?'':'es'}</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${conflict?'<span class="pill notstarted">Short by '+shortfall+'</span>':''}
+          <span class="pill working">${items.length} open batch${items.length===1?'':'es'}</span>
+        </div>
       </div>
       <div class="meta">Sheet Qty remaining: <strong style="color:var(--gray-900)">${total}</strong>${unparsed?` (+${unparsed} batch${unparsed===1?'':'es'} with a non-numeric Sheet Qty, not counted)`:''}</div>
       <div class="meta">Jobs: ${jobs.length?esc(jobs.join(', ')):'(none specified)'}</div>
+      <div class="meta" style="display:flex;align-items:center;gap:6px">On hand:
+        <input type="number" value="${onHand!==null?onHand:''}" placeholder="Enter qty" style="width:90px;padding:4px 8px"
+          onchange="saveMaterialStock('${esc(m)}',this.value)">
+        ${onHand!==null?(conflict?'<span style="color:var(--red-600);font-weight:700">shortfall</span>':'<span style="color:var(--green-700);font-weight:700">covered</span>'):''}
+      </div>
     </div>`;
   }).join('');
 }

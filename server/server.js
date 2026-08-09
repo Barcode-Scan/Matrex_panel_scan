@@ -761,6 +761,25 @@ app.get('/admin/api/device-activity', requireAdmin, (req, res) => {
   res.json({ ok: true, devices: rows });
 });
 
+// ── MATERIAL STOCK — manual on-hand qty per material, the minimal input
+// Phase 4 needs (no real inventory system exists to integrate with).
+const upsertMaterialStock = db.prepare(`
+  INSERT INTO material_stock (material, on_hand_qty, updated_at, updated_by)
+  VALUES (@material, @on_hand_qty, @now, @updated_by)
+  ON CONFLICT(material) DO UPDATE SET on_hand_qty=@on_hand_qty, updated_at=@now, updated_by=@updated_by
+`);
+app.get('/admin/api/material-stock', requireAdmin, (req, res) => {
+  res.json({ ok: true, stock: db.prepare('SELECT * FROM material_stock').all() });
+});
+app.post('/admin/api/material-stock/:material', requireAdmin, (req, res) => {
+  const material = String(req.params.material || '').trim();
+  if (!material) return res.status(400).json({ ok: false, error: 'material required' });
+  const qty = parseFloat(req.body && req.body.on_hand_qty);
+  if (isNaN(qty)) return res.status(400).json({ ok: false, error: 'on_hand_qty must be a number' });
+  upsertMaterialStock.run({ material, on_hand_qty: qty, now: new Date().toISOString(), updated_by: (req.body && req.body.updated_by) || 'ADMIN' });
+  res.json({ ok: true });
+});
+
 // ── BATCH STATUS — read-only, viewer-key gated. Powers the phone app's
 // Batch Status tab: pick a batch, see every label's real-time status. Pure
 // join of parts_panel (write-once from Excel) + parts_index (the only
