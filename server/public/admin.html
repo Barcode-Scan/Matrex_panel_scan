@@ -146,6 +146,7 @@
   <div class="tabbar">
     <button class="tab-btn active" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
     <button class="tab-btn" id="tabBtnWeekly" onclick="showTab('weekly')">Weekly Schedule</button>
+    <button class="tab-btn" id="tabBtnMaterial" onclick="showTab('material')">Material Demand</button>
     <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
   </div>
 
@@ -257,6 +258,12 @@
     </div>
     <div id="weeklyDetailList"></div>
   </div>
+
+  <div id="tabMaterial" style="display:none">
+    <h1>Material Demand Forecast</h1>
+    <div class="sub">Every open (not-yet-complete) batch, grouped by Material — total Sheet Qty still needed, how many batches are contributing, and which Jobs they belong to. For purchasing decisions before running short on stock.</div>
+    <div id="materialList"></div>
+  </div>
 </div>
 
 <div class="colf-pop" id="colFilterPopover">
@@ -305,14 +312,17 @@ function showTab(name){
   $('tabLabels').style.display=name==='labels'?'':'none';
   $('tabWeekly').style.display=name==='weekly'?'':'none';
   $('tabWeeklyDetail').style.display=name==='weeklyDetail'?'':'none';
+  $('tabMaterial').style.display=name==='material'?'':'none';
   // No tab button for 'labels'/'weeklyDetail' - both only ever open by
   // clicking into something else (a batch row, a week card), not as
   // something you'd click into directly.
   $('tabBtnOps').classList.toggle('active',name==='ops');
   $('tabBtnSchedule').classList.toggle('active',name==='schedule');
   $('tabBtnWeekly').classList.toggle('active',name==='weekly'||name==='weeklyDetail');
+  $('tabBtnMaterial').classList.toggle('active',name==='material');
   if(name==='schedule')loadScheduleList();
   if(name==='weekly')renderWeeklySchedule();
+  if(name==='material')renderMaterialDemand();
 }
 
 async function api(path,opts){
@@ -626,6 +636,7 @@ async function loadScheduleList(){
     scheduleBatches=data.batches||[];
     renderScheduleGrid();
     renderWeeklySchedule(); // keeps Weekly Schedule (and an open week's detail) live off the same poll
+    renderMaterialDemand();
   }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
 
@@ -724,6 +735,46 @@ function renderWeekDetail(key){
   }).join('');
 }
 $('bBackWeeklyDetail').onclick=()=>{currentWeekKey=null;showTab('weekly');};
+
+// ── MATERIAL DEMAND FORECAST — another read-only lens on scheduleBatches,
+// same pattern as Weekly Schedule (no separate fetch, no new backend
+// endpoint). "Open" means not yet 100% scanned - a completed batch has
+// already consumed its material, so it doesn't count toward what's still
+// needed. sheet_qty is free-text (typed in Excel or the grid), not always
+// a clean number - only parseable values are summed, and how many
+// couldn't be parsed is called out rather than silently dropped or
+// crashing the total.
+function parseQty(v){
+  const n=parseFloat(String(v||'').replace(/[^\d.-]/g,''));
+  return isNaN(n)?null:n;
+}
+function groupByMaterial(){
+  const groups={};
+  scheduleBatches.filter(b=>rowStatus(b)!=='complete').forEach(b=>{
+    const key=b.material||'(No Material Specified)';
+    (groups[key]=groups[key]||[]).push(b);
+  });
+  return groups;
+}
+function renderMaterialDemand(){
+  const groups=groupByMaterial();
+  const materials=Object.keys(groups).sort();
+  if(!materials.length){$('materialList').innerHTML='<div class="empty">No open batches — nothing currently demanding material.</div>';return;}
+  $('materialList').innerHTML=materials.map(m=>{
+    const items=groups[m];
+    let total=0,unparsed=0;
+    items.forEach(b=>{const q=parseQty(b.sheet_qty);q===null?unparsed++:total+=q;});
+    const jobs=[...new Set(items.map(b=>b.job_name).filter(Boolean))].sort();
+    return`<div class="card" style="align-items:flex-start;flex-direction:column;gap:6px">
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+        <div class="name" style="font-size:16px">${esc(m)}</div>
+        <span class="pill working">${items.length} open batch${items.length===1?'':'es'}</span>
+      </div>
+      <div class="meta">Sheet Qty remaining: <strong style="color:var(--gray-900)">${total}</strong>${unparsed?` (+${unparsed} batch${unparsed===1?'':'es'} with a non-numeric Sheet Qty, not counted)`:''}</div>
+      <div class="meta">Jobs: ${jobs.length?esc(jobs.join(', ')):'(none specified)'}</div>
+    </div>`;
+  }).join('');
+}
 
 // ── AutoFilter (Excel-style: checkbox multi-select per column, search,
 // sort A-Z/Z-A from the same dropdown, columns AND together) ──────────
