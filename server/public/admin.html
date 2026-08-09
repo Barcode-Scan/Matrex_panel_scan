@@ -382,7 +382,9 @@ function goToOperations(){
   }
   showTab('ops');
 }
+let currentTab='schedule';
 function showTab(name){
+  currentTab=name;
   $('tabOperations').style.display=name==='ops'?'':'none';
   $('tabSchedule').style.display=name==='schedule'?'':'none';
   $('tabLabels').style.display=name==='labels'?'':'none';
@@ -725,13 +727,19 @@ async function loadScheduleList(){
   try{
     const data=await api('/viewer/api/batches');
     scheduleBatches=data.batches||[];
-    renderScheduleGrid();
-    renderWeeklySchedule(); // keeps Weekly Schedule (and an open week's detail) live off the same poll
-    renderMaterialDemand();
-    renderStalledBatches();
-    renderAtRisk();
-    renderThroughputYield();
-    renderJobSummary();
+    // Only the currently-visible tab actually needs to re-render on this
+    // poll - the other six were rebuilding their full DOM every 4s
+    // whether anyone was looking at them or not. checkCompletionAlerts()
+    // is the one exception: it has to run every tick regardless of tab,
+    // since the whole point is noticing a completion even when you're
+    // looking at something else.
+    if(currentTab==='schedule')renderScheduleGrid();
+    if(currentTab==='weekly'||currentTab==='weeklyDetail')renderWeeklySchedule();
+    if(currentTab==='material')renderMaterialDemand();
+    if(currentTab==='stalled')renderStalledBatches();
+    if(currentTab==='risk')renderAtRisk();
+    if(currentTab==='yieldTab')renderThroughputYield();
+    if(currentTab==='jobs'||currentTab==='jobDetail')renderJobSummary();
     checkCompletionAlerts();
   }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
