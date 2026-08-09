@@ -42,10 +42,13 @@
   .week-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
   .week-card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:12px;padding:16px;cursor:pointer;transition:box-shadow .15s}
   .week-card:hover{box-shadow:0 4px 14px rgba(16,24,40,.08)}
-  .week-card.current{border-color:var(--blue-600);box-shadow:0 0 0 1px var(--blue-600)}
+  .week-card.current{background:var(--green-50);border-color:var(--green-700)}
+  .week-card.overdue{background:var(--red-50);border-color:var(--red-600)}
   .week-card.unscheduled{border-style:dashed}
   .week-card-range{font-weight:700;font-size:15px;color:var(--gray-900);margin-bottom:4px}
-  .week-card-badge{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--blue-600);background:#EEF2FF;padding:2px 8px;border-radius:100px;margin-bottom:6px}
+  .week-card-badge{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:2px 8px;border-radius:100px;margin-bottom:6px}
+  .week-card-badge.current{color:var(--green-700);background:#D1FADF}
+  .week-card-badge.overdue{color:var(--red-600);background:#FEE4E2}
   .week-card-count{font-size:13px;color:var(--gray-500)}
   .week-card-sub{font-size:12px;color:var(--gray-500);margin-top:2px}
   .acts{margin-left:auto;display:flex;gap:6px}
@@ -664,11 +667,19 @@ function renderWeeklySchedule(){
   if(!weekKeys.length&&!unscheduled.length){$('weeklyList').innerHTML='<div class="empty">No batches in Production Schedule yet.</div>';}
   else{
     const thisWeek=weekKeyFor(new Date().toISOString().slice(0,10));
+    // Current week always reads green regardless of progress (it's not
+    // "overdue" yet, it's just where we are). A past week only reads red
+    // once it's actually overdue - if everything in it got done on time
+    // there's nothing left to flag.
     let html='<div class="week-grid">'+weekKeys.map(k=>{
       const items=groups[k];
       const done=items.filter(b=>rowStatus(b)==='complete').length;
-      return`<div class="week-card${k===thisWeek?' current':''}" onclick="openWeekDetail('${k}')">
-        ${k===thisWeek?'<div class="week-card-badge">This Week</div>':''}
+      const isCurrent=k===thisWeek;
+      const isOverdue=!isCurrent&&k<thisWeek&&done<items.length;
+      const cls=isCurrent?' current':isOverdue?' overdue':'';
+      const badge=isCurrent?'<div class="week-card-badge current">This Week</div>':isOverdue?'<div class="week-card-badge overdue">Overdue</div>':'';
+      return`<div class="week-card${cls}" onclick="openWeekDetail('${k}')">
+        ${badge}
         <div class="week-card-range">${weekLabel(k)}</div>
         <div class="week-card-count">${items.length} batch${items.length===1?'':'es'}</div>
         <div class="week-card-sub">${done} of ${items.length} complete</div>
@@ -695,13 +706,15 @@ function renderWeekDetail(key){
   $('weeklyDetailSub').textContent=items.length+' batch'+(items.length===1?'':'es');
   if(!items.length){$('weeklyDetailList').innerHTML='<div class="empty">No batches.</div>';return;}
   $('weeklyDetailList').innerHTML=items.map(b=>{
+    const status=rowStatus(b);
     const sub=[b.job_name,b.material,b.finish,b.tasked].filter(Boolean).map(esc).join(' · ');
+    const meta=[sub,`${b.scanned}/${b.total} scanned`,b.target_finish?'Due '+esc(b.target_finish):''].filter(Boolean).join(' · ');
     return`<div class="card" onclick="viewBatchLabels('${esc(b.batch)}')" style="cursor:pointer">
       <div>
         <div class="name">${esc(b.batch)}</div>
-        <div class="meta">${sub}${b.target_finish?' · Due '+esc(b.target_finish):''}</div>
+        <div class="meta">${meta}</div>
       </div>
-      <span class="pill ${statusPillClass(rowStatus(b))}">${b.scanned}/${b.total}</span>
+      <span class="pill ${statusPillClass(status)}">${statusLabel(status)}</span>
     </div>`;
   }).join('');
 }
