@@ -73,6 +73,18 @@ function requireAdmin(req, res, next) {
   if (req.get('X-Admin-Key') !== ADMIN_KEY) return res.status(401).json({ ok: false, error: 'bad admin key' });
   next();
 }
+// Free-text name the person typed in once (not a verified identity -
+// there's no per-person login here, everyone with the admin dashboard
+// shares the one admin key) so an edit is attributable when reviewed
+// later, especially now that the GM has their own copy of the dashboard.
+function actorFrom(req) {
+  return (req.get('X-Actor-Name') || '').trim() || 'ADMIN';
+}
+const insertAuditLog = db.prepare('INSERT INTO audit_log (at, actor, action, target, details) VALUES (?, ?, ?, ?, ?)');
+function logAudit(actor, action, target, details) {
+  try { insertAuditLog.run(new Date().toISOString(), actor, action, target || null, details || null); }
+  catch (e) { console.error('audit log write failed:', e.message); }
+}
 function requireIngest(req, res, next) {
   if (req.get('X-Ingest-Key') !== INGEST_KEY) return res.status(401).json({ ok: false, error: 'bad ingest key' });
   next();
@@ -151,10 +163,12 @@ app.get('/devices/:id/status', (req, res) => {
 app.get('/admin/api/devices', requireAdmin, (req, res) => res.json(listDevices.all()));
 app.post('/admin/api/devices/:id/approve', requireAdmin, (req, res) => {
   setDeviceStatus.run({ device_id: req.params.id, status: 'APPROVED', now: new Date().toISOString() });
+  logAudit(actorFrom(req), 'DEVICE_APPROVE', req.params.id);
   res.json({ ok: true });
 });
 app.post('/admin/api/devices/:id/revoke', requireAdmin, (req, res) => {
   setDeviceStatus.run({ device_id: req.params.id, status: 'REVOKED', now: new Date().toISOString() });
+  logAudit(actorFrom(req), 'DEVICE_REVOKE', req.params.id);
   res.json({ ok: true });
 });
 
@@ -371,7 +385,9 @@ app.post('/parts/panel/register', requireIngest, (req, res) => {
 app.post('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
   const batch = String(req.params.batch || '').trim();
   if (!batch) return res.status(400).json({ ok: false, error: 'batch required' });
-  upsertSchedule(batch, req.body || {}, 'MANUAL', (req.body && req.body.updated_by) || 'ADMIN');
+  const actor = actorFrom(req);
+  upsertSchedule(batch, req.body || {}, 'MANUAL', actor);
+  logAudit(actor, 'SCHEDULE_EDIT', batch, JSON.stringify(req.body || {}));
   res.json({ ok: true, batch, schedule: formatSchedule(getProductionSchedule.get(batch)) });
 });
 
@@ -380,7 +396,7 @@ app.post('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
 // schedule row itself. Deliberately allowed even if parts were already
 // scanned (the admin UI warns and requires typing the batch name first) —
 // this is for cleaning up mistaken/test batches, not a safety-gated
-// operation like void, so unlike void it's not logged anywhere afterward.
+// operation like void. Now logged to audit_log below (previously wasn't).
 app.delete('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
   const batch = String(req.params.batch || '').trim();
   if (!batch) return res.status(400).json({ ok: false, error: 'batch required' });
@@ -405,6 +421,7 @@ app.delete('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
     db.exec('ROLLBACK');
     return res.status(500).json({ ok: false, error: e.message });
   }
+  logAudit(actorFrom(req), 'SCHEDULE_DELETE', batch, `deleted ${uids.length} parts`);
 
   res.json({ ok: true, deleted_parts: uids.length });
 });
@@ -737,6 +754,14 @@ app.get('/admin/api/report/notes', requireAdmin, (req, res) => {
   res.json({ ok: true, rows });
 });
 
+// Deliberately only ever surfaced on the main admin.html, not gm.html -
+// so whoever holds the primary dashboard can review what changed on the
+// GM's copy (or anyone else's), not the other way around.
+app.get('/admin/api/audit-log', requireAdmin, (req, res) => {
+  const rows = db.prepare('SELECT * FROM audit_log ORDER BY id DESC LIMIT 500').all();
+  res.json({ ok: true, entries: rows });
+});
+
 // ── EXCEPTION QUEUE — every scan that wasn't a clean match, from either
 // scanning flow (mode distinguishes them). Capped to the most recent 500
 // so the payload stays bounded; acknowledged is a lightweight triage flag,
@@ -757,6 +782,7 @@ app.get('/admin/api/exceptions', requireAdmin, (req, res) => {
 app.post('/admin/api/exceptions/:scanId/ack', requireAdmin, (req, res) => {
   db.prepare("UPDATE scans SET acknowledged='Yes', acknowledged_at=? WHERE scan_id=?")
     .run(new Date().toISOString(), req.params.scanId);
+  logAudit(actorFrom(req), 'EXCEPTION_ACK', req.params.scanId);
   res.json({ ok: true });
 });
 
@@ -790,7 +816,9 @@ app.post('/admin/api/material-stock/:material', requireAdmin, (req, res) => {
   if (!material) return res.status(400).json({ ok: false, error: 'material required' });
   const qty = parseFloat(req.body && req.body.on_hand_qty);
   if (isNaN(qty)) return res.status(400).json({ ok: false, error: 'on_hand_qty must be a number' });
-  upsertMaterialStock.run({ material, on_hand_qty: qty, now: new Date().toISOString(), updated_by: (req.body && req.body.updated_by) || 'ADMIN' });
+  const actor = actorFrom(req);
+  upsertMaterialStock.run({ material, on_hand_qty: qty, now: new Date().toISOString(), updated_by: actor });
+  logAudit(actor, 'MATERIAL_STOCK_EDIT', material, `on_hand_qty=${qty}`);
   res.json({ ok: true });
 });
 
@@ -856,6 +884,7 @@ app.post('/admin/api/packing-slips', requireAdmin, (req, res) => {
 
   const schedule = getProductionSchedule.get(batch) || {};
   const parts = getBatchParts.all(batch);
+  const actor = actorFrom(req);
 
   insertPackingSlip.run({
     slip_number: slipNumber,
@@ -870,8 +899,9 @@ app.post('/admin/api/packing-slips', requireAdmin, (req, res) => {
     checked_by: b.checked_by || null,
     parts_snapshot: JSON.stringify(parts),
     now,
-    created_by: b.created_by || 'ADMIN'
+    created_by: actor
   });
+  logAudit(actor, 'PACKING_SLIP_CREATE', slipNumber, `batch ${batch}`);
 
   res.json({ ok: true, slip: formatPackingSlip(getPackingSlipByNumber.get(slipNumber)) });
 });
@@ -904,10 +934,13 @@ app.post('/admin/api/packing-slips/:id', requireAdmin, (req, res) => {
     special_handling: b.special_handling ?? row.special_handling,
     checked_by: b.checked_by ?? row.checked_by
   });
+  logAudit(actorFrom(req), 'PACKING_SLIP_EDIT', row.slip_number, JSON.stringify(b));
   res.json({ ok: true, slip: formatPackingSlip(getPackingSlip.get(req.params.id)) });
 });
 app.delete('/admin/api/packing-slips/:id', requireAdmin, (req, res) => {
+  const row = getPackingSlip.get(req.params.id);
   db.prepare('DELETE FROM packing_slips WHERE id = ?').run(req.params.id);
+  if (row) logAudit(actorFrom(req), 'PACKING_SLIP_DELETE', row.slip_number, `batch ${row.batch}`);
   res.json({ ok: true });
 });
 

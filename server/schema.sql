@@ -173,3 +173,20 @@ CREATE TABLE IF NOT EXISTS packing_slips (
   created_by          TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_packing_slips_batch ON packing_slips(batch);
+
+-- ── AUDIT LOG — every admin-dashboard write action (not scans - those
+-- already have their own trail in `scans`/`scan_id`), so an edit made from
+-- the GM's page is reviewable later. actor is a free-text name the person
+-- typed in once (there's no per-person login in this system - everyone
+-- with the admin dashboard shares the one admin key), not a verified
+-- identity - a label for accountability/review, not an access-control
+-- mechanism. Only ever displayed on the main admin.html, never gm.html.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  at      TEXT NOT NULL,
+  actor   TEXT,
+  action  TEXT NOT NULL,
+  target  TEXT,
+  details TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_audit_log_at ON audit_log(at);
