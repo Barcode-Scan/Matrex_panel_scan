@@ -60,7 +60,13 @@
      layout) rather than this app's own design language, since this is
      meant to be printed/saved as a business document, not viewed as a
      dashboard screen. */
-  .ps-sheet{background:#fff;max-width:800px;margin:0 auto;padding:20px;border:1.5px solid #000;font-family:Arial,Helvetica,sans-serif;color:#000;font-size:12.5px}
+  /* box-decoration-break:clone is the fix for the missing top border on
+     continuation pages - by default a browser only draws a fragmented
+     box's top/bottom border on its first/last page respectively, treating
+     it as one continuous box split across pages rather than redrawing the
+     full border on each page. clone makes every page get the complete
+     border, like a fresh box. */
+  .ps-sheet{background:#fff;max-width:800px;margin:0 auto;padding:16px 20px;border:1.5px solid #000;font-family:Arial,Helvetica,sans-serif;color:#000;font-size:12.5px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
   /* One table for the whole document (header + part rows), not a div with
      a nested table, specifically so the header repeats on every printed
      page: browsers natively repeat a table's <thead> across page breaks
@@ -100,7 +106,7 @@
   .ps-notes-hdr{background:#3a3a3a;color:#fff;font-weight:800;text-align:center;padding:4px;font-size:10.5px;border-bottom:1.5px solid #000}
   .ps-notes-body{padding:8px;font-size:10.5px;line-height:1.5;min-height:50px}
   .ps-footer{text-align:center;font-weight:800;text-decoration:underline;margin-top:14px;font-size:13px}
-  @page{size:letter;margin:0.4in}
+  @page{size:letter;margin:0.5in}
   @media print{
     body *{visibility:hidden}
     #tabPackingPrint,#tabPackingPrint *{visibility:visible}
