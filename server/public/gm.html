@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matrex — GM Dashboard</title>
+<style>
+  :root{--bg:#F5F6FA;--white:#fff;--gray-200:#E4E7EC;--gray-500:#667085;--gray-900:#101828;
+    --blue-600:#2B59E1;--green-700:#027A48;--green-50:#ECFDF3;--red-600:#D92D20;--red-50:#FEF3F2;
+    --amber-700:#B54708;--amber-50:#FFFAEB;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--gray-900);padding:24px}
+  .wrap{max-width:none;margin:0 auto}
+  h1{font-size:20px;margin-bottom:4px}
+  .sub{font-size:13px;color:var(--gray-500);margin-bottom:20px}
+  .keybar{display:flex;gap:8px;margin-bottom:20px}
+  input{flex:1;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit}
+  /* The rule above targets text inputs, but `input` with no type qualifier
+     also matches checkboxes - flex:1 was making every checkbox grow to
+     match its label's width (both had flex:1, so they split the row
+     50/50), and the padding/border/border-radius were making it look like
+     a small text box instead of a checkbox. This is a real, separate bug
+     fix, not a spacing tweak - fixed size, no growth, no inherited
+     text-input chrome. */
+  input[type="checkbox"]{flex:0 0 auto;width:14px;height:14px;padding:0;border:1px solid #767676;border-radius:2px;margin:0}
+  button{padding:10px 16px;border-radius:8px;border:none;background:var(--blue-600);color:#fff;font-weight:600;cursor:pointer;font-size:13px;font-family:inherit}
+  button.secondary{background:var(--gray-200);color:var(--gray-900)}
+  button.danger{background:var(--red-50);color:var(--red-600)}
+  button.ok{background:var(--green-50);color:var(--green-700)}
+  .card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px}
+  .name{font-weight:700;font-size:14px}
+  .meta{font-size:12px;color:var(--gray-500);margin-top:2px}
+  .pill{font-size:11px;font-weight:800;padding:3px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:.4px}
+  .pill.PENDING{background:var(--amber-50);color:var(--amber-700)}
+  .pill.APPROVED{background:var(--green-50);color:var(--green-700)}
+  .pill.REVOKED{background:var(--red-50);color:var(--red-600)}
+  .pill.ACTIVE{background:var(--green-50);color:var(--green-700)}
+  .pill.IDLE{background:var(--red-50);color:var(--red-600)}
+  .pill.done{background:var(--green-50);color:var(--green-700)}
+  .pill.working{background:var(--amber-50);color:var(--amber-700)}
+  .pill.notstarted{background:var(--red-50);color:var(--red-600)}
+  .week-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+  .week-card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:12px;padding:16px;cursor:pointer;transition:box-shadow .15s}
+  .week-card:hover{box-shadow:0 4px 14px rgba(16,24,40,.08)}
+  .week-card.current{background:var(--green-50);border-color:var(--green-700)}
+  .week-card.overdue{background:var(--red-50);border-color:var(--red-600)}
+  .week-card.unscheduled{border-style:dashed}
+  .week-card-range{font-weight:700;font-size:15px;color:var(--gray-900);margin-bottom:4px}
+  .week-card-badge{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:2px 8px;border-radius:100px;margin-bottom:6px}
+  .week-card-badge.current{color:var(--green-700);background:#D1FADF}
+  .week-card-badge.overdue{color:var(--red-600);background:#FEE4E2}
+  .week-card-count{font-size:13px;color:var(--gray-500)}
+  .week-card-sub{font-size:12px;color:var(--gray-500);margin-top:2px}
+  .job-progress{display:flex;align-items:center;gap:8px;width:100%}
+  .job-progress-track{flex:1;height:6px;border-radius:3px;background:var(--gray-200);overflow:hidden}
+  .job-progress-fill{height:100%;border-radius:3px;background:var(--blue-600)}
+
+  /* PACKING SLIP — print-ready sheet, styled to match the company's
+     existing packing slip document (dark-gray header bars, boxed grid
+     layout) rather than this app's own design language, since this is
+     meant to be printed/saved as a business document, not viewed as a
+     dashboard screen. */
+  /* box-decoration-break:clone is the fix for the missing top border on
+     continuation pages - by default a browser only draws a fragmented
+     box's top/bottom border on its first/last page respectively, treating
+     it as one continuous box split across pages rather than redrawing the
+     full border on each page. clone makes every page get the complete
+     border, like a fresh box. */
+  .ps-sheet{background:#fff;max-width:800px;margin:0 auto;padding:16px 20px;border:1.5px solid #000;font-family:Arial,Helvetica,sans-serif;color:#000;font-size:12.5px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+  /* One table for the whole document (header + part rows), not a div with
+     a nested table, specifically so the header repeats on every printed
+     page: browsers natively repeat a table's <thead> across page breaks
+     when its <tbody> spans multiple pages - the one reliable cross-
+     browser way to do this in print CSS, no JS pagination needed. The
+     header content itself (logo/title/info bars) sits in one <td> inside
+     that <thead>, styled exactly as before. */
+  .ps-doc{width:100%;border-collapse:collapse}
+  .ps-header-cell{padding:0;border:none}
+  .ps-top{display:flex;justify-content:space-between;align-items:stretch;gap:10px;margin-bottom:10px}
+  .ps-brand{display:flex;gap:8px;align-items:flex-start;flex:1}
+  .ps-brand-name{font-weight:800;font-size:12px;letter-spacing:.3px;line-height:1.3}
+  .ps-brand-addr{font-size:10px;color:#333;line-height:1.5;margin-top:2px}
+  .ps-title{text-align:center;flex:1;padding-top:6px}
+  .ps-title-main{font-size:18px;font-weight:800;text-decoration:underline}
+  .ps-title-sub{font-size:14px;font-weight:700;margin-top:2px}
+  .ps-numbox{border:1.5px solid #000;min-width:190px}
+  .ps-numbox-hdr{background:#8c8c8c;color:#fff;font-weight:800;text-align:center;padding:3px;font-size:11px;border-bottom:1.5px solid #000}
+  .ps-numbox-val{text-align:center;font-weight:800;padding:5px;font-size:13px;border-bottom:1.5px solid #000}
+  .ps-numbox-val:last-child{border-bottom:none}
+  .ps-bar{background:#8c8c8c;color:#fff;font-weight:800;text-align:center;padding:4px;font-size:11px;border:1.5px solid #000;letter-spacing:.4px}
+  .ps-bar-val{text-align:center;font-weight:700;padding:7px;border:1.5px solid #000;border-top:none;margin-bottom:8px;font-size:13px;min-height:16px}
+  .ps-row3{display:grid;grid-template-columns:1fr 1fr 1fr;margin-bottom:8px}
+  .ps-row3>div>.ps-bar{border-left:1.5px solid #000}
+  .ps-row3>div:not(:first-child)>.ps-bar{border-left:none}
+  .ps-row3>div>.ps-bar-val{border-left:1.5px solid #000;margin-bottom:0}
+  .ps-row3>div:not(:first-child)>.ps-bar-val{border-left:none}
+  .ps-doc thead th{background:#3a3a3a;color:#fff;padding:5px;border:1.5px solid #000;font-size:10.5px}
+  .ps-doc tbody td{border:1.5px solid #000;padding:5px 6px;text-align:center;height:20px;font-size:12px}
+  .ps-sign-row{display:grid;grid-template-columns:repeat(4,1fr);margin-top:6px}
+  .ps-sign-row>div{border:1.5px solid #000;border-left:none;min-height:52px}
+  .ps-sign-row>div:first-child{border-left:1.5px solid #000}
+  .ps-sign-hdr{background:#8c8c8c;color:#fff;font-weight:800;text-align:center;padding:4px;font-size:10.5px;border-bottom:1.5px solid #000}
+  .ps-notes{display:grid;grid-template-columns:2fr 1fr;margin-top:8px}
+  .ps-notes>div{border:1.5px solid #000}
+  .ps-notes>div:first-child{border-right:none}
+  .ps-notes-hdr{background:#3a3a3a;color:#fff;font-weight:800;text-align:center;padding:4px;font-size:10.5px;border-bottom:1.5px solid #000}
+  .ps-notes-body{padding:8px;font-size:10.5px;line-height:1.5;min-height:50px}
+  .ps-footer{text-align:center;font-weight:800;text-decoration:underline;margin-top:14px;font-size:13px}
+  @page{size:letter;margin:0.5in}
+  @media print{
+    body *{visibility:hidden}
+    #tabPackingPrint,#tabPackingPrint *{visibility:visible}
+    #tabPackingPrint{position:absolute;top:0;left:0;width:100%;margin:0;padding:0}
+    .no-print{display:none!important}
+  }
+  #toastContainer{position:fixed;top:16px;right:16px;z-index:100;display:flex;flex-direction:column;gap:8px;max-width:320px}
+  .toast{background:var(--white);border:1.5px solid var(--green-700);border-left-width:5px;border-radius:10px;padding:12px 14px;box-shadow:0 8px 24px rgba(16,24,40,.12);font-size:14px;font-weight:600;color:var(--gray-900);animation:toastIn .2s ease-out}
+  @keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+  .acts{margin-left:auto;display:flex;gap:6px}
+  .empty{color:var(--gray-500);font-size:13px;padding:20px;text-align:center}
+  h2{font-size:16px;margin:28px 0 4px}
+  select{padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;background:var(--white)}
+  .note-card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+  .note-cat{font-weight:700;font-size:13px}
+  .note-text{font-size:13px;color:var(--gray-500);margin-top:2px}
+  .note-meta{font-size:11px;color:var(--gray-500);margin-top:4px}
+  .field-row{display:flex;gap:10px;font-size:13px;padding:4px 0}
+  .field-k{color:var(--gray-500);min-width:110px;flex-shrink:0}
+  .field-v{font-weight:600}
+  button.danger-solid{background:var(--red-600);color:#fff}
+  .rep-tbl{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px}
+  .rep-tbl th,.rep-tbl td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--gray-200)}
+  .rep-tbl th{color:var(--gray-500);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px}
+  .rep-tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .rep-sub{font-weight:700;font-size:14px;margin:18px 0 8px}
+  .rep-actions{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+  .daterange{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+  .daterange input{flex:none;width:140px}
+
+  /* ── Production Schedule tab ─────────────────────────────── */
+  .tabbar{display:flex;margin-bottom:20px;border-bottom:1.5px solid var(--gray-200)}
+  .tab-btn{background:none;color:var(--gray-500);font-weight:700;padding:10px 4px;margin-right:24px;border-radius:0;border-bottom:2.5px solid transparent;font-size:14px}
+  .tab-btn.active{color:var(--blue-600);border-bottom-color:var(--blue-600)}
+  .tab-btn:hover{background:none}
+  .sched-table{width:100%;border-collapse:collapse;margin:16px 0 12px;table-layout:fixed}
+  .sched-table td{border:1px solid var(--gray-200);padding:10px 12px;font-size:13px;font-weight:600}
+  .sched-table td.stc-batch{font-weight:800;font-size:15px}
+  .sched-table td.stc-progress{font-weight:800;text-align:right}
+  .sched-table input{border:none;background:none;font-size:13px;font-weight:600;width:100%;font-family:inherit;padding:0;color:var(--gray-900);outline:none}
+  .sched-table input::placeholder{color:var(--gray-400);font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.3px}
+  .sched-table input:focus{outline:1.5px solid var(--blue-600);border-radius:4px}
+  .sched-grid{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:16px;table-layout:auto}
+  .sched-grid th{position:sticky;top:0;background:var(--white);border-bottom:2px solid var(--gray-200);padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;z-index:1}
+  .colf-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:4px;border:none;background:var(--gray-200);color:var(--gray-500);border-radius:3px;font-size:9px;line-height:1;cursor:pointer;vertical-align:middle}
+  .colf-btn.active{background:var(--blue-600);color:#fff}
+  /* Styled to read as a real Excel AutoFilter menu: flat/square chrome,
+     icon+label menu rows with a hover highlight, thin dividers between
+     groups - not a rounded card. */
+  .colf-pop{display:none;position:fixed;z-index:50;width:280px;background:var(--white);border:1px solid #B7B7B7;border-radius:3px;box-shadow:0 4px 14px rgba(0,0,0,.22);padding:4px 0;font-size:13px;font-family:Calibri,Segoe UI,-apple-system,sans-serif;text-align:left}
+  .colf-menuitem{display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;color:var(--gray-900)}
+  .colf-menuitem:hover{background:#E8F0FE}
+  .colf-menuitem.disabled{color:var(--gray-400);cursor:default}
+  .colf-menuitem.disabled:hover{background:none}
+  .colf-icon{font-size:9px;font-weight:800;color:#217346;width:20px;text-align:center;flex-shrink:0;letter-spacing:-.5px}
+  .colf-divider{height:1px;background:var(--gray-200);margin:4px 0}
+  .colf-search{display:block;width:calc(100% - 16px);margin:2px 8px 6px;padding:5px 8px;border:1px solid #B7B7B7;border-radius:3px;font-size:12.5px;font-family:inherit}
+  .colf-list{max-height:200px;overflow-y:auto;padding:0 4px 0 calc(4px + 2mm);margin-bottom:6px;text-align:left}
+  .colf-item{display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:3px 0;font-size:12.5px;cursor:pointer;width:100%;text-align:left}
+  .colf-item.colf-all{border-bottom:1px solid var(--gray-200);margin-bottom:4px;padding-bottom:6px}
+  .colf-item input{margin:0;flex-shrink:0}
+  .colf-actions{display:flex;gap:8px;padding:8px 8px 4px;border-top:1px solid var(--gray-200)}
+  .colf-actions button{flex:1;padding:6px;font-size:12.5px;border-radius:3px}
+  .sched-grid td{padding:8px 14px;border-bottom:1px solid var(--gray-200);white-space:nowrap}
+  .sched-grid td.gc-comment{white-space:normal;max-width:280px}
+  .sched-grid tbody tr{cursor:pointer}
+  .sched-grid tbody tr.risk-red td{background:#FEF3F2}
+  .sched-grid tbody tr.risk-red{box-shadow:inset 4px 0 0 var(--red-600)}
+  .sched-grid tbody tr.risk-yellow td{background:#FFFAEB}
+  .sched-grid tbody tr.risk-yellow{box-shadow:inset 4px 0 0 var(--amber-700)}
+  .sched-grid tbody tr.risk-green td{background:#F0FDF4}
+  .sched-grid tbody tr.risk-green{box-shadow:inset 4px 0 0 var(--green-700)}
+  .sched-grid tbody tr:hover td{background:#E8F0FE}
+  .sched-grid td.gc-batch{font-weight:700}
+  .sched-grid .gc-progress{display:flex;align-items:center;gap:6px;min-width:90px}
+  .sched-grid .gc-progress-track{flex:1;height:5px;border-radius:3px;background:var(--gray-200);overflow:hidden}
+  .sched-grid .gc-progress-fill{height:100%;border-radius:3px}
+  .sched-grid .gc-progress-fill.complete{background:var(--green-700)}
+  .sched-grid .gc-progress-fill.progress{background:var(--amber-700)}
+  .sched-grid .gc-progress-fill.none{background:var(--gray-200)}
+  .sched-grid .gc-count{font-size:11px;font-weight:700;color:var(--gray-500);flex-shrink:0}
+  .icon-btn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:none;border-radius:4px;background:var(--gray-100);color:var(--gray-700);cursor:pointer;margin-right:4px;font-size:15px;line-height:1;font-family:"Segoe UI Symbol","Segoe UI Emoji",Arial,sans-serif}
+  .icon-btn:hover{background:var(--gray-200)}
+  .icon-btn.icon-danger{color:var(--red-600)}
+  .icon-btn.icon-danger:hover{background:var(--red-50)}
+  .icon-btn.icon-save{color:var(--green-700)}
+  .icon-btn.icon-save:hover{background:var(--green-50)}
+  .ctx-menu{display:none;position:fixed;z-index:60;min-width:150px;background:var(--white);border:1px solid #B7B7B7;border-radius:3px;box-shadow:0 4px 14px rgba(0,0,0,.22);padding:4px 0;font-size:13px}
+  .ctx-menu-item{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;color:var(--gray-900)}
+  .ctx-menu-item:hover{background:#E8F0FE}
+  .ctx-menu-item.danger{color:var(--red-600)}
+  .ctx-menu-item.danger:hover{background:var(--red-50)}
+  .gc-input{width:100%;padding:4px 6px;border:1px solid var(--blue-600);border-radius:4px;font-size:12.5px;font-family:inherit;background:var(--white)}
+  .extra-row input{flex:1}
+  .source-pill{font-size:11px;font-weight:800;padding:3px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:.4px;background:var(--gray-200);color:var(--gray-500)}
+  .bl-row{display:flex;align-items:center;gap:12px;background:var(--white);border:1.5px solid var(--gray-200);border-radius:10px;padding:10px 12px;margin-bottom:6px}
+  .bl-row:hover{background:#E8F0FE}
+  .bl-dot{width:8px;height:8px;border-radius:50%;background:var(--gray-200);flex-shrink:0}
+  .bl-dot.scanned{background:var(--green-700)}
+  .bl-dot.void{background:var(--red-600)}
+  .bl-info{flex:1;min-width:0}
+  .bl-name{font-size:13px;font-weight:700}
+  .bl-sub{font-size:12px;color:var(--gray-500);margin-top:2px}
+</style>
+</head>
+<body>
+<div id="toastContainer"></div>
+<div class="wrap">
+  <div style="background:var(--blue-600);color:#fff;font-weight:700;font-size:12px;letter-spacing:.4px;text-transform:uppercase;text-align:center;padding:6px;border-radius:8px;margin-bottom:14px">GM Dashboard — same data as the main admin page, live</div>
+  <div class="tabbar">
+    <button class="tab-btn active" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
+    <button class="tab-btn" id="tabBtnWeekly" onclick="showTab('weekly')">Weekly Schedule</button>
+    <button class="tab-btn" id="tabBtnJobs" onclick="showTab('jobs')">Job Summary</button>
+    <button class="tab-btn" id="tabBtnPacking" onclick="showTab('packing')">Packing Slips</button>
+    <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
+    <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()" style="margin-left:auto">&#128276; Enable Desktop Alerts</button>
+  </div>
+
+  <div id="tabOperations" style="display:none">
+  <h1>Device Approvals</h1>
+  <div class="sub">Only approved devices can write scans to the server. New phones show up here as Pending.</div>
+  <div class="keybar">
+    <input id="key" type="password" placeholder="Admin key">
+    <input id="actorName" placeholder="Your name (for the activity log)" style="max-width:260px">
+    <button onclick="saveKey()">Connect</button>
+  </div>
+  <div class="card">
+    <div>
+      <div class="name">Receiver URL for phones (permanent)</div>
+      <div class="meta">https://192.168.20.15 — set this once in each phone's Settings, it no longer changes. Self-signed certificate: each phone must trust it once (Settings &gt; General &gt; About &gt; Certificate Trust Settings on iPhone, or the equivalent cert-install flow on Android) before it will connect. LAN-only — only works while the phone is on this WiFi network.</div>
+    </div>
+  </div>
+  <div class="card" id="tunnelCard" style="display:none">
+    <div>
+      <div class="name">Legacy Cloudflare tunnel URL (not used by phones anymore)</div>
+      <div class="meta">Kept running as a fallback path only. Do not enter this in a phone's Settings — use the permanent URL above instead.</div>
+      <div class="meta" id="tunnelUrl" style="font-weight:700;color:var(--gray-900);margin-top:4px">Loading…</div>
+    </div>
+    <div class="acts"><button class="secondary" onclick="copyTunnelUrl()">Copy</button></div>
+  </div>
+  <div id="list"></div>
+
+  <h2>Device Activity</h2>
+  <div class="sub">Last actual scan per approved device — a device idle 15+ minutes while otherwise approved is flagged, in case a handheld is frozen or forgotten somewhere.</div>
+  <div id="deviceActivityList"></div>
+
+  <h2>Part Lookup</h2>
+  <div class="sub">Look up any registered part by its 10-character unique ID, view its notes, or add one.</div>
+  <div class="keybar">
+    <input id="partId" placeholder="Unique ID" style="text-transform:uppercase">
+    <button onclick="lookupPart()">Search</button>
+  </div>
+  <div id="partResult"></div>
+
+  <h2>Exception Queue</h2>
+  <div class="sub">Every scan that wasn't a clean match — duplicates, voids, unknown codes, out-of-order attempts — from either scanning mode. Acknowledge to mark reviewed; this doesn't fix anything, just clears it from the "needs a look" list.</div>
+  <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--gray-500);margin-bottom:10px;cursor:pointer">
+    <input type="checkbox" id="excHideAck" checked onchange="renderExceptions()">Hide acknowledged
+  </label>
+  <div id="exceptionList"></div>
+
+  <h2>Reporting</h2>
+  <div class="sub">Live counts from the registry, scan log, and notes/defects.</div>
+
+  <div class="rep-sub">Registry status</div>
+  <div class="rep-actions"><button class="secondary" onclick="csvDownload('registry')">Download CSV</button></div>
+  <div id="repRegistry"><div class="empty">Enter the admin key above to load.</div></div>
+
+  <div class="rep-sub">Scans by outcome</div>
+  <div class="rep-actions"><button class="secondary" onclick="csvDownload('matchStatus')">Download CSV</button></div>
+  <div id="repMatchStatus"></div>
+
+  <div class="rep-sub">Daily activity</div>
+  <div class="daterange">
+    <input id="repFrom" type="date">
+    <span style="color:var(--gray-500);font-size:13px">to</span>
+    <input id="repTo" type="date">
+    <button onclick="loadReportDaily()">Load</button>
+    <button class="secondary" onclick="csvDownload('daily')">Download CSV</button>
+  </div>
+  <div id="repDaily"></div>
+
+  <div class="rep-sub">Notes &amp; defects by category</div>
+  <div class="rep-actions"><button class="secondary" onclick="csvDownload('notes')">Download CSV</button></div>
+  <div id="repNotes"></div>
+  </div>
+
+  <div id="tabSchedule">
+    <h1>Production Schedule</h1>
+    <div class="sub">Job name, work order, target finish, material, and more — one row per batch. Filled in automatically by the Excel label generator, or click any row to edit manually. Click a column header's arrow to filter or sort it, same as Excel's AutoFilter — filters on different columns combine (AND).</div>
+    <div style="overflow-x:auto">
+    <table class="sched-grid">
+      <thead>
+        <tr id="scheduleHeadRow"></tr>
+      </thead>
+      <tbody id="scheduleTbody"></tbody>
+    </table>
+    </div>
+  </div>
+
+  <div id="tabLabels" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div>
+        <h1 id="labelsTitle">Batch Labels</h1>
+        <div class="sub" id="labelsSub">Click a batch in Production Schedule to see its labels here.</div>
+      </div>
+      <div id="labelsFilterBar" style="display:flex;gap:8px;flex-shrink:0"></div>
+    </div>
+    <div id="labelsContent"></div>
+  </div>
+
+  <div id="tabWeekly" style="display:none">
+    <h1>Weekly Schedule</h1>
+    <div class="sub">Every Production Schedule batch, grouped by the week its Target Finish date falls in. Click a week to see its batches.</div>
+    <div id="weeklyList"></div>
+  </div>
+
+  <div id="tabWeeklyDetail" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div>
+        <h1 id="weeklyDetailTitle">Week</h1>
+        <div class="sub" id="weeklyDetailSub"></div>
+      </div>
+      <button class="secondary" id="bBackWeeklyDetail">&larr; All Weeks</button>
+    </div>
+    <div id="weeklyDetailList"></div>
+  </div>
+
+  <div id="tabJobSummary" style="display:none">
+    <h1>Job Summary</h1>
+    <div class="sub">Every batch rolled up to one overall completion % per Job — for reporting without digging through individual batch rows. Click a Job for its floor-by-floor breakdown.</div>
+    <div id="jobSummaryList"></div>
+  </div>
+
+  <div id="tabJobDetail" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div>
+        <h1 id="jobDetailTitle">Job</h1>
+        <div class="sub" id="jobDetailSub"></div>
+      </div>
+      <button class="secondary" id="bBackJobDetail">&larr; All Jobs</button>
+    </div>
+    <h2>By Floor / Work Order</h2>
+    <div id="jobDetailFloors"></div>
+    <h2>Batches</h2>
+    <div id="jobDetailBatches"></div>
+  </div>
+
+  <div id="tabPacking" style="display:none">
+    <h1>Packing Slips</h1>
+    <div class="sub">Generate a packing slip once a batch is fully scanned. The part list is captured from the batch at the moment you generate it, so it stays accurate even if the batch changes later.</div>
+    <h2>Ready to Pack</h2>
+    <div class="sub" style="margin-bottom:10px">Fully-scanned batches. A batch can have more than one packing slip (e.g. partial shipments).</div>
+    <div id="readyToPackList"></div>
+    <h2>Created Packing Slips</h2>
+    <div id="packingSlipsList"></div>
+  </div>
+
+  <div id="tabPackingForm" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div>
+        <h1 id="packingFormTitle">New Packing Slip</h1>
+        <div class="sub" id="packingFormBatchLabel"></div>
+      </div>
+      <button class="secondary" id="bBackPackingForm">&larr; Cancel</button>
+    </div>
+    <div class="card" style="flex-direction:column;align-items:stretch;gap:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">DEPARTMENT</label><input id="pfDepartment" placeholder="e.g. RAILING" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">DATE</label><input id="pfDate" type="date" style="width:100%;margin-top:4px"></div>
+      </div>
+      <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">SHIP TO</label><input id="pfShipTo" placeholder="e.g. 1500 CREDITSTON" style="width:100%;margin-top:4px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">JOB</label><input id="pfJob" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">FLOOR / WORK ORDER</label><input id="pfFloor" style="width:100%;margin-top:4px"></div>
+      </div>
+      <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">CHECKED BY</label><input id="pfCheckedBy" style="width:100%;margin-top:4px"></div>
+      <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">COMMENTS / NOTES</label><input id="pfComments" style="width:100%;margin-top:4px"></div>
+      <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">SPECIAL HANDLING / REMARK</label><input id="pfSpecial" style="width:100%;margin-top:4px"></div>
+      <button onclick="submitPackingForm()" id="packingFormSubmitBtn" style="margin-top:4px">Generate Packing Slip</button>
+    </div>
+    <h2>Part List Preview</h2>
+    <div id="packingFormPartsPreview"></div>
+  </div>
+
+  <div id="tabPackingPrint" style="display:none">
+    <button class="secondary no-print" id="bBackPackingPrint" style="margin-bottom:14px">&larr; Back to Packing Slips</button>
+    <button class="no-print" id="bPrintSlip" onclick="window.print()" style="margin-bottom:14px;margin-left:8px">&#128438; Print / Save as PDF</button>
+    <div class="ps-sheet" id="psSheet"></div>
+  </div>
+</div>
+
+<div class="colf-pop" id="colFilterPopover">
+  <div class="colf-menuitem" onclick="sortGridBy(true)"><span class="colf-icon">AZ</span>Sort A to Z</div>
+  <div class="colf-menuitem" onclick="sortGridBy(false)"><span class="colf-icon">ZA</span>Sort Z to A</div>
+  <div class="colf-divider"></div>
+  <div class="colf-menuitem" id="colfClearItem" onclick="clearColFilter()"><span class="colf-icon">&#10005;</span>Clear Filter</div>
+  <div class="colf-divider"></div>
+  <input class="colf-search" id="colfSearch" placeholder="Search" oninput="renderColFilterList()">
+  <div class="colf-list" id="colfList"></div>
+  <div class="colf-actions">
+    <button onclick="applyColFilter()">OK</button>
+    <button class="secondary" onclick="closeColFilter()">Cancel</button>
+  </div>
+</div>
+
+<div class="ctx-menu" id="rowCtxMenu"></div>
+<script src="admin-shared.js"></script>
+</body>
+</html>
