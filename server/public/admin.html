@@ -61,6 +61,15 @@
      meant to be printed/saved as a business document, not viewed as a
      dashboard screen. */
   .ps-sheet{background:#fff;max-width:800px;margin:0 auto;padding:20px;border:1.5px solid #000;font-family:Arial,Helvetica,sans-serif;color:#000;font-size:12.5px}
+  /* One table for the whole document (header + part rows), not a div with
+     a nested table, specifically so the header repeats on every printed
+     page: browsers natively repeat a table's <thead> across page breaks
+     when its <tbody> spans multiple pages - the one reliable cross-
+     browser way to do this in print CSS, no JS pagination needed. The
+     header content itself (logo/title/info bars) sits in one <td> inside
+     that <thead>, styled exactly as before. */
+  .ps-doc{width:100%;border-collapse:collapse}
+  .ps-header-cell{padding:0;border:none}
   .ps-top{display:flex;justify-content:space-between;align-items:stretch;gap:10px;margin-bottom:10px}
   .ps-brand{display:flex;gap:8px;align-items:flex-start;flex:1}
   .ps-brand-name{font-weight:800;font-size:12px;letter-spacing:.3px;line-height:1.3}
@@ -79,9 +88,8 @@
   .ps-row3>div:not(:first-child)>.ps-bar{border-left:none}
   .ps-row3>div>.ps-bar-val{border-left:1.5px solid #000;margin-bottom:0}
   .ps-row3>div:not(:first-child)>.ps-bar-val{border-left:none}
-  .ps-table{width:100%;border-collapse:collapse;margin:10px 0;font-size:12px}
-  .ps-table th{background:#3a3a3a;color:#fff;padding:5px;border:1.5px solid #000;font-size:10.5px}
-  .ps-table td{border:1.5px solid #000;padding:5px 6px;text-align:center;height:20px}
+  .ps-doc thead th{background:#3a3a3a;color:#fff;padding:5px;border:1.5px solid #000;font-size:10.5px}
+  .ps-doc tbody td{border:1.5px solid #000;padding:5px 6px;text-align:center;height:20px;font-size:12px}
   .ps-sign-row{display:grid;grid-template-columns:repeat(4,1fr);margin-top:6px}
   .ps-sign-row>div{border:1.5px solid #000;border-left:none;min-height:52px}
   .ps-sign-row>div:first-child{border-left:1.5px solid #000}
@@ -92,6 +100,7 @@
   .ps-notes-hdr{background:#3a3a3a;color:#fff;font-weight:800;text-align:center;padding:4px;font-size:10.5px;border-bottom:1.5px solid #000}
   .ps-notes-body{padding:8px;font-size:10.5px;line-height:1.5;min-height:50px}
   .ps-footer{text-align:center;font-weight:800;text-decoration:underline;margin-top:14px;font-size:13px}
+  @page{size:letter;margin:0.4in}
   @media print{
     body *{visibility:hidden}
     #tabPackingPrint,#tabPackingPrint *{visibility:visible}
@@ -1312,44 +1321,53 @@ async function viewPackingSlip(id){
 }
 $('bBackPackingPrint').onclick=()=>showTab('packing');
 
+// Everything above the part rows lives in ONE <thead> (across two <tr>s -
+// the top info block, then the column headings) so it repeats on every
+// printed page once the part list is long enough to spill past page one.
+// The signature/notes/footer block is a sibling AFTER the table, so it
+// only ever renders once, wherever the table's last row happens to end -
+// never repeated, never floating mid-document.
 function renderPackingSlip(slip){
   const parts=slip.parts_snapshot||[];
   const cell=(v)=>v?esc(v):'';
   $('psSheet').innerHTML=`
-    <div class="ps-top">
-      <div class="ps-brand">
-        <svg width="34" height="34" viewBox="0 0 200 200" fill="none" style="flex-shrink:0">
-          <rect x="30" y="30" width="140" height="140" rx="6" transform="rotate(45 100 100)" stroke="#0071E3" stroke-width="10" fill="none"/>
-          <path d="M55 145L55 70L100 115L145 70L145 145" stroke="#0071E3" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-        </svg>
-        <div>
-          <div class="ps-brand-name">MATREX<br>WINDOW SYSTEM</div>
-          <div class="ps-brand-addr">3090 Langstaff Road,<br>Vaughan, Ontario L4K 4Y5<br>416-906-6195</div>
-        </div>
-      </div>
-      <div class="ps-title">
-        <div class="ps-title-main">PACKING SLIP</div>
-        <div class="ps-title-sub">INTERNAL</div>
-      </div>
-      <div class="ps-numbox">
-        <div class="ps-numbox-hdr">PACKING SLIP NUMBER</div>
-        <div class="ps-numbox-val">${esc(slip.slip_number)}</div>
-        <div class="ps-numbox-hdr">DATE</div>
-        <div class="ps-numbox-val">${esc(slip.slip_date)}</div>
-      </div>
-    </div>
+    <table class="ps-doc">
+      <thead>
+        <tr><td colspan="6" class="ps-header-cell">
+          <div class="ps-top">
+            <div class="ps-brand">
+              <svg width="34" height="34" viewBox="0 0 200 200" fill="none" style="flex-shrink:0">
+                <rect x="30" y="30" width="140" height="140" rx="6" transform="rotate(45 100 100)" stroke="#0071E3" stroke-width="10" fill="none"/>
+                <path d="M55 145L55 70L100 115L145 70L145 145" stroke="#0071E3" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              </svg>
+              <div>
+                <div class="ps-brand-name">MATREX<br>WINDOW SYSTEM</div>
+                <div class="ps-brand-addr">3090 Langstaff Road,<br>Vaughan, Ontario L4K 4Y5<br>416-906-6195</div>
+              </div>
+            </div>
+            <div class="ps-title">
+              <div class="ps-title-main">PACKING SLIP</div>
+              <div class="ps-title-sub">INTERNAL</div>
+            </div>
+            <div class="ps-numbox">
+              <div class="ps-numbox-hdr">PACKING SLIP NUMBER</div>
+              <div class="ps-numbox-val">${esc(slip.slip_number)}</div>
+              <div class="ps-numbox-hdr">DATE</div>
+              <div class="ps-numbox-val">${esc(slip.slip_date)}</div>
+            </div>
+          </div>
 
-    <div class="ps-bar">DEPARTMENT</div>
-    <div class="ps-bar-val" style="margin-bottom:8px">${cell(slip.department)}</div>
+          <div class="ps-bar">DEPARTMENT</div>
+          <div class="ps-bar-val" style="margin-bottom:8px">${cell(slip.department)}</div>
 
-    <div class="ps-row3">
-      <div><div class="ps-bar">SHIP TO</div><div class="ps-bar-val">${cell(slip.ship_to)}</div></div>
-      <div><div class="ps-bar">JOB</div><div class="ps-bar-val">${cell(slip.job_name)}</div></div>
-      <div><div class="ps-bar">FLOOR / WORK ORDER</div><div class="ps-bar-val">${cell(slip.floor_or_work_order)}</div></div>
-    </div>
-
-    <table class="ps-table">
-      <thead><tr><th>ITEM #</th><th>TAG / ID</th><th>PART TYPE</th><th>SIZE</th><th>QTY</th><th>COLOUR</th></tr></thead>
+          <div class="ps-row3">
+            <div><div class="ps-bar">SHIP TO</div><div class="ps-bar-val">${cell(slip.ship_to)}</div></div>
+            <div><div class="ps-bar">JOB</div><div class="ps-bar-val">${cell(slip.job_name)}</div></div>
+            <div><div class="ps-bar">FLOOR / WORK ORDER</div><div class="ps-bar-val">${cell(slip.floor_or_work_order)}</div></div>
+          </div>
+        </td></tr>
+        <tr><th>ITEM #</th><th>TAG / ID</th><th>PART TYPE</th><th>SIZE</th><th>QTY</th><th>COLOUR</th></tr>
+      </thead>
       <tbody>${parts.map((p,i)=>`<tr><td>${i+1}</td><td>${cell(p.tag||p.unique_id)}</td><td>${cell(p.part_type)}</td><td>${cell([p.width,p.height].filter(Boolean).join(' X '))}</td><td>${cell(p.qty)}</td><td>${cell(p.colour)}</td></tr>`).join('')}
       ${!parts.length?'<tr><td colspan="6">No parts on record for this batch.</td></tr>':''}
       </tbody>
