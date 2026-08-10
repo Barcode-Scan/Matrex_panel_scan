@@ -992,8 +992,12 @@ app.get('/viewer/api/parts/:id/notes', requireViewer, (req, res) => {
 
 const PORT = process.env.PORT || 8765;
 // Plain HTTP — kept for LAN tools/scripts that don't need TLS, and for
-// anything still pointed at :8765 directly.
-http.createServer(app).listen(PORT, () => console.log(`Matrex scan server listening on http://localhost:${PORT}`));
+// anything still pointed at :8765 directly. No host argument to listen()
+// means Node binds all interfaces by default, not just localhost - this
+// already accepts connections from any device on the LAN. The log line
+// used to print "localhost" here, which was never actually the bind
+// scope, just a misleading label.
+http.createServer(app).listen(PORT, () => console.log(`Matrex scan server listening on http://192.168.20.15:${PORT} (all interfaces)`));
 
 // HTTPS on 443 — self-signed, generated once for this server's static LAN
 // IP (server/data/tls-*.pem, gitignored same as the API keys - regenerate
@@ -1013,7 +1017,7 @@ if (fs.existsSync(TLS_KEY_PATH) && fs.existsSync(TLS_CERT_PATH)) {
   https.createServer({
     key: fs.readFileSync(TLS_KEY_PATH),
     cert: fs.readFileSync(TLS_CERT_PATH)
-  }, app).listen(HTTPS_PORT, () => console.log(`Matrex scan server also listening on https://localhost:${HTTPS_PORT}`));
+  }, app).listen(HTTPS_PORT, () => console.log(`Matrex scan server also listening on https://192.168.20.15${HTTPS_PORT === 443 ? '' : ':' + HTTPS_PORT} (all interfaces)`));
 } else {
   console.log(`No TLS cert found at server/data/tls-*.pem — HTTPS not started, only plain HTTP on ${PORT}`);
 }
