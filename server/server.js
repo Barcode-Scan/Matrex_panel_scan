@@ -108,6 +108,19 @@ function deviceGate(req, res, next) {
 
 app.get('/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 
+// Serves only the public certificate (never the private key) so a phone
+// can install it as a trusted profile instead of clicking through Safari's
+// browser warning, which doesn't actually make the app's fetch() calls
+// trust it - iOS treats "visit anyway" in Safari and system-level
+// certificate trust as two separate things. application/x-x509-ca-cert is
+// the MIME type that makes both iOS and Android recognize this as an
+// installable certificate rather than just downloading a text file.
+app.get('/tls-cert.pem', (req, res) => {
+  if (!fs.existsSync(TLS_CERT_PATH)) return res.status(404).send('No certificate configured.');
+  res.type('application/x-x509-ca-cert');
+  res.sendFile(TLS_CERT_PATH);
+});
+
 // The free Cloudflare quick tunnel gets a brand-new random URL every time
 // watchdog.ps1 restarts it (observed roughly every 1-2 hours) — reading
 // the same file the watchdog writes means whoever's looking (the admin
