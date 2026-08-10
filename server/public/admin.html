@@ -231,14 +231,20 @@
     <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()">&#128276; Enable Desktop Alerts</button>
   </div>
 
-  <div id="tabOperations" style="display:none">
-  <h1>Device Approvals</h1>
-  <div class="sub">Only approved devices can write scans to the server. New phones show up here as Pending.</div>
+  <!-- Lives outside every tab container on purpose: it must stay reachable
+       regardless of which tabs a given page has (this used to be inside
+       Operations specifically, which broke gm.html once that tab's button
+       was removed there - the key input became impossible to reach at
+       all, not just hidden behind a password). -->
   <div class="keybar">
     <input id="key" type="password" placeholder="Admin key">
     <input id="actorName" placeholder="Your name (for the activity log)" style="max-width:260px">
     <button onclick="saveKey()">Connect</button>
   </div>
+
+  <div id="tabOperations" style="display:none">
+  <h1>Device Approvals</h1>
+  <div class="sub">Only approved devices can write scans to the server. New phones show up here as Pending.</div>
   <div class="card">
     <div>
       <div class="name">Receiver URL for phones (permanent)</div>
