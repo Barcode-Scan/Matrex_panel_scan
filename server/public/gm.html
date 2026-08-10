@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Matrex — GM Dashboard</title>
+<title>Matrex — Production Schedule</title>
 <style>
   :root{--bg:#F5F6FA;--white:#fff;--gray-200:#E4E7EC;--gray-500:#667085;--gray-900:#101828;
     --blue-600:#2B59E1;--green-700:#027A48;--green-50:#ECFDF3;--red-600:#D92D20;--red-50:#FEF3F2;
@@ -215,13 +215,11 @@
 <body>
 <div id="toastContainer"></div>
 <div class="wrap">
-  <div style="background:var(--blue-600);color:#fff;font-weight:700;font-size:12px;letter-spacing:.4px;text-transform:uppercase;text-align:center;padding:6px;border-radius:8px;margin-bottom:14px">GM Dashboard — same data as the main admin page, live</div>
+  <div style="background:var(--blue-600);height:6px;border-radius:8px;margin-bottom:14px"></div>
   <div class="tabbar">
     <button class="tab-btn active" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
     <button class="tab-btn" id="tabBtnWeekly" onclick="showTab('weekly')">Weekly Schedule</button>
     <button class="tab-btn" id="tabBtnJobs" onclick="showTab('jobs')">Job Summary</button>
-    <button class="tab-btn" id="tabBtnPacking" onclick="showTab('packing')">Packing Slips</button>
-    <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
     <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()" style="margin-left:auto">&#128276; Enable Desktop Alerts</button>
   </div>
 

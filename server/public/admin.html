@@ -215,6 +215,7 @@
 <body>
 <div id="toastContainer"></div>
 <div class="wrap">
+  <div style="background:var(--blue-600);color:#fff;font-weight:700;font-size:12px;letter-spacing:.4px;text-transform:uppercase;text-align:center;padding:6px;border-radius:8px;margin-bottom:14px">Main Dashboard</div>
   <div class="tabbar">
     <button class="tab-btn active" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
     <button class="tab-btn" id="tabBtnWeekly" onclick="showTab('weekly')">Weekly Schedule</button>
@@ -226,7 +227,8 @@
     <button class="tab-btn" id="tabBtnPacking" onclick="showTab('packing')">Packing Slips</button>
     <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
     <button class="tab-btn" id="tabBtnActivity" onclick="goToActivityLog()">Activity Log</button>
-    <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()" style="margin-left:auto">&#128276; Enable Desktop Alerts</button>
+    <a href="gm.html" target="_blank" style="margin-left:auto;display:inline-flex;align-items:center;padding:10px 16px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">&#8599; View GM Dashboard</a>
+    <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()">&#128276; Enable Desktop Alerts</button>
   </div>
 
   <div id="tabOperations" style="display:none">
