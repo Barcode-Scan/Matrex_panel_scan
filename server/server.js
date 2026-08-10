@@ -876,6 +876,41 @@ app.post('/admin/api/packing-slips', requireAdmin, (req, res) => {
   res.json({ ok: true, slip: formatPackingSlip(getPackingSlipByNumber.get(slipNumber)) });
 });
 
+// Edit only touches the metadata fields a person filled in by hand
+// (department/ship-to/job/floor/date/checked-by/comments/special
+// handling) - batch and parts_snapshot are never touched here, staying
+// locked to what was actually packed at creation time. @field ?? existing
+// so an omitted key preserves what's there, but an explicit empty string
+// still clears it (matches the upsertSchedule convention elsewhere).
+const updatePackingSlip = db.prepare(`
+  UPDATE packing_slips SET
+    slip_date=@slip_date, department=@department, ship_to=@ship_to,
+    job_name=@job_name, floor_or_work_order=@floor_or_work_order,
+    comments=@comments, special_handling=@special_handling, checked_by=@checked_by
+  WHERE id=@id
+`);
+app.post('/admin/api/packing-slips/:id', requireAdmin, (req, res) => {
+  const row = getPackingSlip.get(req.params.id);
+  if (!row) return res.status(404).json({ ok: false, error: 'not found' });
+  const b = req.body || {};
+  updatePackingSlip.run({
+    id: req.params.id,
+    slip_date: b.slip_date ?? row.slip_date,
+    department: b.department ?? row.department,
+    ship_to: b.ship_to ?? row.ship_to,
+    job_name: b.job_name ?? row.job_name,
+    floor_or_work_order: b.floor_or_work_order ?? row.floor_or_work_order,
+    comments: b.comments ?? row.comments,
+    special_handling: b.special_handling ?? row.special_handling,
+    checked_by: b.checked_by ?? row.checked_by
+  });
+  res.json({ ok: true, slip: formatPackingSlip(getPackingSlip.get(req.params.id)) });
+});
+app.delete('/admin/api/packing-slips/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM packing_slips WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
 // ── BATCH STATUS — read-only, viewer-key gated. Powers the phone app's
 // Batch Status tab: pick a batch, see every label's real-time status. Pure
 // join of parts_panel (write-once from Excel) + parts_index (the only
