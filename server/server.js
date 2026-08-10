@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const https = require('https');
 const express = require('express');
 const cors = require('cors');
 const db = require('./db');
@@ -827,6 +828,29 @@ app.get('/viewer/api/parts/:id/notes', requireViewer, (req, res) => {
 });
 
 const PORT = process.env.PORT || 8765;
-// Plain HTTP — Cloudflare Tunnel (or a reverse proxy on the company server)
-// terminates public TLS and forwards to this process over localhost only.
+// Plain HTTP — kept for LAN tools/scripts that don't need TLS, and for
+// anything still pointed at :8765 directly.
 http.createServer(app).listen(PORT, () => console.log(`Matrex scan server listening on http://localhost:${PORT}`));
+
+// HTTPS on 443 — self-signed, generated once for this server's static LAN
+// IP (server/data/tls-*.pem, gitignored same as the API keys - regenerate
+// with the openssl command in the deployment notes if the IP ever
+// changes). Exists because the phone app is HTTPS (GitHub Pages), and
+// browsers - Safari in particular, with no user-facing override at all -
+// refuse to let an HTTPS page talk to a plain-HTTP receiver ("mixed
+// content"). LAN-only by design: no port-forwarding, no external DNS,
+// nothing outside this network can reach it. Each phone needs to trust
+// this certificate once (Settings, not a code workaround); after that the
+// URL just works permanently, like any other HTTPS site, for as long as
+// the server keeps this IP.
+const HTTPS_PORT = process.env.HTTPS_PORT || 443;
+const TLS_KEY_PATH = path.join(__dirname, 'data', 'tls-key.pem');
+const TLS_CERT_PATH = path.join(__dirname, 'data', 'tls-cert.pem');
+if (fs.existsSync(TLS_KEY_PATH) && fs.existsSync(TLS_CERT_PATH)) {
+  https.createServer({
+    key: fs.readFileSync(TLS_KEY_PATH),
+    cert: fs.readFileSync(TLS_CERT_PATH)
+  }, app).listen(HTTPS_PORT, () => console.log(`Matrex scan server also listening on https://localhost:${HTTPS_PORT}`));
+} else {
+  console.log(`No TLS cert found at server/data/tls-*.pem — HTTPS not started, only plain HTTP on ${PORT}`);
+}
