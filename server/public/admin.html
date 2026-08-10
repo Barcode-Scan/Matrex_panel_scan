@@ -54,6 +54,50 @@
   .job-progress{display:flex;align-items:center;gap:8px;width:100%}
   .job-progress-track{flex:1;height:6px;border-radius:3px;background:var(--gray-200);overflow:hidden}
   .job-progress-fill{height:100%;border-radius:3px;background:var(--blue-600)}
+
+  /* PACKING SLIP — print-ready sheet, styled to match the company's
+     existing packing slip document (dark-gray header bars, boxed grid
+     layout) rather than this app's own design language, since this is
+     meant to be printed/saved as a business document, not viewed as a
+     dashboard screen. */
+  .ps-sheet{background:#fff;max-width:800px;margin:0 auto;padding:20px;border:1.5px solid #000;font-family:Arial,Helvetica,sans-serif;color:#000;font-size:12.5px}
+  .ps-top{display:flex;justify-content:space-between;align-items:stretch;gap:10px;margin-bottom:10px}
+  .ps-brand{display:flex;gap:8px;align-items:flex-start;flex:1}
+  .ps-brand-name{font-weight:800;font-size:12px;letter-spacing:.3px;line-height:1.3}
+  .ps-brand-addr{font-size:10px;color:#333;line-height:1.5;margin-top:2px}
+  .ps-title{text-align:center;flex:1;padding-top:6px}
+  .ps-title-main{font-size:18px;font-weight:800;text-decoration:underline}
+  .ps-title-sub{font-size:14px;font-weight:700;margin-top:2px}
+  .ps-numbox{border:1.5px solid #000;min-width:190px}
+  .ps-numbox-hdr{background:#8c8c8c;color:#fff;font-weight:800;text-align:center;padding:3px;font-size:11px;border-bottom:1.5px solid #000}
+  .ps-numbox-val{text-align:center;font-weight:800;padding:5px;font-size:13px;border-bottom:1.5px solid #000}
+  .ps-numbox-val:last-child{border-bottom:none}
+  .ps-bar{background:#8c8c8c;color:#fff;font-weight:800;text-align:center;padding:4px;font-size:11px;border:1.5px solid #000;letter-spacing:.4px}
+  .ps-bar-val{text-align:center;font-weight:700;padding:7px;border:1.5px solid #000;border-top:none;margin-bottom:8px;font-size:13px;min-height:16px}
+  .ps-row3{display:grid;grid-template-columns:1fr 1fr 1fr;margin-bottom:8px}
+  .ps-row3>div>.ps-bar{border-left:1.5px solid #000}
+  .ps-row3>div:not(:first-child)>.ps-bar{border-left:none}
+  .ps-row3>div>.ps-bar-val{border-left:1.5px solid #000;margin-bottom:0}
+  .ps-row3>div:not(:first-child)>.ps-bar-val{border-left:none}
+  .ps-table{width:100%;border-collapse:collapse;margin:10px 0;font-size:12px}
+  .ps-table th{background:#3a3a3a;color:#fff;padding:5px;border:1.5px solid #000;font-size:10.5px}
+  .ps-table td{border:1.5px solid #000;padding:5px 6px;text-align:center;height:20px}
+  .ps-sign-row{display:grid;grid-template-columns:repeat(4,1fr);margin-top:6px}
+  .ps-sign-row>div{border:1.5px solid #000;border-left:none;min-height:52px}
+  .ps-sign-row>div:first-child{border-left:1.5px solid #000}
+  .ps-sign-hdr{background:#8c8c8c;color:#fff;font-weight:800;text-align:center;padding:4px;font-size:10.5px;border-bottom:1.5px solid #000}
+  .ps-notes{display:grid;grid-template-columns:2fr 1fr;margin-top:8px}
+  .ps-notes>div{border:1.5px solid #000}
+  .ps-notes>div:first-child{border-right:none}
+  .ps-notes-hdr{background:#3a3a3a;color:#fff;font-weight:800;text-align:center;padding:4px;font-size:10.5px;border-bottom:1.5px solid #000}
+  .ps-notes-body{padding:8px;font-size:10.5px;line-height:1.5;min-height:50px}
+  .ps-footer{text-align:center;font-weight:800;text-decoration:underline;margin-top:14px;font-size:13px}
+  @media print{
+    body *{visibility:hidden}
+    #tabPackingPrint,#tabPackingPrint *{visibility:visible}
+    #tabPackingPrint{position:absolute;top:0;left:0;width:100%;margin:0;padding:0}
+    .no-print{display:none!important}
+  }
   #toastContainer{position:fixed;top:16px;right:16px;z-index:100;display:flex;flex-direction:column;gap:8px;max-width:320px}
   .toast{background:var(--white);border:1.5px solid var(--green-700);border-left-width:5px;border-radius:10px;padding:12px 14px;box-shadow:0 8px 24px rgba(16,24,40,.12);font-size:14px;font-weight:600;color:var(--gray-900);animation:toastIn .2s ease-out}
   @keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
@@ -164,6 +208,7 @@
     <button class="tab-btn" id="tabBtnRisk" onclick="showTab('risk')">At Risk</button>
     <button class="tab-btn" id="tabBtnYield" onclick="showTab('yieldTab')">Throughput &amp; Yield</button>
     <button class="tab-btn" id="tabBtnJobs" onclick="showTab('jobs')">Job Summary</button>
+    <button class="tab-btn" id="tabBtnPacking" onclick="showTab('packing')">Packing Slips</button>
     <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
     <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()" style="margin-left:auto">&#128276; Enable Desktop Alerts</button>
   </div>
@@ -340,6 +385,49 @@
     <h2>Batches</h2>
     <div id="jobDetailBatches"></div>
   </div>
+
+  <div id="tabPacking" style="display:none">
+    <h1>Packing Slips</h1>
+    <div class="sub">Generate a packing slip once a batch is fully scanned. The part list is captured from the batch at the moment you generate it, so it stays accurate even if the batch changes later.</div>
+    <h2>Ready to Pack</h2>
+    <div class="sub" style="margin-bottom:10px">Fully-scanned batches. A batch can have more than one packing slip (e.g. partial shipments).</div>
+    <div id="readyToPackList"></div>
+    <h2>Created Packing Slips</h2>
+    <div id="packingSlipsList"></div>
+  </div>
+
+  <div id="tabPackingForm" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div>
+        <h1>New Packing Slip</h1>
+        <div class="sub" id="packingFormBatchLabel"></div>
+      </div>
+      <button class="secondary" id="bBackPackingForm">&larr; Cancel</button>
+    </div>
+    <div class="card" style="flex-direction:column;align-items:stretch;gap:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">DEPARTMENT</label><input id="pfDepartment" placeholder="e.g. RAILING" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">DATE</label><input id="pfDate" type="date" style="width:100%;margin-top:4px"></div>
+      </div>
+      <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">SHIP TO</label><input id="pfShipTo" placeholder="e.g. 1500 CREDITSTON" style="width:100%;margin-top:4px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">JOB</label><input id="pfJob" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">FLOOR / WORK ORDER</label><input id="pfFloor" style="width:100%;margin-top:4px"></div>
+      </div>
+      <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">CHECKED BY</label><input id="pfCheckedBy" style="width:100%;margin-top:4px"></div>
+      <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">COMMENTS / NOTES</label><input id="pfComments" style="width:100%;margin-top:4px"></div>
+      <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">SPECIAL HANDLING / REMARK</label><input id="pfSpecial" style="width:100%;margin-top:4px"></div>
+      <button onclick="submitPackingForm()" style="margin-top:4px">Generate Packing Slip</button>
+    </div>
+    <h2>Part List Preview</h2>
+    <div id="packingFormPartsPreview"></div>
+  </div>
+
+  <div id="tabPackingPrint" style="display:none">
+    <button class="secondary no-print" id="bBackPackingPrint" style="margin-bottom:14px">&larr; Back to Packing Slips</button>
+    <button class="no-print" id="bPrintSlip" onclick="window.print()" style="margin-bottom:14px;margin-left:8px">&#128438; Print / Save as PDF</button>
+    <div class="ps-sheet" id="psSheet"></div>
+  </div>
 </div>
 
 <div class="colf-pop" id="colFilterPopover">
@@ -362,7 +450,7 @@ const $=id=>document.getElementById(id);
 let KEY=localStorage.getItem('mx_admin_key')||'';
 $('key').value=KEY;
 
-function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();loadMaterialStock();}
+function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();loadMaterialStock();loadPackingSlips();}
 
 // ── TABS ─────────────────────────────────────────────────────
 // Production Schedule is the landing view now, open to whoever has the
@@ -396,9 +484,12 @@ function showTab(name){
   $('tabYield').style.display=name==='yieldTab'?'':'none';
   $('tabJobSummary').style.display=name==='jobs'?'':'none';
   $('tabJobDetail').style.display=name==='jobDetail'?'':'none';
-  // No tab button for 'labels'/'weeklyDetail'/'jobDetail' - all three only
-  // ever open by clicking into something else, not as something you'd
-  // click into directly.
+  $('tabPacking').style.display=name==='packing'?'':'none';
+  $('tabPackingForm').style.display=name==='packingForm'?'':'none';
+  $('tabPackingPrint').style.display=name==='packingPrint'?'':'none';
+  // No tab button for 'labels'/'weeklyDetail'/'jobDetail'/'packingForm'/
+  // 'packingPrint' - all only ever open by clicking into something else,
+  // not as something you'd click into directly.
   $('tabBtnOps').classList.toggle('active',name==='ops');
   $('tabBtnSchedule').classList.toggle('active',name==='schedule');
   $('tabBtnWeekly').classList.toggle('active',name==='weekly'||name==='weeklyDetail');
@@ -407,6 +498,7 @@ function showTab(name){
   $('tabBtnRisk').classList.toggle('active',name==='risk');
   $('tabBtnYield').classList.toggle('active',name==='yieldTab');
   $('tabBtnJobs').classList.toggle('active',name==='jobs'||name==='jobDetail');
+  $('tabBtnPacking').classList.toggle('active',name==='packing'||name==='packingForm'||name==='packingPrint');
   if(name==='schedule')loadScheduleList();
   if(name==='weekly')renderWeeklySchedule();
   if(name==='material')renderMaterialDemand();
@@ -414,6 +506,7 @@ function showTab(name){
   if(name==='risk')renderAtRisk();
   if(name==='yieldTab')renderThroughputYield();
   if(name==='jobs')renderJobSummary();
+  if(name==='packing')renderPackingTab();
 }
 
 async function api(path,opts){
@@ -524,6 +617,7 @@ loadTunnelUrl();
 loadDeviceActivity();
 loadExceptions();
 loadMaterialStock();
+loadPackingSlips();
 setInterval(load,4000);
 setInterval(loadTunnelUrl,10000);
 // Keeps the Production Schedule grid live for a supervisor watching it on
@@ -740,6 +834,7 @@ async function loadScheduleList(){
     if(currentTab==='risk')renderAtRisk();
     if(currentTab==='yieldTab')renderThroughputYield();
     if(currentTab==='jobs'||currentTab==='jobDetail')renderJobSummary();
+    if(currentTab==='packing')renderPackingTab();
     checkCompletionAlerts();
   }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
@@ -1061,6 +1156,170 @@ function renderJobDetail(job){
   }).join('');
 }
 $('bBackJobDetail').onclick=()=>{currentJobKey=null;showTab('jobs');};
+
+// ── PACKING SLIPS — generated once a batch is fully scanned. The "Ready
+// to Pack" list is just scheduleBatches filtered to complete ones (no
+// extra fetch); the created-slips list and each slip's own record come
+// from the packing_slips backend. PDF delivery is the browser's own
+// Print > Save as PDF, via a print-only-styled view (@media print above)
+// - no PDF library needed, matches how the rest of this app avoids
+// adding dependencies where a native browser feature already covers it.
+let packingSlipsCache=[];
+let currentPackingBatch=null;
+let currentPackingParts=[];
+
+function renderPackingTab(){
+  const ready=scheduleBatches.filter(b=>rowStatus(b)==='complete');
+  $('readyToPackList').innerHTML=ready.length?ready.map(b=>{
+    const slipCount=packingSlipsCache.filter(s=>s.batch===b.batch).length;
+    return`<div class="card">
+      <div>
+        <div class="name">${esc(b.batch)}</div>
+        <div class="meta">${esc(b.job_name||'(no job)')} · ${b.scanned}/${b.total} scanned${slipCount?' · '+slipCount+' packing slip'+(slipCount===1?'':'s')+' already created':''}</div>
+      </div>
+      <button onclick="openPackingForm('${esc(b.batch)}')">Create Packing Slip</button>
+    </div>`;
+  }).join(''):'<div class="empty">No fully-scanned batches yet.</div>';
+
+  $('packingSlipsList').innerHTML=packingSlipsCache.length?packingSlipsCache.map(s=>`
+    <div class="card" onclick="viewPackingSlip(${s.id})" style="cursor:pointer">
+      <div>
+        <div class="name">${esc(s.slip_number)} — ${esc(s.batch)}</div>
+        <div class="meta">${esc(s.department||'')}${s.department&&s.ship_to?' · ':''}${esc(s.ship_to||'')} · ${esc(s.slip_date)}</div>
+      </div>
+      <span class="pill working">View / Print</span>
+    </div>`).join(''):'<div class="empty">No packing slips created yet.</div>';
+}
+async function loadPackingSlips(){
+  if(!KEY)return;
+  try{
+    const data=await api('/admin/api/packing-slips');
+    packingSlipsCache=data.slips||[];
+    if(currentTab==='packing')renderPackingTab();
+  }catch(e){/* leave last-known cache showing rather than blank it on a transient error */}
+}
+
+async function openPackingForm(batch){
+  currentPackingBatch=batch;
+  const b=scheduleBatches.find(x=>x.batch===batch)||{};
+  $('packingFormBatchLabel').textContent=batch+' — '+b.scanned+'/'+b.total+' scanned';
+  $('pfDepartment').value='';
+  $('pfDate').value=new Date().toISOString().slice(0,10);
+  $('pfShipTo').value='';
+  $('pfJob').value=b.job_name||'';
+  $('pfFloor').value=b.floor_or_work_order||'';
+  $('pfCheckedBy').value='';
+  $('pfComments').value='';
+  $('pfSpecial').value='';
+  $('packingFormPartsPreview').innerHTML='<div class="empty">Loading part list…</div>';
+  showTab('packingForm');
+  try{
+    const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
+    currentPackingParts=(data.labels||[]).map(l=>({unique_id:l.unique_id,tag:l.tag,part_type:l.part_type,width:l.width,height:l.height,qty:l.qty,colour:l.colour}));
+    $('packingFormPartsPreview').innerHTML=tbl(['Tag','Part Type','Size','Qty','Colour'],currentPackingParts.map(p=>[p.tag||p.unique_id,p.part_type||'',[p.width,p.height].filter(Boolean).join(' X '),p.qty||'',p.colour||'']));
+  }catch(e){
+    $('packingFormPartsPreview').innerHTML='<div class="empty">Could not load part list.</div>';
+  }
+}
+$('bBackPackingForm').onclick=()=>{currentPackingBatch=null;showTab('packing');};
+
+async function submitPackingForm(){
+  if(!currentPackingBatch)return;
+  try{
+    const data=await api('/admin/api/packing-slips',{method:'POST',body:JSON.stringify({
+      batch:currentPackingBatch,
+      department:$('pfDepartment').value.trim(),
+      slip_date:$('pfDate').value||undefined,
+      ship_to:$('pfShipTo').value.trim(),
+      job_name:$('pfJob').value.trim(),
+      floor_or_work_order:$('pfFloor').value.trim(),
+      checked_by:$('pfCheckedBy').value.trim(),
+      comments:$('pfComments').value.trim(),
+      special_handling:$('pfSpecial').value.trim()
+    })});
+    await loadPackingSlips();
+    renderPackingSlip(data.slip);
+    showTab('packingPrint');
+  }catch(e){
+    alert('Could not create packing slip: '+e.message);
+  }
+}
+
+async function viewPackingSlip(id){
+  try{
+    const data=await api('/admin/api/packing-slips/'+id);
+    renderPackingSlip(data.slip);
+    showTab('packingPrint');
+  }catch(e){
+    alert('Could not load packing slip: '+e.message);
+  }
+}
+$('bBackPackingPrint').onclick=()=>showTab('packing');
+
+function renderPackingSlip(slip){
+  const parts=slip.parts_snapshot||[];
+  const cell=(v)=>v?esc(v):'';
+  $('psSheet').innerHTML=`
+    <div class="ps-top">
+      <div class="ps-brand">
+        <svg width="34" height="34" viewBox="0 0 200 200" fill="none" style="flex-shrink:0">
+          <rect x="30" y="30" width="140" height="140" rx="6" transform="rotate(45 100 100)" stroke="#0071E3" stroke-width="10" fill="none"/>
+          <path d="M55 145L55 70L100 115L145 70L145 145" stroke="#0071E3" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <div>
+          <div class="ps-brand-name">MATREX<br>WINDOW SYSTEM</div>
+          <div class="ps-brand-addr">3090 Langstaff Road,<br>Vaughan, Ontario L4K 4Y5<br>416-906-6195</div>
+        </div>
+      </div>
+      <div class="ps-title">
+        <div class="ps-title-main">PACKING SLIP</div>
+        <div class="ps-title-sub">INTERNAL</div>
+      </div>
+      <div class="ps-numbox">
+        <div class="ps-numbox-hdr">PACKING SLIP NUMBER</div>
+        <div class="ps-numbox-val">${esc(slip.slip_number)}</div>
+        <div class="ps-numbox-hdr">DATE</div>
+        <div class="ps-numbox-val">${esc(slip.slip_date)}</div>
+      </div>
+    </div>
+
+    <div class="ps-bar">DEPARTMENT</div>
+    <div class="ps-bar-val" style="margin-bottom:8px">${cell(slip.department)}</div>
+
+    <div class="ps-row3">
+      <div><div class="ps-bar">SHIP TO</div><div class="ps-bar-val">${cell(slip.ship_to)}</div></div>
+      <div><div class="ps-bar">JOB</div><div class="ps-bar-val">${cell(slip.job_name)}</div></div>
+      <div><div class="ps-bar">FLOOR / WORK ORDER</div><div class="ps-bar-val">${cell(slip.floor_or_work_order)}</div></div>
+    </div>
+
+    <table class="ps-table">
+      <thead><tr><th>ITEM #</th><th>TAG / ID</th><th>PART TYPE</th><th>SIZE</th><th>QTY</th><th>COLOUR</th></tr></thead>
+      <tbody>${parts.map((p,i)=>`<tr><td>${i+1}</td><td>${cell(p.tag||p.unique_id)}</td><td>${cell(p.part_type)}</td><td>${cell([p.width,p.height].filter(Boolean).join(' X '))}</td><td>${cell(p.qty)}</td><td>${cell(p.colour)}</td></tr>`).join('')}
+      ${!parts.length?'<tr><td colspan="6">No parts on record for this batch.</td></tr>':''}
+      </tbody>
+    </table>
+
+    <div class="ps-sign-row">
+      <div><div class="ps-sign-hdr">CHECKED BY</div><div style="padding:6px">${cell(slip.checked_by)}</div></div>
+      <div><div class="ps-sign-hdr">RECEIVER NAME</div></div>
+      <div><div class="ps-sign-hdr">RECEIVER SIGN</div></div>
+      <div><div class="ps-sign-hdr">DATE RECEIVED</div></div>
+    </div>
+
+    <div class="ps-notes">
+      <div>
+        <div class="ps-notes-hdr">COMMENTS / NOTES</div>
+        <div class="ps-notes-body">${cell(slip.comments)}</div>
+      </div>
+      <div>
+        <div class="ps-notes-hdr">SPECIAL HANDLING / REMARK</div>
+        <div class="ps-notes-body">${cell(slip.special_handling)}</div>
+      </div>
+    </div>
+
+    <div class="ps-footer">Thank You For Your Business!</div>
+  `;
+}
 
 // ── 100%-COMPLETION ALERT (Phase 7, partial) — the rest of Phase 7
 // ("Panel Scan Integration Hooks") is either already true today (scan
