@@ -794,6 +794,88 @@ app.post('/admin/api/material-stock/:material', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── PACKING SLIPS — generated once a batch is fully scanned, for internal
+// pack-and-ship documentation. parts_snapshot (and the job/floor fields)
+// are captured once at creation time rather than joined live (see
+// schema.sql), so an issued slip stays accurate to what was actually
+// packed even if the batch's data changes afterward.
+const insertPackingSlip = db.prepare(`
+  INSERT INTO packing_slips (
+    slip_number, batch, slip_date, department, ship_to, job_name,
+    floor_or_work_order, comments, special_handling, checked_by,
+    parts_snapshot, created_at, created_by
+  ) VALUES (
+    @slip_number, @batch, @slip_date, @department, @ship_to, @job_name,
+    @floor_or_work_order, @comments, @special_handling, @checked_by,
+    @parts_snapshot, @now, @created_by
+  )
+`);
+const listPackingSlips = db.prepare('SELECT id, slip_number, batch, slip_date, department, ship_to, created_at FROM packing_slips ORDER BY id DESC');
+const getPackingSlip = db.prepare('SELECT * FROM packing_slips WHERE id = ?');
+const getPackingSlipByNumber = db.prepare('SELECT * FROM packing_slips WHERE slip_number = ?');
+const countSlipsWithPrefix = db.prepare('SELECT COUNT(*) AS c FROM packing_slips WHERE slip_number LIKE ?');
+const getBatchCompletion = db.prepare(`
+  SELECT COUNT(*) AS total, SUM(pi.scanned='Yes') AS scanned
+  FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
+  WHERE pp.batch = ?
+`);
+const getBatchParts = db.prepare(`
+  SELECT pp.unique_id, pp.tag, pp.part_type, pp.width, pp.height, pp.qty, pp.colour
+  FROM parts_panel pp
+  WHERE pp.batch = ?
+  ORDER BY pp.sequence_no ASC, pp.tag ASC
+`);
+function formatPackingSlip(row) {
+  if (!row) return null;
+  return { ...row, parts_snapshot: JSON.parse(row.parts_snapshot) };
+}
+
+app.get('/admin/api/packing-slips', requireAdmin, (req, res) => {
+  res.json({ ok: true, slips: listPackingSlips.all() });
+});
+
+app.get('/admin/api/packing-slips/:id', requireAdmin, (req, res) => {
+  const row = getPackingSlip.get(req.params.id);
+  if (!row) return res.status(404).json({ ok: false, error: 'not found' });
+  res.json({ ok: true, slip: formatPackingSlip(row) });
+});
+
+app.post('/admin/api/packing-slips', requireAdmin, (req, res) => {
+  const b = req.body || {};
+  const batch = String(b.batch || '').trim();
+  if (!batch) return res.status(400).json({ ok: false, error: 'batch required' });
+
+  const completion = getBatchCompletion.get(batch);
+  if (!completion || !completion.total) return res.status(400).json({ ok: false, error: 'batch has no registered parts' });
+  if (completion.scanned !== completion.total) return res.status(400).json({ ok: false, error: 'batch is not fully scanned yet — cannot create a packing slip' });
+
+  const now = new Date().toISOString();
+  const prefix = `PS-${new Date().getFullYear().toString().slice(-2)}-`;
+  const seq = countSlipsWithPrefix.get(prefix + '%').c + 1;
+  const slipNumber = prefix + String(seq).padStart(3, '0');
+
+  const schedule = getProductionSchedule.get(batch) || {};
+  const parts = getBatchParts.all(batch);
+
+  insertPackingSlip.run({
+    slip_number: slipNumber,
+    batch,
+    slip_date: b.slip_date || now.slice(0, 10),
+    department: b.department || null,
+    ship_to: b.ship_to || null,
+    job_name: b.job_name || schedule.job_name || null,
+    floor_or_work_order: b.floor_or_work_order || schedule.floor_or_work_order || null,
+    comments: b.comments || null,
+    special_handling: b.special_handling || null,
+    checked_by: b.checked_by || null,
+    parts_snapshot: JSON.stringify(parts),
+    now,
+    created_by: b.created_by || 'ADMIN'
+  });
+
+  res.json({ ok: true, slip: formatPackingSlip(getPackingSlipByNumber.get(slipNumber)) });
+});
+
 // ── BATCH STATUS — read-only, viewer-key gated. Powers the phone app's
 // Batch Status tab: pick a batch, see every label's real-time status. Pure
 // join of parts_panel (write-once from Excel) + parts_index (the only

@@ -147,3 +147,29 @@ CREATE TABLE IF NOT EXISTS material_stock (
   updated_at   TEXT,
   updated_by   TEXT
 );
+
+-- ── PACKING SLIPS — generated once a batch is fully scanned. parts_snapshot
+-- is a JSON array captured at creation time (not a live join against
+-- parts_panel) since this is a shipping record: if a part later gets
+-- voided or a label edited, an already-issued packing slip shouldn't
+-- silently change out from under whoever's holding the printed copy.
+-- job_name/floor_or_work_order are copied from production_schedule at
+-- creation time for the same reason - a historical snapshot, not a live
+-- lookup.
+CREATE TABLE IF NOT EXISTS packing_slips (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  slip_number         TEXT NOT NULL UNIQUE,
+  batch               TEXT NOT NULL,
+  slip_date           TEXT NOT NULL,
+  department          TEXT,
+  ship_to             TEXT,
+  job_name            TEXT,
+  floor_or_work_order TEXT,
+  comments            TEXT,
+  special_handling    TEXT,
+  checked_by          TEXT,
+  parts_snapshot      TEXT NOT NULL,
+  created_at          TEXT NOT NULL,
+  created_by          TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_packing_slips_batch ON packing_slips(batch);
