@@ -399,7 +399,7 @@
   <div id="tabPackingForm" style="display:none">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
       <div>
-        <h1>New Packing Slip</h1>
+        <h1 id="packingFormTitle">New Packing Slip</h1>
         <div class="sub" id="packingFormBatchLabel"></div>
       </div>
       <button class="secondary" id="bBackPackingForm">&larr; Cancel</button>
@@ -417,7 +417,7 @@
       <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">CHECKED BY</label><input id="pfCheckedBy" style="width:100%;margin-top:4px"></div>
       <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">COMMENTS / NOTES</label><input id="pfComments" style="width:100%;margin-top:4px"></div>
       <div><label style="font-size:12px;font-weight:700;color:var(--gray-500)">SPECIAL HANDLING / REMARK</label><input id="pfSpecial" style="width:100%;margin-top:4px"></div>
-      <button onclick="submitPackingForm()" style="margin-top:4px">Generate Packing Slip</button>
+      <button onclick="submitPackingForm()" id="packingFormSubmitBtn" style="margin-top:4px">Generate Packing Slip</button>
     </div>
     <h2>Part List Preview</h2>
     <div id="packingFormPartsPreview"></div>
@@ -1167,6 +1167,7 @@ $('bBackJobDetail').onclick=()=>{currentJobKey=null;showTab('jobs');};
 let packingSlipsCache=[];
 let currentPackingBatch=null;
 let currentPackingParts=[];
+let editingSlipId=null; // null = creating a new slip; set = editing an existing one
 
 function renderPackingTab(){
   const ready=scheduleBatches.filter(b=>rowStatus(b)==='complete');
@@ -1182,13 +1183,35 @@ function renderPackingTab(){
   }).join(''):'<div class="empty">No fully-scanned batches yet.</div>';
 
   $('packingSlipsList').innerHTML=packingSlipsCache.length?packingSlipsCache.map(s=>`
-    <div class="card" onclick="viewPackingSlip(${s.id})" style="cursor:pointer">
+    <div class="card" data-slipid="${s.id}" onclick="viewPackingSlip(${s.id})" oncontextmenu="openPackingCtxMenu(event,${s.id})" style="cursor:pointer">
       <div>
         <div class="name">${esc(s.slip_number)} — ${esc(s.batch)}</div>
         <div class="meta">${esc(s.department||'')}${s.department&&s.ship_to?' · ':''}${esc(s.ship_to||'')} · ${esc(s.slip_date)}</div>
       </div>
       <span class="pill working">View / Print</span>
     </div>`).join(''):'<div class="empty">No packing slips created yet.</div>';
+}
+// Right-click a created packing slip for Edit/Delete - reuses the exact
+// same shared context-menu element the Production Schedule grid already
+// has (#rowCtxMenu / closeRowContextMenu), just populated differently.
+function openPackingCtxMenu(evt,id){
+  evt.preventDefault();
+  evt.stopPropagation();
+  const menu=$('rowCtxMenu');
+  menu.innerHTML=`
+    <div class="ctx-menu-item" onclick="closeRowContextMenu();openPackingEditForm(${id})">${ICON_EDIT} Edit</div>
+    <div class="ctx-menu-item danger" onclick="closeRowContextMenu();deletePackingSlip(${id})">${ICON_DELETE} Delete</div>`;
+  menu.style.top=evt.clientY+'px';
+  menu.style.left=Math.min(evt.clientX,window.innerWidth-170)+'px';
+  menu.style.display='block';
+}
+async function deletePackingSlip(id){
+  const s=packingSlipsCache.find(x=>x.id===id);
+  if(!confirm('Delete packing slip '+(s?s.slip_number:id)+'? This cannot be undone.'))return;
+  try{
+    await api('/admin/api/packing-slips/'+id,{method:'DELETE'});
+    await loadPackingSlips();
+  }catch(e){alert('Could not delete: '+e.message);}
 }
 async function loadPackingSlips(){
   if(!KEY)return;
@@ -1200,7 +1223,10 @@ async function loadPackingSlips(){
 }
 
 async function openPackingForm(batch){
+  editingSlipId=null;
   currentPackingBatch=batch;
+  $('packingFormTitle').textContent='New Packing Slip';
+  $('packingFormSubmitBtn').textContent='Generate Packing Slip';
   const b=scheduleBatches.find(x=>x.batch===batch)||{};
   $('packingFormBatchLabel').textContent=batch+' — '+b.scanned+'/'+b.total+' scanned';
   $('pfDepartment').value='';
@@ -1221,27 +1247,57 @@ async function openPackingForm(batch){
     $('packingFormPartsPreview').innerHTML='<div class="empty">Could not load part list.</div>';
   }
 }
-$('bBackPackingForm').onclick=()=>{currentPackingBatch=null;showTab('packing');};
+// Editing an existing slip only touches its metadata (same fields as
+// creation) - the part list stays whatever was snapshotted when it was
+// first generated, shown read-only here rather than re-fetched live, so
+// editing never accidentally changes what the slip says was packed.
+async function openPackingEditForm(id){
+  try{
+    const data=await api('/admin/api/packing-slips/'+id);
+    const s=data.slip;
+    editingSlipId=id;
+    currentPackingBatch=s.batch;
+    $('packingFormTitle').textContent='Edit Packing Slip '+s.slip_number;
+    $('packingFormSubmitBtn').textContent='Save Changes';
+    $('packingFormBatchLabel').textContent=s.batch;
+    $('pfDepartment').value=s.department||'';
+    $('pfDate').value=s.slip_date||'';
+    $('pfShipTo').value=s.ship_to||'';
+    $('pfJob').value=s.job_name||'';
+    $('pfFloor').value=s.floor_or_work_order||'';
+    $('pfCheckedBy').value=s.checked_by||'';
+    $('pfComments').value=s.comments||'';
+    $('pfSpecial').value=s.special_handling||'';
+    currentPackingParts=s.parts_snapshot||[];
+    $('packingFormPartsPreview').innerHTML='<div class="sub" style="margin-bottom:8px">Part list is locked to what was packed when this slip was created — not editable here.</div>'
+      +tbl(['Tag','Part Type','Size','Qty','Colour'],currentPackingParts.map(p=>[p.tag||p.unique_id,p.part_type||'',[p.width,p.height].filter(Boolean).join(' X '),p.qty||'',p.colour||'']));
+    showTab('packingForm');
+  }catch(e){alert('Could not load packing slip: '+e.message);}
+}
+$('bBackPackingForm').onclick=()=>{currentPackingBatch=null;editingSlipId=null;showTab('packing');};
 
 async function submitPackingForm(){
   if(!currentPackingBatch)return;
+  const fields={
+    department:$('pfDepartment').value.trim(),
+    slip_date:$('pfDate').value||undefined,
+    ship_to:$('pfShipTo').value.trim(),
+    job_name:$('pfJob').value.trim(),
+    floor_or_work_order:$('pfFloor').value.trim(),
+    checked_by:$('pfCheckedBy').value.trim(),
+    comments:$('pfComments').value.trim(),
+    special_handling:$('pfSpecial').value.trim()
+  };
   try{
-    const data=await api('/admin/api/packing-slips',{method:'POST',body:JSON.stringify({
-      batch:currentPackingBatch,
-      department:$('pfDepartment').value.trim(),
-      slip_date:$('pfDate').value||undefined,
-      ship_to:$('pfShipTo').value.trim(),
-      job_name:$('pfJob').value.trim(),
-      floor_or_work_order:$('pfFloor').value.trim(),
-      checked_by:$('pfCheckedBy').value.trim(),
-      comments:$('pfComments').value.trim(),
-      special_handling:$('pfSpecial').value.trim()
-    })});
+    const data=editingSlipId
+      ?await api('/admin/api/packing-slips/'+editingSlipId,{method:'POST',body:JSON.stringify(fields)})
+      :await api('/admin/api/packing-slips',{method:'POST',body:JSON.stringify({...fields,batch:currentPackingBatch})});
+    editingSlipId=null;
     await loadPackingSlips();
     renderPackingSlip(data.slip);
     showTab('packingPrint');
   }catch(e){
-    alert('Could not create packing slip: '+e.message);
+    alert('Could not save packing slip: '+e.message);
   }
 }
 
@@ -1522,7 +1578,7 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#rowCtxMenu'))closeRowContextMenu();
 });
 document.addEventListener('contextmenu',e=>{
-  if(!e.target.closest('tr[data-batch]'))closeRowContextMenu();
+  if(!e.target.closest('tr[data-batch], [data-slipid]'))closeRowContextMenu();
 });
 // Right-click a Production Schedule row for Edit/Delete (or Save/Cancel
 // if that row is already mid-edit) - same actions the old Actions column
