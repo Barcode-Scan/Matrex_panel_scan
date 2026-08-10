@@ -225,6 +225,7 @@
     <button class="tab-btn" id="tabBtnJobs" onclick="showTab('jobs')">Job Summary</button>
     <button class="tab-btn" id="tabBtnPacking" onclick="showTab('packing')">Packing Slips</button>
     <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
+    <button class="tab-btn" id="tabBtnActivity" onclick="goToActivityLog()">Activity Log</button>
     <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()" style="margin-left:auto">&#128276; Enable Desktop Alerts</button>
   </div>
 
@@ -233,6 +234,7 @@
   <div class="sub">Only approved devices can write scans to the server. New phones show up here as Pending.</div>
   <div class="keybar">
     <input id="key" type="password" placeholder="Admin key">
+    <input id="actorName" placeholder="Your name (for the activity log)" style="max-width:260px">
     <button onclick="saveKey()">Connect</button>
   </div>
   <div class="card">
@@ -442,6 +444,12 @@
     <button class="secondary no-print" id="bBackPackingPrint" style="margin-bottom:14px">&larr; Back to Packing Slips</button>
     <button class="no-print" id="bPrintSlip" onclick="window.print()" style="margin-bottom:14px;margin-left:8px">&#128438; Print / Save as PDF</button>
     <div class="ps-sheet" id="psSheet"></div>
+  </div>
+
+  <div id="tabActivity" style="display:none">
+    <h1>Activity Log</h1>
+    <div class="sub">Every edit, create, and delete made from an admin dashboard — including the GM's copy. Not shown there; this view is only ever on this page.</div>
+    <div id="activityLogList"></div>
   </div>
 </div>
 

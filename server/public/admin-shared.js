@@ -1,6 +1,18 @@
 const $=id=>document.getElementById(id);
 let KEY=localStorage.getItem('mx_admin_key')||'';
 $('key').value=KEY;
+// Declared up here (not down near api(), where it's used) specifically
+// because it's also read immediately below, at the top of the script -
+// a const referenced before its own declaration line has run throws
+// "Cannot access before initialization", the same class of bug that
+// once left the Production Schedule grid silently empty until something
+// happened to re-trigger it later.
+const LS_ACTOR_NAME='mx_actor_name';
+function getActorName(){return localStorage.getItem(LS_ACTOR_NAME)||'';}
+if($('actorName')){
+  $('actorName').value=getActorName();
+  $('actorName').addEventListener('change',e=>localStorage.setItem(LS_ACTOR_NAME,e.target.value.trim()));
+}
 
 function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();loadMaterialStock();loadPackingSlips();}
 
@@ -22,35 +34,56 @@ function goToOperations(){
   }
   showTab('ops');
 }
+// Same password/unlock state as Operations - same trust tier (internal,
+// not client-facing), and once unlocked for one there's no reason to
+// prompt again for the other in the same session.
+function goToActivityLog(){
+  if(!opsUnlocked){
+    const pw=prompt('Enter the Operations password:');
+    if(pw===null)return;
+    if(pw!==OPS_PASSWORD){alert('Incorrect password.');return;}
+    opsUnlocked=true;
+  }
+  showTab('activity');
+}
 let currentTab='schedule';
+const TAB_CONTAINERS={
+  ops:'tabOperations',schedule:'tabSchedule',labels:'tabLabels',
+  weekly:'tabWeekly',weeklyDetail:'tabWeeklyDetail',
+  material:'tabMaterial',stalled:'tabStalled',risk:'tabRisk',yieldTab:'tabYield',
+  jobs:'tabJobSummary',jobDetail:'tabJobDetail',
+  packing:'tabPacking',packingForm:'tabPackingForm',packingPrint:'tabPackingPrint',
+  activity:'tabActivity'
+};
+// Which tab-bar button lights up "active" for a given tab name - several
+// names share one button (weekly + weeklyDetail both light up the one
+// Weekly Schedule button; 'labels' has no button of its own since it's
+// only ever reached by clicking a batch, not directly).
+const TAB_BUTTON_FOR={
+  ops:'tabBtnOps',schedule:'tabBtnSchedule',
+  weekly:'tabBtnWeekly',weeklyDetail:'tabBtnWeekly',
+  material:'tabBtnMaterial',stalled:'tabBtnStalled',risk:'tabBtnRisk',yieldTab:'tabBtnYield',
+  jobs:'tabBtnJobs',jobDetail:'tabBtnJobs',
+  packing:'tabBtnPacking',packingForm:'tabBtnPacking',packingPrint:'tabBtnPacking',
+  activity:'tabBtnActivity'
+};
 function showTab(name){
   currentTab=name;
-  $('tabOperations').style.display=name==='ops'?'':'none';
-  $('tabSchedule').style.display=name==='schedule'?'':'none';
-  $('tabLabels').style.display=name==='labels'?'':'none';
-  $('tabWeekly').style.display=name==='weekly'?'':'none';
-  $('tabWeeklyDetail').style.display=name==='weeklyDetail'?'':'none';
-  $('tabMaterial').style.display=name==='material'?'':'none';
-  $('tabStalled').style.display=name==='stalled'?'':'none';
-  $('tabRisk').style.display=name==='risk'?'':'none';
-  $('tabYield').style.display=name==='yieldTab'?'':'none';
-  $('tabJobSummary').style.display=name==='jobs'?'':'none';
-  $('tabJobDetail').style.display=name==='jobDetail'?'':'none';
-  $('tabPacking').style.display=name==='packing'?'':'none';
-  $('tabPackingForm').style.display=name==='packingForm'?'':'none';
-  $('tabPackingPrint').style.display=name==='packingPrint'?'':'none';
-  // No tab button for 'labels'/'weeklyDetail'/'jobDetail'/'packingForm'/
-  // 'packingPrint' - all only ever open by clicking into something else,
-  // not as something you'd click into directly.
-  $('tabBtnOps').classList.toggle('active',name==='ops');
-  $('tabBtnSchedule').classList.toggle('active',name==='schedule');
-  $('tabBtnWeekly').classList.toggle('active',name==='weekly'||name==='weeklyDetail');
-  $('tabBtnMaterial').classList.toggle('active',name==='material');
-  $('tabBtnStalled').classList.toggle('active',name==='stalled');
-  $('tabBtnRisk').classList.toggle('active',name==='risk');
-  $('tabBtnYield').classList.toggle('active',name==='yieldTab');
-  $('tabBtnJobs').classList.toggle('active',name==='jobs'||name==='jobDetail');
-  $('tabBtnPacking').classList.toggle('active',name==='packing'||name==='packingForm'||name==='packingPrint');
+  // Table-driven and defensive on purpose: this same file is shared by
+  // admin.html (every tab) and gm.html (a trimmed subset - no Material
+  // Demand/Stalled Batches/At Risk/Throughput & Yield/Activity Log). A
+  // page missing some of these containers/buttons must never crash
+  // showTab() just because it doesn't have every tab admin.html does -
+  // each lookup is guarded instead of assumed to exist.
+  Object.entries(TAB_CONTAINERS).forEach(([tab,id])=>{
+    const el=$(id);
+    if(el)el.style.display=(tab===name)?'':'none';
+  });
+  const activeBtnId=TAB_BUTTON_FOR[name];
+  new Set(Object.values(TAB_BUTTON_FOR)).forEach(btnId=>{
+    const el=$(btnId);
+    if(el)el.classList.toggle('active',btnId===activeBtnId);
+  });
   if(name==='schedule')loadScheduleList();
   if(name==='weekly')renderWeeklySchedule();
   if(name==='material')renderMaterialDemand();
@@ -59,10 +92,11 @@ function showTab(name){
   if(name==='yieldTab')renderThroughputYield();
   if(name==='jobs')renderJobSummary();
   if(name==='packing')renderPackingTab();
+  if(name==='activity')renderActivityLog();
 }
 
 async function api(path,opts){
-  const r=await fetch(path,Object.assign({headers:{'X-Admin-Key':KEY,'Content-Type':'application/json'}},opts||{}));
+  const r=await fetch(path,Object.assign({headers:{'X-Admin-Key':KEY,'X-Actor-Name':getActorName(),'Content-Type':'application/json'}},opts||{}));
   if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json();
 }
@@ -532,6 +566,7 @@ async function saveMaterialStock(material,value){
   catch(e){/* stays in the cache either way - worst case a stale value until the next successful save */}
 }
 function renderMaterialDemand(){
+  if(!$('materialList'))return; // this tab doesn't exist on every page (gm.html) - loadMaterialStock() calls this unconditionally at boot
   const groups=groupByMaterial();
   const materials=Object.keys(groups).sort();
   if(!materials.length){$('materialList').innerHTML='<div class="empty">No open batches — nothing currently demanding material.</div>';return;}
@@ -609,6 +644,7 @@ function cycleTimeOnlyRows(keyFn){
   });
 }
 function renderThroughputYield(){
+  if(!$('throughputMaterial'))return; // not every page has this tab (gm.html)
   $('throughputMaterial').innerHTML=tbl(['Material','Total Batches','Completed','Completion Rate','Avg Cycle Time (days)'],throughputRows(b=>b.material));
   $('throughputFinish').innerHTML=tbl(['Finish','Total Batches','Completed','Completion Rate','Avg Cycle Time (days)'],throughputRows(b=>b.finish));
   $('throughputJob').innerHTML=tbl(['Job','Completed Batches','Avg Cycle Time (days)'],cycleTimeOnlyRows(b=>b.job_name));
@@ -1004,6 +1040,7 @@ function workingDaysSince(dateStr){
   return days;
 }
 function renderStalledBatches(){
+  if(!$('stalledThreshold'))return; // not every page has this tab (gm.html)
   const saved=localStorage.getItem(LS_STALLED_THRESHOLD);
   if(saved)$('stalledThreshold').value=saved;
   const threshold=Math.max(1,parseInt($('stalledThreshold').value,10)||3);
@@ -1026,7 +1063,8 @@ function renderStalledBatches(){
     </div>`;
   }).join('');
 }
-$('stalledThreshold').addEventListener('input',e=>{
+// Guarded (not every page has this tab - see the showTab comment above)
+if($('stalledThreshold'))$('stalledThreshold').addEventListener('input',e=>{
   localStorage.setItem(LS_STALLED_THRESHOLD,e.target.value);
   renderStalledBatches();
 });
@@ -1035,6 +1073,7 @@ $('stalledThreshold').addEventListener('input',e=>{
 // used to color Production Schedule rows, filtered to just 'red' and sorted
 // worst-first (most overdue, or least complete with the least time left).
 function renderAtRisk(){
+  if(!$('riskList'))return; // not every page has this tab (gm.html)
   const atRisk=scheduleBatches
     .map(b=>({b,risk:computeRisk(b)}))
     .filter(r=>r.risk&&r.risk.level==='red')
@@ -1051,6 +1090,33 @@ function renderAtRisk(){
       <span class="pill notstarted">At Risk</span>
     </div>`;
   }).join('');
+}
+
+// ── ACTIVITY LOG — read-only history of every admin-dashboard write
+// action, including ones made from the GM's copy of the dashboard.
+// Deliberately absent from gm.html entirely (no button, no container,
+// guarded here the same way as the other GM-excluded tabs) - this page
+// is the review surface, not something the GM sees themselves. Rendered
+// once per visit rather than on the 4s poll, since reviewing history
+// doesn't need to be live the way scan progress does.
+async function renderActivityLog(){
+  const el=$('activityLogList');
+  if(!el)return;
+  if(!KEY){el.innerHTML='<div class="empty">Enter the admin key above to load.</div>';return;}
+  try{
+    const data=await api('/admin/api/audit-log');
+    const entries=data.entries||[];
+    if(!entries.length){el.innerHTML='<div class="empty">No activity recorded yet.</div>';return;}
+    el.innerHTML=entries.map(e=>{
+      const details=e.details&&e.details.length>150?e.details.slice(0,150)+'…':e.details;
+      return`<div class="card">
+        <div>
+          <div class="name">${esc(e.action)}${e.target?' — '+esc(e.target):''}</div>
+          <div class="meta">${esc(e.actor||'—')} · ${fmt(e.at)}${details?' · '+esc(details):''}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(err){el.innerHTML='<div class="empty">Wrong key, or server unreachable.</div>';}
 }
 
 // ── AutoFilter (Excel-style: checkbox multi-select per column, search,
