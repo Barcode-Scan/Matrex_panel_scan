@@ -46,6 +46,17 @@ function goToActivityLog(){
   }
   showTab('activity');
 }
+// Same gate as Operations/Activity Log - this tab surfaces the raw admin
+// key, so it gets the same casual-deterrent password before showing it.
+function goToBoards(){
+  if(!opsUnlocked){
+    const pw=prompt('Enter the Operations password:');
+    if(pw===null)return;
+    if(pw!==OPS_PASSWORD){alert('Incorrect password.');return;}
+    opsUnlocked=true;
+  }
+  showTab('boards');
+}
 let currentTab='schedule';
 const TAB_CONTAINERS={
   ops:'tabOperations',schedule:'tabSchedule',labels:'tabLabels',
@@ -53,7 +64,7 @@ const TAB_CONTAINERS={
   material:'tabMaterial',stalled:'tabStalled',risk:'tabRisk',yieldTab:'tabYield',
   jobs:'tabJobSummary',jobDetail:'tabJobDetail',
   packing:'tabPacking',packingForm:'tabPackingForm',packingPrint:'tabPackingPrint',
-  activity:'tabActivity'
+  activity:'tabActivity',boards:'tabBoards'
 };
 // Which tab-bar button lights up "active" for a given tab name - several
 // names share one button (weekly + weeklyDetail both light up the one
@@ -65,7 +76,7 @@ const TAB_BUTTON_FOR={
   material:'tabBtnMaterial',stalled:'tabBtnStalled',risk:'tabBtnRisk',yieldTab:'tabBtnYield',
   jobs:'tabBtnJobs',jobDetail:'tabBtnJobs',
   packing:'tabBtnPacking',packingForm:'tabBtnPacking',packingPrint:'tabBtnPacking',
-  activity:'tabBtnActivity'
+  activity:'tabBtnActivity',boards:'tabBtnBoards'
 };
 function showTab(name){
   currentTab=name;
@@ -93,6 +104,20 @@ function showTab(name){
   if(name==='jobs')renderJobSummary();
   if(name==='packing')renderPackingTab();
   if(name==='activity')renderActivityLog();
+  if(name==='boards')renderBoardsTab();
+}
+// Not present on gm.html at all, so this is guarded like the other
+// gm.html-excluded render functions even though it's only ever reached
+// via a button gm.html doesn't have either - cheap insurance against a
+// future call site added in the wrong place.
+function renderBoardsTab(){
+  const el=$('boardsAdminKey');
+  if(!el)return;
+  el.textContent=KEY||'— connect above first —';
+}
+function copyAdminKeyFromBoards(){
+  if(!KEY)return;
+  navigator.clipboard.writeText(KEY).catch(()=>{});
 }
 
 async function api(path,opts){
