@@ -857,10 +857,15 @@ const getBatchCompletion = db.prepare(`
   FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
   WHERE pp.batch = ? AND pi.void = 'No'
 `);
+// Voided lines never shipped - a packing slip lists what actually left
+// the floor, not everything ever registered under this batch name. The
+// completion gate above already guarantees every non-voided line is
+// scanned by the time a slip can be created, so this filter alone is
+// enough to make the snapshot "scanned, non-voided parts only".
 const getBatchParts = db.prepare(`
   SELECT pp.unique_id, pp.tag, pp.part_type, pp.width, pp.height, pp.qty, pp.colour
-  FROM parts_panel pp
-  WHERE pp.batch = ?
+  FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
+  WHERE pp.batch = ? AND pi.void = 'No'
   ORDER BY pp.sequence_no ASC, pp.tag ASC
 `);
 function formatPackingSlip(row) {
