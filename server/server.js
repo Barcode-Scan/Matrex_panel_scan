@@ -488,7 +488,14 @@ const getDirectedLine = db.prepare(`
   FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
   WHERE pp.batch = ? AND pp.unique_id = ?
 `);
-const countDirectedTotal = db.prepare('SELECT COUNT(*) AS c FROM parts_panel WHERE batch = ?');
+// Voided lines never block progress elsewhere (getNextExpectedLine above
+// already skips them) - total has to exclude them too, or a voided line
+// permanently caps completion below 100% since it can never become
+// scanned='Yes'.
+const countDirectedTotal = db.prepare(`
+  SELECT COUNT(*) AS c FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
+  WHERE pp.batch = ? AND pi.void = 'No'
+`);
 const countDirectedScanned = db.prepare(`
   SELECT COUNT(*) AS c FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
   WHERE pp.batch = ? AND pi.scanned = 'Yes'
@@ -842,10 +849,13 @@ const listPackingSlips = db.prepare('SELECT id, slip_number, batch, slip_date, d
 const getPackingSlip = db.prepare('SELECT * FROM packing_slips WHERE id = ?');
 const getPackingSlipByNumber = db.prepare('SELECT * FROM packing_slips WHERE slip_number = ?');
 const countSlipsWithPrefix = db.prepare('SELECT COUNT(*) AS c FROM packing_slips WHERE slip_number LIKE ?');
+// total excludes voided lines - same reasoning as countDirectedTotal
+// above, otherwise a batch with any voided line could never be "fully
+// scanned" and would permanently block packing slip creation.
 const getBatchCompletion = db.prepare(`
   SELECT COUNT(*) AS total, SUM(pi.scanned='Yes') AS scanned
   FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
-  WHERE pp.batch = ?
+  WHERE pp.batch = ? AND pi.void = 'No'
 `);
 const getBatchParts = db.prepare(`
   SELECT pp.unique_id, pp.tag, pp.part_type, pp.width, pp.height, pp.qty, pp.colour
@@ -951,8 +961,8 @@ app.delete('/admin/api/packing-slips/:id', requireAdmin, (req, res) => {
 // mutates anything.
 app.get('/viewer/api/batches', requireViewer, (req, res) => {
   const rows = db.prepare(`
-    SELECT pp.batch, COUNT(*) AS total,
-           SUM(pi.scanned='Yes') AS scanned,
+    SELECT pp.batch, SUM(pi.void='No') AS total,
+           SUM(pi.scanned='Yes' AND pi.void='No') AS scanned,
            SUM(pi.void='Yes') AS voided,
            MIN(pi.created_at) AS added_at,
            MAX(pi.scanned_at) AS last_scanned_at
