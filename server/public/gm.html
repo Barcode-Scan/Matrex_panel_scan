@@ -220,7 +220,6 @@
     <button class="tab-btn active" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
     <button class="tab-btn" id="tabBtnWeekly" onclick="showTab('weekly')">Weekly Schedule</button>
     <button class="tab-btn" id="tabBtnJobs" onclick="showTab('jobs')">Job Summary</button>
-    <button class="tab-btn" id="tabBtnBoards" onclick="goToBoards()">Boards &amp; Admin Key</button>
     <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()" style="margin-left:auto">&#128276; Enable Desktop Alerts</button>
   </div>
 
@@ -401,42 +400,6 @@
     <div class="ps-sheet" id="psSheet"></div>
   </div>
 
-  <div id="tabBoards" style="display:none">
-    <h1>Boards &amp; Admin Key</h1>
-    <div class="sub">Every dashboard connected to this server, and the admin key needed to connect a new one.</div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
-      <div>
-        <h2>Boards</h2>
-        <div class="card">
-          <div>
-            <div class="name">Main Dashboard</div>
-            <div class="meta">Full access — every tab, including Activity Log (the audit trail), only ever shown there.</div>
-          </div>
-          <div class="acts"><a class="secondary" href="admin.html" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">&#8599; Open</a></div>
-        </div>
-        <div class="card">
-          <div>
-            <div class="name">GM Dashboard</div>
-            <div class="meta">Production Schedule, Weekly Schedule, Job Summary, Operations. This page.</div>
-          </div>
-        </div>
-        <div class="sub" style="margin-top:6px">Add a card here whenever a new board is built.</div>
-      </div>
-
-      <div>
-        <h2>Admin Key</h2>
-        <div class="sub">Enter this into the "Admin key" field at the top of any dashboard — including a brand-new one — to connect it.</div>
-        <div class="card">
-          <div>
-            <div class="name" id="boardsAdminKey" style="font-family:monospace;font-size:15px;letter-spacing:.3px">—</div>
-            <div class="meta">Read from this browser's saved key, never stored in the page source. Connect above first if it shows a dash.</div>
-          </div>
-          <div class="acts"><button class="secondary" onclick="copyAdminKeyFromBoards()">Copy</button></div>
-        </div>
-      </div>
-    </div>
-  </div>
 </div>
 
 <div class="colf-pop" id="colFilterPopover">
