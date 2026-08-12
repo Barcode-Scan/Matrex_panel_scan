@@ -548,10 +548,34 @@ function openWeekDetail(key){
   showTab('weeklyDetail');
   renderWeekDetail(key);
 }
+// Same material+finish grouping shape as groupByMaterial() (Material
+// Demand tab), scoped to one week's items instead of every open batch -
+// reuses parseQty so a non-numeric Sheet Qty is called out, not dropped
+// or crashed on.
+function renderWeekMaterialSummary(items){
+  const el=$('weeklyMaterialSummaryBody');
+  if(!el)return; // this table doesn't exist on every page
+  const open=items.filter(b=>rowStatus(b)!=='complete');
+  const groups={};
+  open.forEach(b=>{
+    const key=(b.material||'(No Material Specified)')+'|'+(b.finish||'(No Finish Specified)');
+    const g=groups[key]=groups[key]||{material:b.material||'(No Material Specified)',finish:b.finish||'(No Finish Specified)',total:0,unparsed:0};
+    const q=parseQty(b.sheet_qty);
+    q===null?g.unparsed++:g.total+=q;
+  });
+  const rows=Object.values(groups).sort((a,b)=>a.material.localeCompare(b.material)||a.finish.localeCompare(b.finish));
+  if(!rows.length){el.innerHTML='<tr><td colspan="3" class="empty">No open batches with a Sheet Qty due this week.</td></tr>';return;}
+  el.innerHTML=rows.map(r=>`<tr>
+    <td>${esc(r.material)}</td>
+    <td>${esc(r.finish)}</td>
+    <td class="num">${r.total}${r.unparsed?` <span style="color:var(--gray-500);font-weight:400">(+${r.unparsed} non-numeric)</span>`:''}</td>
+  </tr>`).join('');
+}
 function renderWeekDetail(key){
   const items=(groupByWeek()[key])||[];
   $('weeklyDetailTitle').textContent=key==='unscheduled'?'No Target Finish Date':weekLabel(key);
   $('weeklyDetailSub').textContent=items.length+' batch'+(items.length===1?'':'es');
+  renderWeekMaterialSummary(items);
   if(!items.length){$('weeklyDetailList').innerHTML='<div class="empty">No batches.</div>';return;}
   $('weeklyDetailList').innerHTML=items.map(b=>{
     const status=rowStatus(b);
