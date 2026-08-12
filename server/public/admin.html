@@ -228,6 +228,7 @@
     <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
     <button class="tab-btn" id="tabBtnActivity" onclick="goToActivityLog()">Activity Log</button>
     <button class="tab-btn" id="tabBtnBoards" onclick="goToBoards()">Boards &amp; Admin Key</button>
+    <button class="tab-btn" id="tabBtnDeviceSetup" onclick="showTab('deviceSetup')">Phone Setup</button>
     <a href="gm.html" target="_blank" style="margin-left:auto;display:inline-flex;align-items:center;padding:10px 16px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">&#8599; View GM Dashboard</a>
     <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()">&#128276; Enable Desktop Alerts</button>
   </div>
@@ -497,6 +498,55 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="tabDeviceSetup" style="display:none">
+    <h1>Phone Setup</h1>
+    <div class="sub">Steps to turn a new iPhone or Android phone into a scanner. Works over this WiFi network only — the phone won't be able to reach the server off this LAN.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+      <div>
+        <h2>iPhone</h2>
+        <div class="card"><div>
+          <div class="name">1. Join this WiFi network</div>
+          <div class="meta">Same network as this computer. Required for every step below and for scanning afterward.</div>
+        </div></div>
+        <div class="card"><div>
+          <div class="name">2. Trust the server's certificate</div>
+          <div class="meta">Open this link in Safari, then go to Settings &gt; General &gt; VPN &amp; Device Management and install the downloaded profile, then Settings &gt; General &gt; About &gt; Certificate Trust Settings and turn on full trust for it.</div>
+        </div><div class="acts"><a class="secondary" href="http://192.168.20.15:8765/tls-cert.pem" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Download Certificate</a></div></div>
+        <div class="card"><div>
+          <div class="name">3. Open the app in Safari</div>
+          <div class="meta">Then tap the Share icon and choose "Add to Home Screen" — installs it as an app icon, no App Store needed.</div>
+        </div><div class="acts"><a class="secondary" href="https://barcode-scan.github.io/Matrex_panel_scan/" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Open App</a></div></div>
+        <div class="card"><div>
+          <div class="name">4. Set the Receiver URL</div>
+          <div class="meta">Open the app from the home screen icon &gt; Settings &gt; Receiver URL &gt; enter <code>https://192.168.20.15</code> &gt; Save. Only needs to be done once.</div>
+        </div></div>
+      </div>
+
+      <div>
+        <h2>Android</h2>
+        <div class="card"><div>
+          <div class="name">1. Join this WiFi network</div>
+          <div class="meta">Same network as this computer. Required for every step below and for scanning afterward.</div>
+        </div></div>
+        <div class="card"><div>
+          <div class="name">2. Trust the server's certificate</div>
+          <div class="meta">Download it, then go to Settings &gt; Security (or Security &amp; Privacy) &gt; More security settings &gt; Encryption &amp; credentials &gt; Install a certificate &gt; CA certificate, and select the downloaded file. Menu names vary by phone brand.</div>
+        </div><div class="acts"><a class="secondary" href="http://192.168.20.15:8765/tls-cert.pem" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Download Certificate</a></div></div>
+        <div class="card"><div>
+          <div class="name">3. Open the app in Chrome</div>
+          <div class="meta">Then tap the &#8942; menu and choose "Add to Home screen" / "Install app" — installs it as an app icon, no Play Store needed.</div>
+        </div><div class="acts"><a class="secondary" href="https://barcode-scan.github.io/Matrex_panel_scan/" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Open App</a></div></div>
+        <div class="card"><div>
+          <div class="name">4. Set the Receiver URL</div>
+          <div class="meta">Open the app from the home screen icon &gt; Settings &gt; Receiver URL &gt; enter <code>https://192.168.20.15</code> &gt; Save. Only needs to be done once.</div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="sub" style="margin-top:14px">Last step for either phone: it'll show up as <b>Pending</b> on the Operations tab after its first scan attempt — approve it there before it can save scans to the server.</div>
   </div>
 </div>
 

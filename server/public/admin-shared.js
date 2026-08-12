@@ -64,7 +64,7 @@ const TAB_CONTAINERS={
   material:'tabMaterial',stalled:'tabStalled',risk:'tabRisk',yieldTab:'tabYield',
   jobs:'tabJobSummary',jobDetail:'tabJobDetail',
   packing:'tabPacking',packingForm:'tabPackingForm',packingPrint:'tabPackingPrint',
-  activity:'tabActivity',boards:'tabBoards'
+  activity:'tabActivity',boards:'tabBoards',deviceSetup:'tabDeviceSetup'
 };
 // Which tab-bar button lights up "active" for a given tab name - several
 // names share one button (weekly + weeklyDetail both light up the one
@@ -76,7 +76,7 @@ const TAB_BUTTON_FOR={
   material:'tabBtnMaterial',stalled:'tabBtnStalled',risk:'tabBtnRisk',yieldTab:'tabBtnYield',
   jobs:'tabBtnJobs',jobDetail:'tabBtnJobs',
   packing:'tabBtnPacking',packingForm:'tabBtnPacking',packingPrint:'tabBtnPacking',
-  activity:'tabBtnActivity',boards:'tabBtnBoards'
+  activity:'tabBtnActivity',boards:'tabBtnBoards',deviceSetup:'tabBtnDeviceSetup'
 };
 function showTab(name){
   currentTab=name;
