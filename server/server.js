@@ -197,6 +197,17 @@ app.post('/admin/api/devices/:id/revoke', requireAdmin, (req, res) => {
   logAudit(actorFrom(req), 'DEVICE_REVOKE', req.params.id);
   res.json({ ok: true });
 });
+// Removes the device row entirely - unlike revoke, this isn't a status a
+// phone can be put back into by re-approving it. If the same physical
+// phone scans again later it just re-registers as a brand-new Pending
+// device (device_id is generated client-side, so this has no effect on
+// its past scans in the scans table, only on the approvals list itself).
+app.delete('/admin/api/devices/:id', requireAdmin, (req, res) => {
+  const row = getDevice.get(req.params.id);
+  db.prepare('DELETE FROM devices WHERE device_id = ?').run(req.params.id);
+  if (row) logAudit(actorFrom(req), 'DEVICE_DELETE', req.params.id, `was ${row.status}, "${row.device_name || ''}"`);
+  res.json({ ok: true });
+});
 
 // ── UPLOAD — the phone resends the *whole day's* rows array on every
 // call (debounced after each scan, plus midnight/manual/retry), so this

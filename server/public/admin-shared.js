@@ -131,8 +131,9 @@ async function load(){
   try{
     const devices=await api('/admin/api/devices');
     if(!devices.length){$('list').innerHTML='<div class="empty">No devices have registered yet.</div>';return;}
+    devicesCache=devices;
     $('list').innerHTML=devices.map(d=>`
-      <div class="card">
+      <div class="card" data-deviceid="${esc(d.device_id)}" oncontextmenu="openDeviceCtxMenu(event,'${esc(d.device_id)}')">
         <div>
           <div class="name">${esc(d.device_name||'(unnamed)')}</div>
           <div class="meta">${esc(d.device_id)} · first seen ${fmt(d.first_seen)} · last seen ${fmt(d.last_seen)}</div>
@@ -145,7 +146,28 @@ async function load(){
       </div>`).join('');
   }catch(e){$('list').innerHTML='<div class="empty">Wrong key, or server unreachable.</div>';}
 }
+let devicesCache=[];
 async function act(id,action){await api(`/admin/api/devices/${encodeURIComponent(id)}/${action}`,{method:'POST'});load();}
+// Right-click a device for Delete - same shared #rowCtxMenu the schedule
+// grid and packing slips already use, just populated with one item since
+// there's nothing to edit on a device row.
+function openDeviceCtxMenu(evt,id){
+  evt.preventDefault();
+  evt.stopPropagation();
+  const menu=$('rowCtxMenu');
+  menu.innerHTML=`<div class="ctx-menu-item danger" onclick="closeRowContextMenu();deleteDevice('${id}')">${ICON_DELETE} Delete</div>`;
+  menu.style.top=evt.clientY+'px';
+  menu.style.left=Math.min(evt.clientX,window.innerWidth-170)+'px';
+  menu.style.display='block';
+}
+async function deleteDevice(id){
+  const d=devicesCache.find(x=>x.device_id===id);
+  if(!confirm('Delete '+(d?(d.device_name||d.device_id):id)+' from the device list? This cannot be undone - if it scans again later it will show up as a brand-new Pending device.'))return;
+  try{
+    await api('/admin/api/devices/'+encodeURIComponent(id),{method:'DELETE'});
+    await load();
+  }catch(e){alert('Could not delete: '+e.message);}
+}
 function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function fmt(iso){return iso?new Date(iso).toLocaleString():'—';}
 
@@ -1230,7 +1252,7 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#rowCtxMenu'))closeRowContextMenu();
 });
 document.addEventListener('contextmenu',e=>{
-  if(!e.target.closest('tr[data-batch], [data-slipid]'))closeRowContextMenu();
+  if(!e.target.closest('tr[data-batch], [data-slipid], [data-deviceid]'))closeRowContextMenu();
 });
 // Right-click a Production Schedule row for Edit/Delete (or Save/Cancel
 // if that row is already mid-edit) - same actions the old Actions column
