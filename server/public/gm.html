@@ -27,7 +27,8 @@
   button.secondary{background:var(--gray-200);color:var(--gray-900)}
   button.danger{background:var(--red-50);color:var(--red-600)}
   button.ok{background:var(--green-50);color:var(--green-700)}
-  .card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px}
+  .card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;transition:background .1s}
+  .card:hover{background:#E8F0FE}
   .name{font-weight:700;font-size:14px}
   .meta{font-size:12px;color:var(--gray-500);margin-top:2px}
   .pill{font-size:11px;font-weight:800;padding:3px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:.4px}
@@ -40,8 +41,8 @@
   .pill.working{background:var(--amber-50);color:var(--amber-700)}
   .pill.notstarted{background:var(--red-50);color:var(--red-600)}
   .week-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
-  .week-card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:12px;padding:16px;cursor:pointer;transition:box-shadow .15s}
-  .week-card:hover{box-shadow:0 4px 14px rgba(16,24,40,.08)}
+  .week-card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:12px;padding:16px;cursor:pointer;transition:box-shadow .15s,background .1s}
+  .week-card:hover{box-shadow:0 4px 14px rgba(16,24,40,.08);background:#E8F0FE}
   .week-card.current{background:var(--green-50);border-color:var(--green-700)}
   .week-card.overdue{background:var(--red-50);border-color:var(--red-600)}
   .week-card.unscheduled{border-style:dashed}
