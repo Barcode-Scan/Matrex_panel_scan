@@ -1460,14 +1460,22 @@ async function deleteBatchFromGrid(batch){
 // batch this is without having to flip back to Production Schedule.
 let currentBatchLabels=[];
 let labelFilters={part_type:'',scanned:''};
+let currentLabelsBatch=null;
+// Selection lives independent of the filter dropdowns but is cleared
+// whenever the batch or filters change - "what's checked on screen right
+// now" should always be exactly what a bulk action affects, never a
+// stale selection hiding behind a filter that's since moved on.
+let selectedLabelIds=new Set();
 
 async function viewBatchLabels(batch){
   showTab('labels');
+  currentLabelsBatch=batch;
   $('labelsTitle').textContent=batch;
   $('labelsSub').textContent='Loading…';
   $('labelsFilterBar').innerHTML='';
   $('labelsContent').innerHTML='<div class="empty">Loading…</div>';
   labelFilters={part_type:'',scanned:''};
+  selectedLabelIds=new Set();
   try{
     const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
     const sched=data.schedule||{};
@@ -1490,11 +1498,11 @@ async function viewBatchLabels(batch){
 function renderLabelFilterBar(){
   const types=[...new Set(currentBatchLabels.map(l=>l.part_type).filter(Boolean))].sort();
   $('labelsFilterBar').innerHTML=`
-    <select id="filtLabelType" onchange="labelFilters.part_type=this.value;renderFilteredLabels()">
+    <select id="filtLabelType" onchange="labelFilters.part_type=this.value;selectedLabelIds=new Set();renderFilteredLabels()">
       <option value="">All Types</option>
       ${types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}
     </select>
-    <select id="filtLabelScanned" onchange="labelFilters.scanned=this.value;renderFilteredLabels()">
+    <select id="filtLabelScanned" onchange="labelFilters.scanned=this.value;selectedLabelIds=new Set();renderFilteredLabels()">
       <option value="">Scanned &amp; Not Scanned</option>
       <option value="Yes">Scanned</option>
       <option value="No">Not Scanned</option>
@@ -1505,6 +1513,7 @@ function renderFilteredLabels(){
   if(labelFilters.part_type)rows=rows.filter(l=>(l.part_type||'')===labelFilters.part_type);
   if(labelFilters.scanned)rows=rows.filter(l=>l.scanned===labelFilters.scanned);
   $('labelsContent').innerHTML=rows.length?labelRowsHtml(rows):'<div class="empty">No matches.</div>';
+  renderLabelsBulkBar();
 }
 function labelRowsHtml(labels){
   if(!labels.length)return'<div class="empty">No labels in this batch.</div>';
@@ -1512,8 +1521,66 @@ function labelRowsHtml(labels){
     const dc=l.void==='Yes'?'void':l.scanned==='Yes'?'scanned':'';
     const statusText=l.void==='Yes'?'VOID':l.scanned==='Yes'?'Scanned':'Not scanned';
     const sub=[l.project,l.floor,l.part_type,[l.width,l.height].filter(Boolean).join(' X '),l.qty,l.colour].filter(Boolean).map(esc).join(' · ');
-    return`<div class="bl-row"><div class="bl-dot ${dc}"></div><div class="bl-info"><div class="bl-name">${esc(l.tag||l.unique_id)}</div><div class="bl-sub">${sub?sub+' · ':''}${esc(statusText)}</div></div></div>`;
+    // Already-voided labels can't be voided again (the endpoint rejects
+    // it), so they get no checkbox - nothing for a bulk action to do to
+    // them.
+    const cb=l.void==='Yes'?'<span style="width:16px;flex-shrink:0"></span>':`<input type="checkbox" style="flex-shrink:0" ${selectedLabelIds.has(l.unique_id)?'checked':''} onchange="toggleLabelSelect('${esc(l.unique_id)}',this.checked)">`;
+    return`<div class="bl-row">${cb}<div class="bl-dot ${dc}"></div><div class="bl-info"><div class="bl-name">${esc(l.tag||l.unique_id)}</div><div class="bl-sub">${sub?sub+' · ':''}${esc(statusText)}</div></div></div>`;
   }).join('');
+}
+function toggleLabelSelect(uid,checked){
+  checked?selectedLabelIds.add(uid):selectedLabelIds.delete(uid);
+  renderLabelsBulkBar();
+}
+function visibleVoidableLabelIds(){
+  let rows=currentBatchLabels;
+  if(labelFilters.part_type)rows=rows.filter(l=>(l.part_type||'')===labelFilters.part_type);
+  if(labelFilters.scanned)rows=rows.filter(l=>l.scanned===labelFilters.scanned);
+  return rows.filter(l=>l.void!=='Yes').map(l=>l.unique_id);
+}
+function selectAllVisibleLabels(){
+  selectedLabelIds=new Set(visibleVoidableLabelIds());
+  renderFilteredLabels();
+}
+function clearLabelSelection(){
+  selectedLabelIds=new Set();
+  renderFilteredLabels();
+}
+// Bulk void reuses the exact same category+reason contract as a single
+// part's Void (NOTE_CATEGORIES, "Other" requires text) - one reason
+// applied to every selected label, written to each one's own part_notes
+// row exactly like the single-part flow does.
+function renderLabelsBulkBar(){
+  const bar=$('labelsBulkBar');
+  if(!bar)return;
+  const n=selectedLabelIds.size;
+  const voidableOnScreen=visibleVoidableLabelIds().length;
+  if(!voidableOnScreen){bar.style.display='none';return;}
+  bar.style.display='flex';
+  if(!n){
+    bar.innerHTML=`<button class="secondary" onclick="selectAllVisibleLabels()">Select All (${voidableOnScreen})</button>
+      <span class="meta">Check labels below to void more than one at once.</span>`;
+    return;
+  }
+  bar.innerHTML=`
+    <strong>${n} selected</strong>
+    <button class="secondary" onclick="clearLabelSelection()">Clear</button>
+    <select id="bulkVoidCat">${NOTE_CATEGORIES.map(([v,l])=>`<option value="${v}">${esc(l)}</option>`).join('')}</select>
+    <input id="bulkVoidTxt" placeholder="Details (required for Other)" style="flex:1;min-width:160px">
+    <button class="danger-solid" onclick="bulkVoidSelectedLabels()">Void Selected</button>`;
+}
+async function bulkVoidSelectedLabels(){
+  const category=$('bulkVoidCat').value,note=$('bulkVoidTxt').value.trim();
+  if(category==='OTHER'&&!note){alert('Details are required for "Other".');return;}
+  const ids=[...selectedLabelIds];
+  if(!confirm('Void '+ids.length+' label'+(ids.length===1?'':'s')+'? This flags them on every future scan and cannot be undone from this screen.'))return;
+  let failed=0;
+  for(const uid of ids){
+    try{await api('/admin/api/parts/void',{method:'POST',body:JSON.stringify({unique_id:uid,category,note,device:'ADMIN'})});}
+    catch(e){failed++;}
+  }
+  if(failed)alert(failed+' of '+ids.length+' could not be voided (already voided, or a connection issue) - the rest went through.');
+  if(currentLabelsBatch)viewBatchLabels(currentLabelsBatch);
 }
 
 // Production Schedule is the landing tab now, so its grid needs to load
