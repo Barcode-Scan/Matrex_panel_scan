@@ -120,6 +120,32 @@ function deviceGate(req, res, next) {
 
 app.get('/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 
+// The server has no real landing page - / would otherwise 404. This exists
+// so the "Receiver URL" QR code in the admin Phone Setup tab has somewhere
+// useful to open: a phone scans it, lands here, and copies the URL shown
+// straight into the app's Settings screen instead of typing an IP by hand.
+app.get('/', (req, res) => {
+  const url = `${req.protocol}://${req.hostname}`;
+  res.type('html').send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Matrex Scan Receiver</title>
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F5F5F7;color:#111827;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
+  .card{background:#fff;border:1.5px solid #E5E7EB;border-radius:16px;padding:28px 24px;max-width:360px;width:100%}
+  h1{font-size:17px;margin:0 0 6px}
+  p{font-size:13px;color:#6B7280;margin:0 0 18px}
+  .url{font-family:ui-monospace,Menlo,monospace;font-size:16px;font-weight:600;background:#F5F5F7;border-radius:10px;padding:14px;word-break:break-all;margin-bottom:14px}
+  button{width:100%;padding:12px;border:none;border-radius:10px;background:#0071E3;color:#fff;font-weight:600;font-size:14px;cursor:pointer}
+  button.copied{background:#16A34A}
+</style></head><body>
+<div class="card">
+  <h1>Matrex Scan Receiver</h1>
+  <p>Paste this into the app's Settings &gt; Receiver URL field.</p>
+  <div class="url" id="u">${url}</div>
+  <button id="b" onclick="navigator.clipboard.writeText(document.getElementById('u').textContent).then(()=>{const b=document.getElementById('b');b.textContent='Copied';b.classList.add('copied');}).catch(()=>{})">Copy</button>
+</div>
+</body></html>`);
+});
+
 // Serves only the public certificate (never the private key) so a phone
 // can install it as a trusted profile instead of clicking through Safari's
 // browser warning, which doesn't actually make the app's fetch() calls
