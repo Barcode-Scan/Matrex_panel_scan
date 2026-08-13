@@ -231,23 +231,24 @@
     <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()">&#128276; Enable Desktop Alerts</button>
   </div>
 
-  <!-- Lives outside every tab container on purpose: it must stay reachable
-       regardless of which tabs a given page has (this used to be inside
-       Operations specifically, which broke gm.html once that tab's button
-       was removed there - the key input became impossible to reach at
-       all, not just hidden behind a password). -->
-  <div class="keybar">
-    <input id="key" type="password" placeholder="Admin key">
-    <input id="actorName" placeholder="Your name (for the activity log)" style="max-width:260px">
-    <button onclick="saveKey()">Connect</button>
-  </div>
-
   <div id="tabOperations" style="display:none">
   <div class="ops-subtabbar" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1.5px solid var(--gray-200)">
     <button class="tab-btn active" id="opsSubBtnDevices" onclick="showOpsSubTab('devices')">Device Approvals</button>
     <button class="tab-btn" id="opsSubBtnActivity" onclick="showOpsSubTab('activity')">Activity Log</button>
     <button class="tab-btn" id="opsSubBtnBoards" onclick="showOpsSubTab('boards')">Boards &amp; Admin Key</button>
     <button class="tab-btn" id="opsSubBtnPhoneSetup" onclick="showOpsSubTab('phoneSetup')">Phone Setup</button>
+  </div>
+  <!-- Only reachable from inside Operations now - unlike gm.html, this
+       page's Operations button is always in the tab bar, so nesting the
+       key input here doesn't create the "impossible to reach" problem
+       that happened on gm.html once its Operations button was removed
+       (see gm.html for why its own keybar stays outside every tab). The
+       key persists in localStorage once entered, so this is a one-time
+       stop per browser, not a recurring detour. -->
+  <div class="keybar">
+    <input id="key" type="password" placeholder="Admin key">
+    <input id="actorName" placeholder="Your name (for the activity log)" style="max-width:260px">
+    <button onclick="saveKey()">Connect</button>
   </div>
   <div id="opsDeviceApprovals">
   <h1>Device Approvals</h1>
@@ -293,7 +294,7 @@
 
   <div class="rep-sub">Registry status</div>
   <div class="rep-actions"><button class="secondary" onclick="csvDownload('registry')">Download CSV</button></div>
-  <div id="repRegistry"><div class="empty">Enter the admin key above to load.</div></div>
+  <div id="repRegistry"><div class="empty">Enter the admin key to load.</div></div>
 
   <div class="rep-sub">Scans by outcome</div>
   <div class="rep-actions"><button class="secondary" onclick="csvDownload('matchStatus')">Download CSV</button></div>

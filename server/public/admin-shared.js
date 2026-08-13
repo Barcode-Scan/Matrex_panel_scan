@@ -271,7 +271,7 @@ let currentPartId=null;
 async function lookupPart(){
   const id=$('partId').value.trim().toUpperCase();
   if(!id){$('partResult').innerHTML='';return;}
-  if(!KEY){$('partResult').innerHTML='<div class="empty">Enter the admin key above first.</div>';return;}
+  if(!KEY){$('partResult').innerHTML='<div class="empty">Enter the admin key first.</div>';return;}
   currentPartId=id;
   $('partResult').innerHTML='<div class="empty">Looking up…</div>';
   try{
@@ -352,7 +352,7 @@ function tbl(headers,rows){
 }
 
 async function loadReportSummary(){
-  if(!KEY){$('repRegistry').innerHTML='<div class="empty">Enter the admin key above to load.</div>';return;}
+  if(!KEY){$('repRegistry').innerHTML='<div class="empty">Enter the admin key to load.</div>';return;}
   try{
     const data=await api('/admin/api/report/summary');
     repData.registry=data.registry;repData.matchStatus=data.match_status;
@@ -441,7 +441,7 @@ function renderScheduleHead(){
 }
 async function loadScheduleList(){
   if(!$('scheduleHeadRow').children.length)renderScheduleHead();
-  if(!KEY){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Enter the admin key above to load.</td></tr>';return;}
+  if(!KEY){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Enter the admin key to load.</td></tr>';return;}
   // Skip while a row is mid-edit - a background refresh replaces the grid's
   // innerHTML wholesale, which would silently wipe out whatever's typed
   // into that row's inputs before it's saved. Resumes on its own within
@@ -1169,7 +1169,7 @@ function renderAtRisk(){
 async function renderActivityLog(){
   const el=$('activityLogList');
   if(!el)return;
-  if(!KEY){el.innerHTML='<div class="empty">Enter the admin key above to load.</div>';return;}
+  if(!KEY){el.innerHTML='<div class="empty">Enter the admin key to load.</div>';return;}
   try{
     const data=await api('/admin/api/audit-log');
     const entries=data.entries||[];
