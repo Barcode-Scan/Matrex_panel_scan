@@ -1389,7 +1389,7 @@ function renderScheduleGrid(){
       <td>${field('part_name')}</td>
       <td class="gc-batch">${esc(b.batch)}</td>
       <td><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${b.scanned}/${b.total}</div></div></td>
-      <td>${field('sheet_qty')}</td>
+      <td class="gc-num">${field('sheet_qty')}</td>
       <td class="gc-comment">${field('comment')}</td>
       <td>${field('tasked')}</td>
     </tr>`;
