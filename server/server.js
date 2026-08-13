@@ -885,7 +885,14 @@ const insertPackingSlip = db.prepare(`
 const listPackingSlips = db.prepare('SELECT id, slip_number, batch, slip_date, department, ship_to, created_at FROM packing_slips ORDER BY id DESC');
 const getPackingSlip = db.prepare('SELECT * FROM packing_slips WHERE id = ?');
 const getPackingSlipByNumber = db.prepare('SELECT * FROM packing_slips WHERE slip_number = ?');
-const countSlipsWithPrefix = db.prepare('SELECT COUNT(*) AS c FROM packing_slips WHERE slip_number LIKE ?');
+// COUNT(*)+1 looked right but breaks the moment any slip is ever deleted -
+// deleting PS-26-001 drops the count back to 0, so the next slip computes
+// "PS-26-001" again and collides with whatever's still using PS-26-002+.
+// MAX of the actual numeric suffix never goes backwards on a deletion.
+const maxSlipSeqWithPrefix = db.prepare(`
+  SELECT MAX(CAST(SUBSTR(slip_number, LENGTH(?) + 1) AS INTEGER)) AS m
+  FROM packing_slips WHERE slip_number LIKE ?
+`);
 // total excludes voided lines - same reasoning as countDirectedTotal
 // above, otherwise a batch with any voided line could never be "fully
 // scanned" and would permanently block packing slip creation.
@@ -931,15 +938,10 @@ app.post('/admin/api/packing-slips', requireAdmin, (req, res) => {
 
   const now = new Date().toISOString();
   const prefix = `PS-${new Date().getFullYear().toString().slice(-2)}-`;
-  const seq = countSlipsWithPrefix.get(prefix + '%').c + 1;
-  const slipNumber = prefix + String(seq).padStart(3, '0');
-
   const schedule = getProductionSchedule.get(batch) || {};
   const parts = getBatchParts.all(batch);
   const actor = actorFrom(req);
-
-  insertPackingSlip.run({
-    slip_number: slipNumber,
+  const insertFields = {
     batch,
     slip_date: b.slip_date || now.slice(0, 10),
     department: b.department || null,
@@ -952,7 +954,28 @@ app.post('/admin/api/packing-slips', requireAdmin, (req, res) => {
     parts_snapshot: JSON.stringify(parts),
     now,
     created_by: actor
-  });
+  };
+
+  // Four dashboards can now hit this at once - MAX+1 fixes the deletion-gap
+  // bug, but two requests racing between the MAX read and the INSERT could
+  // still both land on the same number. Retry with the next number instead
+  // of 500ing if that happens; a handful of attempts is more than enough
+  // for a UNIQUE collision that only occurs from real concurrent clicks.
+  let slipNumber, lastErr;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const seq = (maxSlipSeqWithPrefix.get(prefix, prefix + '%').m || 0) + 1;
+    slipNumber = prefix + String(seq).padStart(3, '0');
+    try {
+      insertPackingSlip.run({ slip_number: slipNumber, ...insertFields });
+      lastErr = null;
+      break;
+    } catch (e) {
+      lastErr = e;
+      if (!/UNIQUE constraint failed: packing_slips\.slip_number/.test(e.message)) throw e;
+    }
+  }
+  if (lastErr) return res.status(500).json({ ok: false, error: 'Could not allocate a packing slip number - try again.' });
+
   logAudit(actor, 'PACKING_SLIP_CREATE', slipNumber, `batch ${batch}`);
 
   res.json({ ok: true, slip: formatPackingSlip(getPackingSlipByNumber.get(slipNumber)) });
