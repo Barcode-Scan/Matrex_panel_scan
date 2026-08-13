@@ -227,9 +227,6 @@
     <button class="tab-btn" id="tabBtnJobs" onclick="showTab('jobs')">Job Summary</button>
     <button class="tab-btn" id="tabBtnPacking" onclick="showTab('packing')">Packing Slips</button>
     <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
-    <button class="tab-btn" id="tabBtnActivity" onclick="goToActivityLog()">Activity Log</button>
-    <button class="tab-btn" id="tabBtnBoards" onclick="goToBoards()">Boards &amp; Admin Key</button>
-    <button class="tab-btn" id="tabBtnDeviceSetup" onclick="showTab('deviceSetup')">Phone Setup</button>
     <a href="gm.html" target="_blank" style="margin-left:auto;display:inline-flex;align-items:center;padding:10px 16px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">&#8599; View GM Dashboard</a>
     <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()">&#128276; Enable Desktop Alerts</button>
   </div>
@@ -246,6 +243,13 @@
   </div>
 
   <div id="tabOperations" style="display:none">
+  <div class="ops-subtabbar" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1.5px solid var(--gray-200)">
+    <button class="tab-btn active" id="opsSubBtnDevices" onclick="showOpsSubTab('devices')">Device Approvals</button>
+    <button class="tab-btn" id="opsSubBtnActivity" onclick="showOpsSubTab('activity')">Activity Log</button>
+    <button class="tab-btn" id="opsSubBtnBoards" onclick="showOpsSubTab('boards')">Boards &amp; Admin Key</button>
+    <button class="tab-btn" id="opsSubBtnPhoneSetup" onclick="showOpsSubTab('phoneSetup')">Phone Setup</button>
+  </div>
+  <div id="opsDeviceApprovals">
   <h1>Device Approvals</h1>
   <div class="sub">Only approved devices can write scans to the server. New phones show up here as Pending.</div>
   <div class="card">
@@ -308,6 +312,116 @@
   <div class="rep-sub">Notes &amp; defects by category</div>
   <div class="rep-actions"><button class="secondary" onclick="csvDownload('notes')">Download CSV</button></div>
   <div id="repNotes"></div>
+  </div>
+
+  <div id="opsActivity" style="display:none">
+    <h1>Activity Log</h1>
+    <div class="sub">Every edit, create, and delete made from an admin dashboard — including the GM's copy. Not shown there; this view is only ever on this page.</div>
+    <div id="activityLogList"></div>
+  </div>
+
+  <div id="opsBoards" style="display:none">
+    <h1>Boards &amp; Admin Key</h1>
+    <div class="sub">Every dashboard connected to this server, and the admin key needed to connect a new one.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+      <div>
+        <h2>Boards</h2>
+        <div class="card">
+          <div>
+            <div class="name">Main Dashboard</div>
+            <div class="meta">Full access — every tab, including Activity Log (the audit trail), only ever shown here.</div>
+          </div>
+          <div class="acts"><a class="secondary" href="admin.html" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">&#8599; Open</a></div>
+        </div>
+        <div class="card">
+          <div>
+            <div class="name">GM Dashboard</div>
+            <div class="meta">Production Schedule, Weekly Schedule, Job Summary, Operations. No Activity Log — the audit trail stays main-dashboard-only.</div>
+          </div>
+          <div class="acts"><a class="secondary" href="gm.html" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">&#8599; Open</a></div>
+        </div>
+        <div class="sub" style="margin-top:6px">Add a card here whenever a new board is built.</div>
+      </div>
+
+      <div>
+        <h2>Admin Key</h2>
+        <div class="sub">Enter this into the "Admin key" field at the top of any dashboard — including a brand-new one — to connect it.</div>
+        <div class="card">
+          <div>
+            <div class="name" id="boardsAdminKey" style="font-family:monospace;font-size:15px;letter-spacing:.3px">—</div>
+            <div class="meta">Read from this browser's saved key, never stored in the page source. Connect above first if it shows a dash.</div>
+          </div>
+          <div class="acts"><button class="secondary" onclick="copyAdminKeyFromBoards()">Copy</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="opsPhoneSetup" style="display:none">
+    <h1>Phone Setup</h1>
+    <div class="sub">Steps to turn a new iPhone or Android phone into a scanner. Works over this WiFi network only — the phone won't be able to reach the server off this LAN.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+      <div>
+        <h2>iPhone</h2>
+        <div class="card"><div>
+          <div class="name">1. Join this WiFi network</div>
+          <div class="meta">Same network as this computer. Required for every step below and for scanning afterward.</div>
+        </div></div>
+        <div class="card"><div>
+          <div class="name">2. Trust the server's certificate</div>
+          <div class="meta">Open this link in Safari, then go to Settings &gt; General &gt; VPN &amp; Device Management and install the downloaded profile, then Settings &gt; General &gt; About &gt; Certificate Trust Settings and turn on full trust for it. Or just scan the QR code with the iPhone's camera.</div>
+        </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
+          <a class="secondary" href="http://192.168.20.15:8765/tls-cert.pem" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Download Certificate</a>
+          <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 31 31" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h31v31H0z"/><path stroke="#111827" d="M1 1.5h7m1 0h2m3 0h3m3 0h2m1 0h7M1 2.5h1m5 0h1m3 0h1m1 0h1m2 0h1m2 0h1m1 0h1m1 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h2m1 0h3m3 0h1m2 0h1m1 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m2 0h2m4 0h1m6 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m2 0h2m1 0h1m2 0h2m2 0h2m1 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h2m3 0h2m2 0h1m2 0h1m1 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M14 8.5h1m4 0h1M1 9.5h1m1 0h1m3 0h2m5 0h1m1 0h5m3 0h1m2 0h1m1 0h1M3 10.5h3m2 0h4m5 0h4m2 0h2m3 0h2M1 11.5h1m1 0h1m1 0h3m1 0h1m1 0h6m1 0h1m1 0h2m3 0h3m1 0h1M5 12.5h2m4 0h1m3 0h2m1 0h1m2 0h1m1 0h1M1 13.5h3m1 0h1m1 0h4m3 0h2m2 0h1m1 0h2m3 0h2m2 0h1M1 14.5h1m1 0h1m5 0h3m2 0h2m1 0h2m1 0h1m4 0h1m2 0h2M1 15.5h1m2 0h2m1 0h1m1 0h1m1 0h2m3 0h1m2 0h4m2 0h3m1 0h1M1 16.5h1m1 0h1m7 0h4m4 0h1m7 0h1M2 17.5h4m1 0h1m3 0h1m2 0h1m3 0h1m2 0h3m5 0h1M2 18.5h1m2 0h2m1 0h3m2 0h1m4 0h3m4 0h2m1 0h2M1 19.5h4m1 0h4m4 0h9m6 0h1M3 20.5h1m2 0h1m1 0h1m4 0h1m1 0h1m1 0h2m2 0h1m1 0h5M1 21.5h4m1 0h2m3 0h2m1 0h2m2 0h1m1 0h7m1 0h1M9 22.5h4m1 0h2m2 0h2m1 0h1m3 0h2m2 0h1M1 23.5h7m1 0h2m2 0h1m4 0h4m1 0h1m1 0h1m3 0h1M1 24.5h1m5 0h1m3 0h1m2 0h1m1 0h1m2 0h3m3 0h3M1 25.5h1m1 0h3m1 0h1m2 0h2m2 0h1m2 0h2m2 0h5m3 0h1M1 26.5h1m1 0h3m1 0h1m2 0h3m5 0h4m1 0h2M1 27.5h1m1 0h3m1 0h1m1 0h2m5 0h1m1 0h1m2 0h3m1 0h2m1 0h2M1 28.5h1m5 0h1m2 0h1m1 0h2m1 0h1m1 0h2m1 0h1m4 0h1M1 29.5h7m1 0h1m2 0h4m2 0h3m2 0h1m1 0h3m1 0h1"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
+        </div></div>
+        <div class="card"><div>
+          <div class="name">3. Open the app in Safari</div>
+          <div class="meta">Then tap the Share icon and choose "Add to Home Screen" — installs it as an app icon, no App Store needed. Or scan the QR code to open it straight away.</div>
+        </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
+          <a class="secondary" href="https://barcode-scan.github.io/Matrex_panel_scan/" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Open App</a>
+          <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 35 35" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h35v35H0z"/><path stroke="#111827" d="M1 1.5h7m2 0h4m3 0h1m1 0h4m1 0h1m2 0h7M1 2.5h1m5 0h1m2 0h3m3 0h2m1 0h1m7 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h1m3 0h1m1 0h2m3 0h5m2 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h3m1 0h1m5 0h2m2 0h2m2 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h1m1 0h2m1 0h4m3 0h2m1 0h1m2 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h3m2 0h2m2 0h1m1 0h1m1 0h2m3 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m2 0h2m1 0h1m1 0h1m2 0h3m1 0h1M1 9.5h1m1 0h5m2 0h1m1 0h3m3 0h1m1 0h1m2 0h3m1 0h5M1 10.5h1m1 0h1m5 0h1m1 0h4m2 0h4m1 0h1m1 0h1m2 0h2m1 0h4M1 11.5h1m1 0h1m2 0h3m5 0h3m1 0h1m10 0h1m1 0h2M3 12.5h1m1 0h1m3 0h3m1 0h2m2 0h9m3 0h4M3 13.5h1m1 0h4m1 0h1m4 0h1m1 0h1m2 0h2m1 0h1m2 0h1m2 0h2M1 14.5h1m2 0h3m1 0h1m1 0h5m1 0h1m1 0h2m2 0h1m4 0h1m2 0h4M2 15.5h2m2 0h2m1 0h1m1 0h2m2 0h3m1 0h1m1 0h3m1 0h3m1 0h1m1 0h2M2 16.5h1m1 0h1m1 0h1m2 0h1m2 0h2m2 0h1m5 0h2m2 0h2m1 0h3M2 17.5h1m1 0h2m1 0h1m1 0h2m3 0h3m1 0h1m5 0h3m1 0h3m2 0h1M2 18.5h1m1 0h1m6 0h2m2 0h1m4 0h3m1 0h1m2 0h2m1 0h2m1 0h1M2 19.5h2m2 0h2m1 0h3m2 0h3m2 0h1m1 0h2m2 0h1m2 0h2m1 0h2M1 20.5h1m1 0h1m4 0h6m1 0h1m6 0h5m1 0h5M3 21.5h5m6 0h1m1 0h1m2 0h1m3 0h1m1 0h2m3 0h1m1 0h2M1 22.5h4m1 0h1m2 0h3m2 0h4m3 0h1m2 0h1m2 0h1m3 0h1m1 0h1M1 23.5h1m1 0h1m2 0h2m2 0h3m7 0h1m1 0h2m4 0h1m3 0h1M1 24.5h1m2 0h1m3 0h1m1 0h2m1 0h2m2 0h1m1 0h5m3 0h6M1 25.5h1m1 0h2m1 0h3m1 0h1m1 0h2m1 0h1m2 0h1m1 0h1m2 0h1m1 0h5M9 26.5h1m1 0h2m2 0h1m1 0h5m1 0h3m3 0h1m1 0h1M1 27.5h7m2 0h2m1 0h2m1 0h3m2 0h1m1 0h3m1 0h1m1 0h1m1 0h2M1 28.5h1m5 0h1m1 0h2m1 0h1m1 0h1m1 0h5m1 0h1m1 0h2m3 0h5M1 29.5h1m1 0h3m1 0h1m1 0h9m7 0h6m1 0h2M1 30.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h2m2 0h1m1 0h3m2 0h5M1 31.5h1m1 0h3m1 0h1m1 0h1m2 0h1m3 0h2m1 0h1m1 0h1m3 0h1m1 0h2m1 0h2M1 32.5h1m5 0h1m2 0h1m1 0h2m2 0h1m2 0h5m2 0h2m1 0h3M1 33.5h7m1 0h2m5 0h3m1 0h1m2 0h3m1 0h2m1 0h1m1 0h1"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
+        </div></div>
+        <div class="card"><div>
+          <div class="name">4. Set the Receiver URL</div>
+          <div class="meta">Open the app from the home screen icon &gt; Settings &gt; Receiver URL &gt; enter <code>https://192.168.20.15</code> &gt; Save. Only needs to be done once. Or scan the QR code, then copy the URL straight from that page.</div>
+        </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
+          <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 27 27" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h27v27H0z"/><path stroke="#111827" d="M1 1.5h7m2 0h3m4 0h1m1 0h7M1 2.5h1m5 0h1m1 0h2m1 0h1m1 0h2m1 0h1m1 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m2 0h1m1 0h2m3 0h1m1 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m7 0h2m2 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h3m3 0h1m1 0h1m1 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m2 0h2m1 0h2m4 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M10 8.5h1m3 0h1M1 9.5h1m1 0h1m1 0h1m1 0h1m2 0h2m1 0h1m1 0h3m3 0h1m2 0h1M1 10.5h2m3 0h1m2 0h2m1 0h1m3 0h1m1 0h1m1 0h1m4 0h1M1 11.5h3m1 0h1m1 0h5m1 0h2m2 0h3m3 0h3M2 12.5h2m1 0h1m3 0h2m1 0h1m3 0h1m1 0h3m3 0h1M1 13.5h2m2 0h1m1 0h1m2 0h1m2 0h1m2 0h5m1 0h1m1 0h2M9 14.5h1m2 0h3m1 0h2m3 0h2m2 0h1M1 15.5h1m1 0h2m1 0h3m1 0h4m1 0h4m1 0h1m2 0h3M2 16.5h1m1 0h2m4 0h1m2 0h3m1 0h1m1 0h1m4 0h1M1 17.5h1m1 0h1m1 0h1m1 0h2m1 0h1m1 0h1m2 0h8M9 18.5h1m1 0h2m2 0h3m3 0h2m1 0h2M1 19.5h7m2 0h2m2 0h1m1 0h2m1 0h1m1 0h2m1 0h2M1 20.5h1m5 0h1m3 0h2m4 0h1m3 0h2M1 21.5h1m1 0h3m1 0h1m1 0h1m3 0h1m3 0h5m2 0h2M1 22.5h1m1 0h3m1 0h1m2 0h5m3 0h5m1 0h1M1 23.5h1m1 0h3m1 0h1m1 0h2m1 0h2m1 0h1m1 0h2m1 0h1m2 0h1m1 0h1M1 24.5h1m5 0h1m3 0h1m1 0h3m2 0h1m2 0h4M1 25.5h7m1 0h1m2 0h1m2 0h1m2 0h3m2 0h3"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
+        </div></div>
+      </div>
+
+      <div>
+        <h2>Android</h2>
+        <div class="card"><div>
+          <div class="name">1. Join this WiFi network</div>
+          <div class="meta">Same network as this computer. Required for every step below and for scanning afterward.</div>
+        </div></div>
+        <div class="card"><div>
+          <div class="name">2. Trust the server's certificate</div>
+          <div class="meta">Download it, then go to Settings &gt; Security (or Security &amp; Privacy) &gt; More security settings &gt; Encryption &amp; credentials &gt; Install a certificate &gt; CA certificate, and select the downloaded file. Menu names vary by phone brand. Or just scan the QR code with the camera app.</div>
+        </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
+          <a class="secondary" href="http://192.168.20.15:8765/tls-cert.pem" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Download Certificate</a>
+          <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 31 31" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h31v31H0z"/><path stroke="#111827" d="M1 1.5h7m1 0h2m3 0h3m3 0h2m1 0h7M1 2.5h1m5 0h1m3 0h1m1 0h1m2 0h1m2 0h1m1 0h1m1 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h2m1 0h3m3 0h1m2 0h1m1 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m2 0h2m4 0h1m6 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m2 0h2m1 0h1m2 0h2m2 0h2m1 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h2m3 0h2m2 0h1m2 0h1m1 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M14 8.5h1m4 0h1M1 9.5h1m1 0h1m3 0h2m5 0h1m1 0h5m3 0h1m2 0h1m1 0h1M3 10.5h3m2 0h4m5 0h4m2 0h2m3 0h2M1 11.5h1m1 0h1m1 0h3m1 0h1m1 0h6m1 0h1m1 0h2m3 0h3m1 0h1M5 12.5h2m4 0h1m3 0h2m1 0h1m2 0h1m1 0h1M1 13.5h3m1 0h1m1 0h4m3 0h2m2 0h1m1 0h2m3 0h2m2 0h1M1 14.5h1m1 0h1m5 0h3m2 0h2m1 0h2m1 0h1m4 0h1m2 0h2M1 15.5h1m2 0h2m1 0h1m1 0h1m1 0h2m3 0h1m2 0h4m2 0h3m1 0h1M1 16.5h1m1 0h1m7 0h4m4 0h1m7 0h1M2 17.5h4m1 0h1m3 0h1m2 0h1m3 0h1m2 0h3m5 0h1M2 18.5h1m2 0h2m1 0h3m2 0h1m4 0h3m4 0h2m1 0h2M1 19.5h4m1 0h4m4 0h9m6 0h1M3 20.5h1m2 0h1m1 0h1m4 0h1m1 0h1m1 0h2m2 0h1m1 0h5M1 21.5h4m1 0h2m3 0h2m1 0h2m2 0h1m1 0h7m1 0h1M9 22.5h4m1 0h2m2 0h2m1 0h1m3 0h2m2 0h1M1 23.5h7m1 0h2m2 0h1m4 0h4m1 0h1m1 0h1m3 0h1M1 24.5h1m5 0h1m3 0h1m2 0h1m1 0h1m2 0h3m3 0h3M1 25.5h1m1 0h3m1 0h1m2 0h2m2 0h1m2 0h2m2 0h5m3 0h1M1 26.5h1m1 0h3m1 0h1m2 0h3m5 0h4m1 0h2M1 27.5h1m1 0h3m1 0h1m1 0h2m5 0h1m1 0h1m2 0h3m1 0h2m1 0h2M1 28.5h1m5 0h1m2 0h1m1 0h2m1 0h1m1 0h2m1 0h1m4 0h1M1 29.5h7m1 0h1m2 0h4m2 0h3m2 0h1m1 0h3m1 0h1"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
+        </div></div>
+        <div class="card"><div>
+          <div class="name">3. Open the app in Chrome</div>
+          <div class="meta">Then tap the &#8942; menu and choose "Add to Home screen" / "Install app" — installs it as an app icon, no Play Store needed. Or scan the QR code to open it straight away.</div>
+        </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
+          <a class="secondary" href="https://barcode-scan.github.io/Matrex_panel_scan/" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Open App</a>
+          <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 35 35" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h35v35H0z"/><path stroke="#111827" d="M1 1.5h7m2 0h4m3 0h1m1 0h4m1 0h1m2 0h7M1 2.5h1m5 0h1m2 0h3m3 0h2m1 0h1m7 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h1m3 0h1m1 0h2m3 0h5m2 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h3m1 0h1m5 0h2m2 0h2m2 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h1m1 0h2m1 0h4m3 0h2m1 0h1m2 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h3m2 0h2m2 0h1m1 0h1m1 0h2m3 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m2 0h2m1 0h1m1 0h1m2 0h3m1 0h1M1 9.5h1m1 0h5m2 0h1m1 0h3m3 0h1m1 0h1m2 0h3m1 0h5M1 10.5h1m1 0h1m5 0h1m1 0h4m2 0h4m1 0h1m1 0h1m2 0h2m1 0h4M1 11.5h1m1 0h1m2 0h3m5 0h3m1 0h1m10 0h1m1 0h2M3 12.5h1m1 0h1m3 0h3m1 0h2m2 0h9m3 0h4M3 13.5h1m1 0h4m1 0h1m4 0h1m1 0h1m2 0h2m1 0h1m2 0h1m2 0h2M1 14.5h1m2 0h3m1 0h1m1 0h5m1 0h1m1 0h2m2 0h1m4 0h1m2 0h4M2 15.5h2m2 0h2m1 0h1m1 0h2m2 0h3m1 0h1m1 0h3m1 0h3m1 0h1m1 0h2M2 16.5h1m1 0h1m1 0h1m2 0h1m2 0h2m2 0h1m5 0h2m2 0h2m1 0h3M2 17.5h1m1 0h2m1 0h1m1 0h2m3 0h3m1 0h1m5 0h3m1 0h3m2 0h1M2 18.5h1m1 0h1m6 0h2m2 0h1m4 0h3m1 0h1m2 0h2m1 0h2m1 0h1M2 19.5h2m2 0h2m1 0h3m2 0h3m2 0h1m1 0h2m2 0h1m2 0h2m1 0h2M1 20.5h1m1 0h1m4 0h6m1 0h1m6 0h5m1 0h5M3 21.5h5m6 0h1m1 0h1m2 0h1m3 0h1m1 0h2m3 0h1m1 0h2M1 22.5h4m1 0h1m2 0h3m2 0h4m3 0h1m2 0h1m2 0h1m3 0h1m1 0h1M1 23.5h1m1 0h1m2 0h2m2 0h3m7 0h1m1 0h2m4 0h1m3 0h1M1 24.5h1m2 0h1m3 0h1m1 0h2m1 0h2m2 0h1m1 0h5m3 0h6M1 25.5h1m1 0h2m1 0h3m1 0h1m1 0h2m1 0h1m2 0h1m1 0h1m2 0h1m1 0h5M9 26.5h1m1 0h2m2 0h1m1 0h5m1 0h3m3 0h1m1 0h1M1 27.5h7m2 0h2m1 0h2m1 0h3m2 0h1m1 0h3m1 0h1m1 0h1m1 0h2M1 28.5h1m5 0h1m1 0h2m1 0h1m1 0h1m1 0h5m1 0h1m1 0h2m3 0h5M1 29.5h1m1 0h3m1 0h1m1 0h9m7 0h6m1 0h2M1 30.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h2m2 0h1m1 0h3m2 0h5M1 31.5h1m1 0h3m1 0h1m1 0h1m2 0h1m3 0h2m1 0h1m1 0h1m3 0h1m1 0h2m1 0h2M1 32.5h1m5 0h1m2 0h1m1 0h2m2 0h1m2 0h5m2 0h2m1 0h3M1 33.5h7m1 0h2m5 0h3m1 0h1m2 0h3m1 0h2m1 0h1m1 0h1"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
+        </div></div>
+        <div class="card"><div>
+          <div class="name">4. Set the Receiver URL</div>
+          <div class="meta">Open the app from the home screen icon &gt; Settings &gt; Receiver URL &gt; enter <code>https://192.168.20.15</code> &gt; Save. Only needs to be done once. Or scan the QR code, then copy the URL straight from that page.</div>
+        </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
+          <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 27 27" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h27v27H0z"/><path stroke="#111827" d="M1 1.5h7m2 0h3m4 0h1m1 0h7M1 2.5h1m5 0h1m1 0h2m1 0h1m1 0h2m1 0h1m1 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m2 0h1m1 0h2m3 0h1m1 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m7 0h2m2 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h3m3 0h1m1 0h1m1 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m2 0h2m1 0h2m4 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M10 8.5h1m3 0h1M1 9.5h1m1 0h1m1 0h1m1 0h1m2 0h2m1 0h1m1 0h3m3 0h1m2 0h1M1 10.5h2m3 0h1m2 0h2m1 0h1m3 0h1m1 0h1m1 0h1m4 0h1M1 11.5h3m1 0h1m1 0h5m1 0h2m2 0h3m3 0h3M2 12.5h2m1 0h1m3 0h2m1 0h1m3 0h1m1 0h3m3 0h1M1 13.5h2m2 0h1m1 0h1m2 0h1m2 0h1m2 0h5m1 0h1m1 0h2M9 14.5h1m2 0h3m1 0h2m3 0h2m2 0h1M1 15.5h1m1 0h2m1 0h3m1 0h4m1 0h4m1 0h1m2 0h3M2 16.5h1m1 0h2m4 0h1m2 0h3m1 0h1m1 0h1m4 0h1M1 17.5h1m1 0h1m1 0h1m1 0h2m1 0h1m1 0h1m2 0h8M9 18.5h1m1 0h2m2 0h3m3 0h2m1 0h2M1 19.5h7m2 0h2m2 0h1m1 0h2m1 0h1m1 0h2m1 0h2M1 20.5h1m5 0h1m3 0h2m4 0h1m3 0h2M1 21.5h1m1 0h3m1 0h1m1 0h1m3 0h1m3 0h5m2 0h2M1 22.5h1m1 0h3m1 0h1m2 0h5m3 0h5m1 0h1M1 23.5h1m1 0h3m1 0h1m1 0h2m1 0h2m1 0h1m1 0h2m1 0h1m2 0h1m1 0h1M1 24.5h1m5 0h1m3 0h1m1 0h3m2 0h1m2 0h4M1 25.5h7m1 0h1m2 0h1m2 0h1m2 0h3m2 0h3"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="sub" style="margin-top:14px">Last step for either phone: it'll show up as <b>Pending</b> on the Operations tab after its first scan attempt — approve it there before it can save scans to the server.</div>
+  </div>
   </div>
 
   <div id="tabSchedule">
@@ -465,114 +579,8 @@
     <div class="ps-sheet" id="psSheet"></div>
   </div>
 
-  <div id="tabActivity" style="display:none">
-    <h1>Activity Log</h1>
-    <div class="sub">Every edit, create, and delete made from an admin dashboard — including the GM's copy. Not shown there; this view is only ever on this page.</div>
-    <div id="activityLogList"></div>
-  </div>
 
-  <div id="tabBoards" style="display:none">
-    <h1>Boards &amp; Admin Key</h1>
-    <div class="sub">Every dashboard connected to this server, and the admin key needed to connect a new one.</div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
-      <div>
-        <h2>Boards</h2>
-        <div class="card">
-          <div>
-            <div class="name">Main Dashboard</div>
-            <div class="meta">Full access — every tab, including Activity Log (the audit trail), only ever shown here.</div>
-          </div>
-          <div class="acts"><a class="secondary" href="admin.html" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">&#8599; Open</a></div>
-        </div>
-        <div class="card">
-          <div>
-            <div class="name">GM Dashboard</div>
-            <div class="meta">Production Schedule, Weekly Schedule, Job Summary, Operations. No Activity Log — the audit trail stays main-dashboard-only.</div>
-          </div>
-          <div class="acts"><a class="secondary" href="gm.html" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">&#8599; Open</a></div>
-        </div>
-        <div class="sub" style="margin-top:6px">Add a card here whenever a new board is built.</div>
-      </div>
-
-      <div>
-        <h2>Admin Key</h2>
-        <div class="sub">Enter this into the "Admin key" field at the top of any dashboard — including a brand-new one — to connect it.</div>
-        <div class="card">
-          <div>
-            <div class="name" id="boardsAdminKey" style="font-family:monospace;font-size:15px;letter-spacing:.3px">—</div>
-            <div class="meta">Read from this browser's saved key, never stored in the page source. Connect above first if it shows a dash.</div>
-          </div>
-          <div class="acts"><button class="secondary" onclick="copyAdminKeyFromBoards()">Copy</button></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="tabDeviceSetup" style="display:none">
-    <h1>Phone Setup</h1>
-    <div class="sub">Steps to turn a new iPhone or Android phone into a scanner. Works over this WiFi network only — the phone won't be able to reach the server off this LAN.</div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
-      <div>
-        <h2>iPhone</h2>
-        <div class="card"><div>
-          <div class="name">1. Join this WiFi network</div>
-          <div class="meta">Same network as this computer. Required for every step below and for scanning afterward.</div>
-        </div></div>
-        <div class="card"><div>
-          <div class="name">2. Trust the server's certificate</div>
-          <div class="meta">Open this link in Safari, then go to Settings &gt; General &gt; VPN &amp; Device Management and install the downloaded profile, then Settings &gt; General &gt; About &gt; Certificate Trust Settings and turn on full trust for it. Or just scan the QR code with the iPhone's camera.</div>
-        </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
-          <a class="secondary" href="http://192.168.20.15:8765/tls-cert.pem" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Download Certificate</a>
-          <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 31 31" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h31v31H0z"/><path stroke="#111827" d="M1 1.5h7m1 0h2m3 0h3m3 0h2m1 0h7M1 2.5h1m5 0h1m3 0h1m1 0h1m2 0h1m2 0h1m1 0h1m1 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h2m1 0h3m3 0h1m2 0h1m1 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m2 0h2m4 0h1m6 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m2 0h2m1 0h1m2 0h2m2 0h2m1 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h2m3 0h2m2 0h1m2 0h1m1 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M14 8.5h1m4 0h1M1 9.5h1m1 0h1m3 0h2m5 0h1m1 0h5m3 0h1m2 0h1m1 0h1M3 10.5h3m2 0h4m5 0h4m2 0h2m3 0h2M1 11.5h1m1 0h1m1 0h3m1 0h1m1 0h6m1 0h1m1 0h2m3 0h3m1 0h1M5 12.5h2m4 0h1m3 0h2m1 0h1m2 0h1m1 0h1M1 13.5h3m1 0h1m1 0h4m3 0h2m2 0h1m1 0h2m3 0h2m2 0h1M1 14.5h1m1 0h1m5 0h3m2 0h2m1 0h2m1 0h1m4 0h1m2 0h2M1 15.5h1m2 0h2m1 0h1m1 0h1m1 0h2m3 0h1m2 0h4m2 0h3m1 0h1M1 16.5h1m1 0h1m7 0h4m4 0h1m7 0h1M2 17.5h4m1 0h1m3 0h1m2 0h1m3 0h1m2 0h3m5 0h1M2 18.5h1m2 0h2m1 0h3m2 0h1m4 0h3m4 0h2m1 0h2M1 19.5h4m1 0h4m4 0h9m6 0h1M3 20.5h1m2 0h1m1 0h1m4 0h1m1 0h1m1 0h2m2 0h1m1 0h5M1 21.5h4m1 0h2m3 0h2m1 0h2m2 0h1m1 0h7m1 0h1M9 22.5h4m1 0h2m2 0h2m1 0h1m3 0h2m2 0h1M1 23.5h7m1 0h2m2 0h1m4 0h4m1 0h1m1 0h1m3 0h1M1 24.5h1m5 0h1m3 0h1m2 0h1m1 0h1m2 0h3m3 0h3M1 25.5h1m1 0h3m1 0h1m2 0h2m2 0h1m2 0h2m2 0h5m3 0h1M1 26.5h1m1 0h3m1 0h1m2 0h3m5 0h4m1 0h2M1 27.5h1m1 0h3m1 0h1m1 0h2m5 0h1m1 0h1m2 0h3m1 0h2m1 0h2M1 28.5h1m5 0h1m2 0h1m1 0h2m1 0h1m1 0h2m1 0h1m4 0h1M1 29.5h7m1 0h1m2 0h4m2 0h3m2 0h1m1 0h3m1 0h1"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
-        </div></div>
-        <div class="card"><div>
-          <div class="name">3. Open the app in Safari</div>
-          <div class="meta">Then tap the Share icon and choose "Add to Home Screen" — installs it as an app icon, no App Store needed. Or scan the QR code to open it straight away.</div>
-        </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
-          <a class="secondary" href="https://barcode-scan.github.io/Matrex_panel_scan/" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Open App</a>
-          <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 35 35" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h35v35H0z"/><path stroke="#111827" d="M1 1.5h7m2 0h4m3 0h1m1 0h4m1 0h1m2 0h7M1 2.5h1m5 0h1m2 0h3m3 0h2m1 0h1m7 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h1m3 0h1m1 0h2m3 0h5m2 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h3m1 0h1m5 0h2m2 0h2m2 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h1m1 0h2m1 0h4m3 0h2m1 0h1m2 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h3m2 0h2m2 0h1m1 0h1m1 0h2m3 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m2 0h2m1 0h1m1 0h1m2 0h3m1 0h1M1 9.5h1m1 0h5m2 0h1m1 0h3m3 0h1m1 0h1m2 0h3m1 0h5M1 10.5h1m1 0h1m5 0h1m1 0h4m2 0h4m1 0h1m1 0h1m2 0h2m1 0h4M1 11.5h1m1 0h1m2 0h3m5 0h3m1 0h1m10 0h1m1 0h2M3 12.5h1m1 0h1m3 0h3m1 0h2m2 0h9m3 0h4M3 13.5h1m1 0h4m1 0h1m4 0h1m1 0h1m2 0h2m1 0h1m2 0h1m2 0h2M1 14.5h1m2 0h3m1 0h1m1 0h5m1 0h1m1 0h2m2 0h1m4 0h1m2 0h4M2 15.5h2m2 0h2m1 0h1m1 0h2m2 0h3m1 0h1m1 0h3m1 0h3m1 0h1m1 0h2M2 16.5h1m1 0h1m1 0h1m2 0h1m2 0h2m2 0h1m5 0h2m2 0h2m1 0h3M2 17.5h1m1 0h2m1 0h1m1 0h2m3 0h3m1 0h1m5 0h3m1 0h3m2 0h1M2 18.5h1m1 0h1m6 0h2m2 0h1m4 0h3m1 0h1m2 0h2m1 0h2m1 0h1M2 19.5h2m2 0h2m1 0h3m2 0h3m2 0h1m1 0h2m2 0h1m2 0h2m1 0h2M1 20.5h1m1 0h1m4 0h6m1 0h1m6 0h5m1 0h5M3 21.5h5m6 0h1m1 0h1m2 0h1m3 0h1m1 0h2m3 0h1m1 0h2M1 22.5h4m1 0h1m2 0h3m2 0h4m3 0h1m2 0h1m2 0h1m3 0h1m1 0h1M1 23.5h1m1 0h1m2 0h2m2 0h3m7 0h1m1 0h2m4 0h1m3 0h1M1 24.5h1m2 0h1m3 0h1m1 0h2m1 0h2m2 0h1m1 0h5m3 0h6M1 25.5h1m1 0h2m1 0h3m1 0h1m1 0h2m1 0h1m2 0h1m1 0h1m2 0h1m1 0h5M9 26.5h1m1 0h2m2 0h1m1 0h5m1 0h3m3 0h1m1 0h1M1 27.5h7m2 0h2m1 0h2m1 0h3m2 0h1m1 0h3m1 0h1m1 0h1m1 0h2M1 28.5h1m5 0h1m1 0h2m1 0h1m1 0h1m1 0h5m1 0h1m1 0h2m3 0h5M1 29.5h1m1 0h3m1 0h1m1 0h9m7 0h6m1 0h2M1 30.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h2m2 0h1m1 0h3m2 0h5M1 31.5h1m1 0h3m1 0h1m1 0h1m2 0h1m3 0h2m1 0h1m1 0h1m3 0h1m1 0h2m1 0h2M1 32.5h1m5 0h1m2 0h1m1 0h2m2 0h1m2 0h5m2 0h2m1 0h3M1 33.5h7m1 0h2m5 0h3m1 0h1m2 0h3m1 0h2m1 0h1m1 0h1"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
-        </div></div>
-        <div class="card"><div>
-          <div class="name">4. Set the Receiver URL</div>
-          <div class="meta">Open the app from the home screen icon &gt; Settings &gt; Receiver URL &gt; enter <code>https://192.168.20.15</code> &gt; Save. Only needs to be done once. Or scan the QR code, then copy the URL straight from that page.</div>
-        </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
-          <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 27 27" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h27v27H0z"/><path stroke="#111827" d="M1 1.5h7m2 0h3m4 0h1m1 0h7M1 2.5h1m5 0h1m1 0h2m1 0h1m1 0h2m1 0h1m1 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m2 0h1m1 0h2m3 0h1m1 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m7 0h2m2 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h3m3 0h1m1 0h1m1 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m2 0h2m1 0h2m4 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M10 8.5h1m3 0h1M1 9.5h1m1 0h1m1 0h1m1 0h1m2 0h2m1 0h1m1 0h3m3 0h1m2 0h1M1 10.5h2m3 0h1m2 0h2m1 0h1m3 0h1m1 0h1m1 0h1m4 0h1M1 11.5h3m1 0h1m1 0h5m1 0h2m2 0h3m3 0h3M2 12.5h2m1 0h1m3 0h2m1 0h1m3 0h1m1 0h3m3 0h1M1 13.5h2m2 0h1m1 0h1m2 0h1m2 0h1m2 0h5m1 0h1m1 0h2M9 14.5h1m2 0h3m1 0h2m3 0h2m2 0h1M1 15.5h1m1 0h2m1 0h3m1 0h4m1 0h4m1 0h1m2 0h3M2 16.5h1m1 0h2m4 0h1m2 0h3m1 0h1m1 0h1m4 0h1M1 17.5h1m1 0h1m1 0h1m1 0h2m1 0h1m1 0h1m2 0h8M9 18.5h1m1 0h2m2 0h3m3 0h2m1 0h2M1 19.5h7m2 0h2m2 0h1m1 0h2m1 0h1m1 0h2m1 0h2M1 20.5h1m5 0h1m3 0h2m4 0h1m3 0h2M1 21.5h1m1 0h3m1 0h1m1 0h1m3 0h1m3 0h5m2 0h2M1 22.5h1m1 0h3m1 0h1m2 0h5m3 0h5m1 0h1M1 23.5h1m1 0h3m1 0h1m1 0h2m1 0h2m1 0h1m1 0h2m1 0h1m2 0h1m1 0h1M1 24.5h1m5 0h1m3 0h1m1 0h3m2 0h1m2 0h4M1 25.5h7m1 0h1m2 0h1m2 0h1m2 0h3m2 0h3"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
-        </div></div>
-      </div>
-
-      <div>
-        <h2>Android</h2>
-        <div class="card"><div>
-          <div class="name">1. Join this WiFi network</div>
-          <div class="meta">Same network as this computer. Required for every step below and for scanning afterward.</div>
-        </div></div>
-        <div class="card"><div>
-          <div class="name">2. Trust the server's certificate</div>
-          <div class="meta">Download it, then go to Settings &gt; Security (or Security &amp; Privacy) &gt; More security settings &gt; Encryption &amp; credentials &gt; Install a certificate &gt; CA certificate, and select the downloaded file. Menu names vary by phone brand. Or just scan the QR code with the camera app.</div>
-        </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
-          <a class="secondary" href="http://192.168.20.15:8765/tls-cert.pem" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Download Certificate</a>
-          <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 31 31" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h31v31H0z"/><path stroke="#111827" d="M1 1.5h7m1 0h2m3 0h3m3 0h2m1 0h7M1 2.5h1m5 0h1m3 0h1m1 0h1m2 0h1m2 0h1m1 0h1m1 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h2m1 0h3m3 0h1m2 0h1m1 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m2 0h2m4 0h1m6 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m2 0h2m1 0h1m2 0h2m2 0h2m1 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h2m3 0h2m2 0h1m2 0h1m1 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M14 8.5h1m4 0h1M1 9.5h1m1 0h1m3 0h2m5 0h1m1 0h5m3 0h1m2 0h1m1 0h1M3 10.5h3m2 0h4m5 0h4m2 0h2m3 0h2M1 11.5h1m1 0h1m1 0h3m1 0h1m1 0h6m1 0h1m1 0h2m3 0h3m1 0h1M5 12.5h2m4 0h1m3 0h2m1 0h1m2 0h1m1 0h1M1 13.5h3m1 0h1m1 0h4m3 0h2m2 0h1m1 0h2m3 0h2m2 0h1M1 14.5h1m1 0h1m5 0h3m2 0h2m1 0h2m1 0h1m4 0h1m2 0h2M1 15.5h1m2 0h2m1 0h1m1 0h1m1 0h2m3 0h1m2 0h4m2 0h3m1 0h1M1 16.5h1m1 0h1m7 0h4m4 0h1m7 0h1M2 17.5h4m1 0h1m3 0h1m2 0h1m3 0h1m2 0h3m5 0h1M2 18.5h1m2 0h2m1 0h3m2 0h1m4 0h3m4 0h2m1 0h2M1 19.5h4m1 0h4m4 0h9m6 0h1M3 20.5h1m2 0h1m1 0h1m4 0h1m1 0h1m1 0h2m2 0h1m1 0h5M1 21.5h4m1 0h2m3 0h2m1 0h2m2 0h1m1 0h7m1 0h1M9 22.5h4m1 0h2m2 0h2m1 0h1m3 0h2m2 0h1M1 23.5h7m1 0h2m2 0h1m4 0h4m1 0h1m1 0h1m3 0h1M1 24.5h1m5 0h1m3 0h1m2 0h1m1 0h1m2 0h3m3 0h3M1 25.5h1m1 0h3m1 0h1m2 0h2m2 0h1m2 0h2m2 0h5m3 0h1M1 26.5h1m1 0h3m1 0h1m2 0h3m5 0h4m1 0h2M1 27.5h1m1 0h3m1 0h1m1 0h2m5 0h1m1 0h1m2 0h3m1 0h2m1 0h2M1 28.5h1m5 0h1m2 0h1m1 0h2m1 0h1m1 0h2m1 0h1m4 0h1M1 29.5h7m1 0h1m2 0h4m2 0h3m2 0h1m1 0h3m1 0h1"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
-        </div></div>
-        <div class="card"><div>
-          <div class="name">3. Open the app in Chrome</div>
-          <div class="meta">Then tap the &#8942; menu and choose "Add to Home screen" / "Install app" — installs it as an app icon, no Play Store needed. Or scan the QR code to open it straight away.</div>
-        </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
-          <a class="secondary" href="https://barcode-scan.github.io/Matrex_panel_scan/" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Open App</a>
-          <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 35 35" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h35v35H0z"/><path stroke="#111827" d="M1 1.5h7m2 0h4m3 0h1m1 0h4m1 0h1m2 0h7M1 2.5h1m5 0h1m2 0h3m3 0h2m1 0h1m7 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h1m3 0h1m1 0h2m3 0h5m2 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h3m1 0h1m5 0h2m2 0h2m2 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h1m1 0h2m1 0h4m3 0h2m1 0h1m2 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h3m2 0h2m2 0h1m1 0h1m1 0h2m3 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m2 0h2m1 0h1m1 0h1m2 0h3m1 0h1M1 9.5h1m1 0h5m2 0h1m1 0h3m3 0h1m1 0h1m2 0h3m1 0h5M1 10.5h1m1 0h1m5 0h1m1 0h4m2 0h4m1 0h1m1 0h1m2 0h2m1 0h4M1 11.5h1m1 0h1m2 0h3m5 0h3m1 0h1m10 0h1m1 0h2M3 12.5h1m1 0h1m3 0h3m1 0h2m2 0h9m3 0h4M3 13.5h1m1 0h4m1 0h1m4 0h1m1 0h1m2 0h2m1 0h1m2 0h1m2 0h2M1 14.5h1m2 0h3m1 0h1m1 0h5m1 0h1m1 0h2m2 0h1m4 0h1m2 0h4M2 15.5h2m2 0h2m1 0h1m1 0h2m2 0h3m1 0h1m1 0h3m1 0h3m1 0h1m1 0h2M2 16.5h1m1 0h1m1 0h1m2 0h1m2 0h2m2 0h1m5 0h2m2 0h2m1 0h3M2 17.5h1m1 0h2m1 0h1m1 0h2m3 0h3m1 0h1m5 0h3m1 0h3m2 0h1M2 18.5h1m1 0h1m6 0h2m2 0h1m4 0h3m1 0h1m2 0h2m1 0h2m1 0h1M2 19.5h2m2 0h2m1 0h3m2 0h3m2 0h1m1 0h2m2 0h1m2 0h2m1 0h2M1 20.5h1m1 0h1m4 0h6m1 0h1m6 0h5m1 0h5M3 21.5h5m6 0h1m1 0h1m2 0h1m3 0h1m1 0h2m3 0h1m1 0h2M1 22.5h4m1 0h1m2 0h3m2 0h4m3 0h1m2 0h1m2 0h1m3 0h1m1 0h1M1 23.5h1m1 0h1m2 0h2m2 0h3m7 0h1m1 0h2m4 0h1m3 0h1M1 24.5h1m2 0h1m3 0h1m1 0h2m1 0h2m2 0h1m1 0h5m3 0h6M1 25.5h1m1 0h2m1 0h3m1 0h1m1 0h2m1 0h1m2 0h1m1 0h1m2 0h1m1 0h5M9 26.5h1m1 0h2m2 0h1m1 0h5m1 0h3m3 0h1m1 0h1M1 27.5h7m2 0h2m1 0h2m1 0h3m2 0h1m1 0h3m1 0h1m1 0h1m1 0h2M1 28.5h1m5 0h1m1 0h2m1 0h1m1 0h1m1 0h5m1 0h1m1 0h2m3 0h5M1 29.5h1m1 0h3m1 0h1m1 0h9m7 0h6m1 0h2M1 30.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h2m2 0h1m1 0h3m2 0h5M1 31.5h1m1 0h3m1 0h1m1 0h1m2 0h1m3 0h2m1 0h1m1 0h1m3 0h1m1 0h2m1 0h2M1 32.5h1m5 0h1m2 0h1m1 0h2m2 0h1m2 0h5m2 0h2m1 0h3M1 33.5h7m1 0h2m5 0h3m1 0h1m2 0h3m1 0h2m1 0h1m1 0h1"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
-        </div></div>
-        <div class="card"><div>
-          <div class="name">4. Set the Receiver URL</div>
-          <div class="meta">Open the app from the home screen icon &gt; Settings &gt; Receiver URL &gt; enter <code>https://192.168.20.15</code> &gt; Save. Only needs to be done once. Or scan the QR code, then copy the URL straight from that page.</div>
-        </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
-          <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 27 27" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h27v27H0z"/><path stroke="#111827" d="M1 1.5h7m2 0h3m4 0h1m1 0h7M1 2.5h1m5 0h1m1 0h2m1 0h1m1 0h2m1 0h1m1 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m2 0h1m1 0h2m3 0h1m1 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m7 0h2m2 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h3m3 0h1m1 0h1m1 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m2 0h2m1 0h2m4 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M10 8.5h1m3 0h1M1 9.5h1m1 0h1m1 0h1m1 0h1m2 0h2m1 0h1m1 0h3m3 0h1m2 0h1M1 10.5h2m3 0h1m2 0h2m1 0h1m3 0h1m1 0h1m1 0h1m4 0h1M1 11.5h3m1 0h1m1 0h5m1 0h2m2 0h3m3 0h3M2 12.5h2m1 0h1m3 0h2m1 0h1m3 0h1m1 0h3m3 0h1M1 13.5h2m2 0h1m1 0h1m2 0h1m2 0h1m2 0h5m1 0h1m1 0h2M9 14.5h1m2 0h3m1 0h2m3 0h2m2 0h1M1 15.5h1m1 0h2m1 0h3m1 0h4m1 0h4m1 0h1m2 0h3M2 16.5h1m1 0h2m4 0h1m2 0h3m1 0h1m1 0h1m4 0h1M1 17.5h1m1 0h1m1 0h1m1 0h2m1 0h1m1 0h1m2 0h8M9 18.5h1m1 0h2m2 0h3m3 0h2m1 0h2M1 19.5h7m2 0h2m2 0h1m1 0h2m1 0h1m1 0h2m1 0h2M1 20.5h1m5 0h1m3 0h2m4 0h1m3 0h2M1 21.5h1m1 0h3m1 0h1m1 0h1m3 0h1m3 0h5m2 0h2M1 22.5h1m1 0h3m1 0h1m2 0h5m3 0h5m1 0h1M1 23.5h1m1 0h3m1 0h1m1 0h2m1 0h2m1 0h1m1 0h2m1 0h1m2 0h1m1 0h1M1 24.5h1m5 0h1m3 0h1m1 0h3m2 0h1m2 0h4M1 25.5h7m1 0h1m2 0h1m2 0h1m2 0h3m2 0h3"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
-        </div></div>
-      </div>
-    </div>
-
-    <div class="sub" style="margin-top:14px">Last step for either phone: it'll show up as <b>Pending</b> on the Operations tab after its first scan attempt — approve it there before it can save scans to the server.</div>
-  </div>
 </div>
 
 <div class="colf-pop" id="colFilterPopover">

@@ -34,37 +34,13 @@ function goToOperations(){
   }
   showTab('ops');
 }
-// Same password/unlock state as Operations - same trust tier (internal,
-// not client-facing), and once unlocked for one there's no reason to
-// prompt again for the other in the same session.
-function goToActivityLog(){
-  if(!opsUnlocked){
-    const pw=prompt('Enter the Operations password:');
-    if(pw===null)return;
-    if(pw!==OPS_PASSWORD){alert('Incorrect password.');return;}
-    opsUnlocked=true;
-  }
-  showTab('activity');
-}
-// Same gate as Operations/Activity Log - this tab surfaces the raw admin
-// key, so it gets the same casual-deterrent password before showing it.
-function goToBoards(){
-  if(!opsUnlocked){
-    const pw=prompt('Enter the Operations password:');
-    if(pw===null)return;
-    if(pw!==OPS_PASSWORD){alert('Incorrect password.');return;}
-    opsUnlocked=true;
-  }
-  showTab('boards');
-}
 let currentTab='schedule';
 const TAB_CONTAINERS={
   ops:'tabOperations',schedule:'tabSchedule',labels:'tabLabels',
   weekly:'tabWeekly',weeklyDetail:'tabWeeklyDetail',
   material:'tabMaterial',stalled:'tabStalled',risk:'tabRisk',yieldTab:'tabYield',
   jobs:'tabJobSummary',jobDetail:'tabJobDetail',
-  packing:'tabPacking',packingForm:'tabPackingForm',packingPrint:'tabPackingPrint',
-  activity:'tabActivity',boards:'tabBoards',deviceSetup:'tabDeviceSetup'
+  packing:'tabPacking',packingForm:'tabPackingForm',packingPrint:'tabPackingPrint'
 };
 // Which tab-bar button lights up "active" for a given tab name - several
 // names share one button (weekly + weeklyDetail both light up the one
@@ -75,14 +51,13 @@ const TAB_BUTTON_FOR={
   weekly:'tabBtnWeekly',weeklyDetail:'tabBtnWeekly',
   material:'tabBtnMaterial',stalled:'tabBtnStalled',risk:'tabBtnRisk',yieldTab:'tabBtnYield',
   jobs:'tabBtnJobs',jobDetail:'tabBtnJobs',
-  packing:'tabBtnPacking',packingForm:'tabBtnPacking',packingPrint:'tabBtnPacking',
-  activity:'tabBtnActivity',boards:'tabBtnBoards',deviceSetup:'tabBtnDeviceSetup'
+  packing:'tabBtnPacking',packingForm:'tabBtnPacking',packingPrint:'tabBtnPacking'
 };
 function showTab(name){
   currentTab=name;
   // Table-driven and defensive on purpose: this same file is shared by
   // admin.html (every tab) and gm.html (a trimmed subset - no Material
-  // Demand/Stalled Batches/At Risk/Throughput & Yield/Activity Log). A
+  // Demand/Stalled Batches/At Risk/Throughput & Yield/Operations). A
   // page missing some of these containers/buttons must never crash
   // showTab() just because it doesn't have every tab admin.html does -
   // each lookup is guarded instead of assumed to exist.
@@ -103,13 +78,34 @@ function showTab(name){
   if(name==='yieldTab')renderThroughputYield();
   if(name==='jobs')renderJobSummary();
   if(name==='packing')renderPackingTab();
+  if(name==='ops')showOpsSubTab(currentOpsSubTab);
+}
+// ── OPERATIONS SUB-TABS ─────────────────────────────────────
+// Activity Log, Boards & Admin Key, and Phone Setup live inside
+// Operations now instead of as their own top-level tabs - reaching any
+// of them means you're already past the Operations password gate, so
+// none of them need (or have) a gate of their own anymore. Same
+// table-driven/guarded pattern as showTab() above, scoped to Operations'
+// own sub-containers instead of the whole page's tabs.
+let currentOpsSubTab='devices';
+const OPS_SUBTAB_CONTAINERS={devices:'opsDeviceApprovals',activity:'opsActivity',boards:'opsBoards',phoneSetup:'opsPhoneSetup'};
+const OPS_SUBTAB_BUTTONS={devices:'opsSubBtnDevices',activity:'opsSubBtnActivity',boards:'opsSubBtnBoards',phoneSetup:'opsSubBtnPhoneSetup'};
+function showOpsSubTab(name){
+  currentOpsSubTab=name;
+  Object.entries(OPS_SUBTAB_CONTAINERS).forEach(([tab,id])=>{
+    const el=$(id);
+    if(el)el.style.display=(tab===name)?'':'none';
+  });
+  Object.values(OPS_SUBTAB_BUTTONS).forEach(btnId=>{
+    const el=$(btnId);
+    if(el)el.classList.toggle('active',btnId===OPS_SUBTAB_BUTTONS[name]);
+  });
   if(name==='activity')renderActivityLog();
   if(name==='boards')renderBoardsTab();
 }
-// Not present on gm.html at all, so this is guarded like the other
-// gm.html-excluded render functions even though it's only ever reached
-// via a button gm.html doesn't have either - cheap insurance against a
-// future call site added in the wrong place.
+// Not present on gm.html at all (Operations itself isn't reachable
+// there), so this is guarded like the other gm.html-excluded render
+// functions - cheap insurance against a future call site added wrong.
 function renderBoardsTab(){
   const el=$('boardsAdminKey');
   if(!el)return;
