@@ -227,6 +227,38 @@ const upsertScan = db.prepare(`
     skid=@skid, flag=@flag, match_status=@match_status
 `);
 
+// A decode that comes back the wrong length never reaches /upload at all
+// today - it's rejected client-side before a "scan" even exists, so it
+// leaves no record anywhere. This gives it one, reusing the scans table
+// (unique_id/match_status are already nullable/free-text) and the
+// existing Exception Queue (anything outside OK_STATUSES already shows
+// up there automatically - no admin-side changes needed for this to be
+// reviewable). Best-effort only: the phone fires this and moves on,
+// no offline queue/retry, since losing a diagnostic log entry now and
+// then is a fair tradeoff for not adding real complexity to a feature
+// that only exists to help debug a device-specific problem.
+app.post('/parts/decode-reject', deviceGate, (req, res) => {
+  const { raw, device, device_id, scanned_at } = req.body || {};
+  const now = new Date().toISOString();
+  const scanId = `reject_${device_id || 'unknown'}_${now}_${Math.random().toString(36).slice(2, 8)}`;
+  upsertScan.run({
+    scan_id: scanId,
+    date: (scanned_at || now).slice(0, 10),
+    scanned_at: scanned_at || now,
+    received_at: now,
+    device: device || null,
+    device_id: device_id || null,
+    unique_id: null,
+    match_status: 'DECODE_REJECTED',
+    batch_sheet: null, project: null, floor: null, part_type: null,
+    part_name: String(raw || '').slice(0, 60) || '(empty decode)',
+    size: null, qty: null, colour: null, skid: null,
+    method: 'SCAN', flag: null, raw: String(raw || '').slice(0, 500),
+    mode: 'FREE', batch: null
+  });
+  res.json({ ok: true });
+});
+
 app.post('/upload', deviceGate, (req, res) => {
   const b = req.body || {};
   const { filename, csv, rows } = b;

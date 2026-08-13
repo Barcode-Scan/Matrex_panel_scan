@@ -1125,11 +1125,23 @@ async function runWithDevice(deviceId){
     // Capping resolution to 720p (an "ideal", not "exact", constraint —
     // browsers that can't hit it just get as close as they can) means
     // every decode attempt scans far fewer pixels. 720p is plenty of
-    // detail for a PDF417 held 15-25cm away, so this trades no accuracy
-    // for a meaningfully faster per-attempt decode.
+    // detail for a PDF417 held 15-25cm away on the Android phones this
+    // was tuned against, so this trades no accuracy for a meaningfully
+    // faster per-attempt decode there.
+    //
+    // iOS gets a higher ideal instead of that same 720p: reports from an
+    // iPhone 12 show slow, unreliable decodes of the exact same physical
+    // labels that read cleanly on Android at 720p - i.e. this isn't a
+    // label problem, it's this resolution being marginal for whatever
+    // Safari/WebKit's camera pipeline produces on that hardware. Kept
+    // separate from the Android path rather than raised for everyone, so
+    // phones already working well at 720p aren't slowed down chasing a
+    // problem they don't have.
+    const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+    const idealW=isIOS?1920:1280,idealH=isIOS?1080:720;
     const videoConstraints=deviceId
-      ?{deviceId:{exact:deviceId},width:{ideal:1280},height:{ideal:720}}
-      :{facingMode:'environment',width:{ideal:1280},height:{ideal:720}};
+      ?{deviceId:{exact:deviceId},width:{ideal:idealW},height:{ideal:idealH}}
+      :{facingMode:'environment',width:{ideal:idealW},height:{ideal:idealH}};
     controls=await codeReader.decodeFromConstraints({video:videoConstraints},previewElem,(result,error)=>{
       if(result){
         if(!resultInAimBox(result,previewElem))return; // detected, but outside the visible scan frame — same as nothing found
@@ -1191,11 +1203,22 @@ function dataHtml(p){
 // unregistered IDs are all flagged (amber/red dot + pill), never
 // blocked with a popup, so a fast-moving operator never loses a beat.
 const ID_LEN=10;
+// Best-effort diagnostic log for a decode that came back the wrong
+// length - fires and forgets, no offline queue, since this exists only
+// to help debug device-specific decode problems (e.g. a camera that
+// struggles with a dense PDF417 at the resolution requested), not to
+// track anything business-critical. Shows up in the admin Exception
+// Queue automatically (DECODE_REJECTED isn't a known-good status).
+function logDecodeReject(raw){
+  if(!cfg.url)return;
+  fetch(cfg.url+'/parts/decode-reject',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({raw,device:cfg.dev,device_id:deviceId,scanned_at:new Date().toISOString()})}).catch(()=>{});
+}
 async function handleRaw(raw,method){
   raw=String(raw).trim();if(!raw)return;
   if(method!=='SCAN')return; // manual entry is handled entirely by its own modal/button, not here
   if(raw.length!==ID_LEN){
-    beep('err');showFlash('bad','Not a Matrex code — barcode ignored.');return;
+    beep('err');showFlash('bad','Not a Matrex code — barcode ignored.');logDecodeReject(raw);return;
   }
   await handleScan(raw);
 }
@@ -1987,7 +2010,11 @@ function handleDirectedRaw(raw){
   directedScan(raw,false,'SCAN');
 }
 async function directedScan(uid,confirm,inputMethod){
-  if(uid.length!==ID_LEN){beep('err');showDirBanner('err','Not a Matrex code','Barcode ignored.');return;}
+  if(uid.length!==ID_LEN){
+    beep('err');showDirBanner('err','Not a Matrex code','Barcode ignored.');
+    if(inputMethod==='SCAN')logDecodeReject(uid); // not a manual-entry typo - a real camera decode came back wrong
+    return;
+  }
   if(!navigator.onLine){localDirectedScan(uid,confirm,inputMethod);return;}
   let data;
   try{
