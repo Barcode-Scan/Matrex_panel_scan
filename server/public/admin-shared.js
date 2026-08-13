@@ -499,6 +499,25 @@ function groupByWeek(){
   return groups;
 }
 function statusPillClass(v){return v==='complete'?'done':v==='progress'?'working':'notstarted';}
+// Shared by any batch-card list that mixes every status together (Weekly
+// Detail, Job Detail) - groups into Not Started / In Progress / Complete
+// sections instead of one flat list where a finished batch sits next to
+// one that hasn't started, sorts each group by Target Finish (soonest
+// first, batches with no date last), and skips empty groups entirely.
+// cardFn renders one batch's card markup - callers differ in what they
+// put in the meta line, so that part stays with the caller.
+function groupedBatchCardsHtml(items,cardFn){
+  const groups={none:[],progress:[],complete:[]};
+  items.forEach(b=>groups[rowStatus(b)].push(b));
+  const byDue=(a,b)=>(a.target_finish||'9999-99-99').localeCompare(b.target_finish||'9999-99-99');
+  Object.values(groups).forEach(g=>g.sort(byDue));
+  return[['none','Not Started'],['progress','In Progress'],['complete','Complete']]
+    .filter(([key])=>groups[key].length)
+    .map(([key,label])=>`<div class="batch-group">
+      <div class="batch-group-head">${label} <span class="batch-group-count">${groups[key].length}</span></div>
+      ${groups[key].map(cardFn).join('')}
+    </div>`).join('');
+}
 function renderWeeklySchedule(){
   const groups=groupByWeek();
   const thisWeek=weekKeyFor(new Date().toISOString().slice(0,10));
@@ -573,7 +592,7 @@ function renderWeekDetail(key){
   $('weeklyDetailSub').textContent=items.length+' batch'+(items.length===1?'':'es');
   renderWeekMaterialSummary(items);
   if(!items.length){$('weeklyDetailList').innerHTML='<div class="empty">No batches.</div>';return;}
-  $('weeklyDetailList').innerHTML=items.map(b=>{
+  $('weeklyDetailList').innerHTML=groupedBatchCardsHtml(items,b=>{
     const status=rowStatus(b);
     const sub=[b.job_name,b.material,b.finish,b.tasked].filter(Boolean).map(esc).join(' · ');
     const meta=[sub,`${b.scanned}/${b.total} scanned`,b.target_finish?'Due '+esc(b.target_finish):''].filter(Boolean).join(' · ');
@@ -584,7 +603,7 @@ function renderWeekDetail(key){
       </div>
       <span class="pill ${statusPillClass(status)}">${statusLabel(status)}</span>
     </div>`;
-  }).join('');
+  });
 }
 $('bBackWeeklyDetail').onclick=()=>{currentWeekKey=null;showTab('weekly');};
 
@@ -799,7 +818,7 @@ function renderJobDetail(job){
     </div>`;
   }).join('');
 
-  $('jobDetailBatches').innerHTML=items.map(b=>{
+  $('jobDetailBatches').innerHTML=groupedBatchCardsHtml(items,b=>{
     const bp=sumProgress([b]);
     return`<div class="card" onclick="viewBatchLabels('${esc(b.batch)}')" style="cursor:pointer">
       <div>
@@ -808,7 +827,7 @@ function renderJobDetail(job){
       </div>
       <span class="pill ${progressPillClass(bp.pct)}">${bp.pct}%</span>
     </div>`;
-  }).join('');
+  });
 }
 $('bBackJobDetail').onclick=()=>{currentJobKey=null;showTab('jobs');};
 
