@@ -584,12 +584,14 @@ function renderWeekMaterialSummary(items){
     q===null?g.unparsed++:g.total+=q;
   });
   const rows=Object.values(groups).sort((a,b)=>a.material.localeCompare(b.material)||a.finish.localeCompare(b.finish));
-  if(!rows.length){el.innerHTML='<tr><td colspan="3" class="empty">No open batches with a Sheet Qty due this week.</td></tr>';return;}
-  el.innerHTML=rows.map(r=>`<tr>
-    <td>${esc(r.material)}</td>
-    <td>${esc(r.finish)}</td>
-    <td class="num">${r.total}${r.unparsed?` <span style="color:var(--gray-500);font-weight:400">(+${r.unparsed} non-numeric)</span>`:''}</td>
-  </tr>`).join('');
+  if(!rows.length){el.innerHTML='<div class="empty">No open batches with a Sheet Qty due this week.</div>';return;}
+  el.innerHTML=rows.map(r=>`<div class="card">
+    <div>
+      <div class="name">${esc(r.material)}</div>
+      <div class="meta">${esc(r.finish)}</div>
+    </div>
+    <div class="mrs-qty">${r.total}${r.unparsed?` <span style="font-size:11px;font-weight:400;color:var(--gray-500)">(+${r.unparsed})</span>`:''}</div>
+  </div>`).join('');
 }
 function renderWeekDetail(key){
   const items=(groupByWeek()[key])||[];

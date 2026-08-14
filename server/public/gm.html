@@ -50,6 +50,9 @@
   .pill.notstarted{background:var(--red-50);color:var(--red-600)}
   .pill.neutral{background:var(--gray-100);color:var(--gray-500)}
   .week-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+  .mrs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+  .mrs-grid .card{margin-bottom:0}
+  .mrs-qty{font-size:20px;font-weight:800;color:var(--gray-900);font-variant-numeric:tabular-nums;flex-shrink:0}
   .week-card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:12px;padding:16px;cursor:pointer;transition:box-shadow .15s,background .1s}
   .week-card:hover{box-shadow:0 4px 14px rgba(16,24,40,.08);background:var(--blue-50)}
   .week-card.current{background:var(--green-50);border-color:var(--green-700)}
@@ -362,11 +365,7 @@
     <div class="panel">
       <div class="rep-sub">Material Requirement Summary</div>
       <div class="sub" style="margin-top:-4px">Open batches due this week, grouped by Material and Finish. A batch already fully scanned isn't counted — its material's already been used.</div>
-      <table class="rep-tbl" style="margin-bottom:0;table-layout:fixed;width:auto;min-width:0">
-        <colgroup><col style="width:420px"><col style="width:200px"><col style="width:110px"></colgroup>
-        <thead><tr><th>Material</th><th>Finish</th><th class="num">Sheet Qty</th></tr></thead>
-        <tbody id="weeklyMaterialSummaryBody"></tbody>
-      </table>
+      <div class="mrs-grid" id="weeklyMaterialSummaryBody"></div>
     </div>
     <div id="weeklyDetailList"></div>
   </div>
