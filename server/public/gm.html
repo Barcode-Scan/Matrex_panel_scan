@@ -215,7 +215,8 @@
   .ctx-menu-item:hover{background:var(--blue-50)}
   .ctx-menu-item.danger{color:var(--red-600)}
   .ctx-menu-item.danger:hover{background:var(--red-50)}
-  .gc-input{width:100%;padding:4px 6px;border:1px solid var(--blue-600);border-radius:4px;font-size:12.5px;font-family:inherit;background:var(--white)}
+  .gc-input,.ts-select{width:100%;padding:4px 6px;border:1px solid var(--blue-600);border-radius:4px;font-size:12.5px;font-family:inherit;background:var(--white)}
+  .ts-select:disabled{border-color:var(--gray-200);color:var(--gray-500);background:var(--gray-100)}
   .extra-row input{flex:1}
   .source-pill{font-size:11px;font-weight:800;padding:3px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:.4px;background:var(--gray-200);color:var(--gray-500)}
   .bl-row{display:flex;align-items:center;gap:12px;background:var(--white);border:1.5px solid var(--gray-200);border-radius:var(--radius-lg);padding:10px 12px;margin-bottom:6px}
@@ -364,7 +365,7 @@
       <thead>
         <tr>
           <th>Job</th><th>Floor or Work Order</th><th>Target Finish</th><th>Material</th><th>Finish</th>
-          <th>Part Name</th><th>Batch Name</th><th>Part Qty</th><th>Sheet Qty</th><th>Comment</th><th>Tasked</th>
+          <th>Part Name</th><th>Batch Name</th><th>Part Qty</th><th>Sheet Qty</th><th>Comment</th><th>Task Status</th>
         </tr>
       </thead>
       <tbody id="weeklyDetailList"></tbody>

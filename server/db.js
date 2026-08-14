@@ -30,6 +30,12 @@ ensureColumn('scans', 'mode', "TEXT NOT NULL DEFAULT 'FREE'");
 ensureColumn('scans', 'batch', 'TEXT');
 ensureColumn('scans', 'acknowledged', "TEXT NOT NULL DEFAULT 'No'");
 ensureColumn('scans', 'acknowledged_at', 'TEXT');
+// Manual process stage (Cut/Bending/Assembly), blank = Not Started.
+// Deliberately never stores "Complete" - that's derived from
+// scanned===total wherever this is displayed, same "derive, don't
+// type" reasoning already used for parts_index.scanned - avoids this
+// ever going stale if a completed batch's scan count somehow changes.
+ensureColumn('production_schedule', 'task_status', 'TEXT');
 // Index depends on sequence_no, so it's created here (after ensureColumn
 // guarantees the column exists) rather than in schema.sql — CREATE TABLE
 // IF NOT EXISTS is a no-op on an already-existing table, so a CREATE INDEX

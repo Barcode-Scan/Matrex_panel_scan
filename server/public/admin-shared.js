@@ -432,7 +432,7 @@ let scheduleBatches=[];
 const GRID_COLUMNS=[
   ['job_name','Job'],['floor_or_work_order','Floor or Work Order'],['target_finish','Target Finish'],
   ['material','Material'],['finish','Finish'],['part_name','Part Name'],['batch','Batch Name'],
-  ['status','Part Qty'],['sheet_qty','Sheet Qty'],['comment','Comment'],['tasked','Tasked']
+  ['status','Part Qty'],['sheet_qty','Sheet Qty'],['comment','Comment'],['task_status','Task Status']
 ];
 function renderScheduleHead(){
   $('scheduleHeadRow').innerHTML=GRID_COLUMNS.map(([key,label])=>
@@ -1186,9 +1186,11 @@ async function renderActivityLog(){
 // sort A-Z/Z-A from the same dropdown, columns AND together) ──────────
 function rowStatus(b){return b.total>0&&b.scanned===b.total?'complete':b.scanned>0?'progress':'none';}
 function statusLabel(v){return v==='complete'?'Complete':v==='progress'?'In Progress':'Not Started';}
-function colValue(b,key){return key==='status'?rowStatus(b):(b[key]||'');}
+function effectiveTaskStatus(b){return rowStatus(b)==='complete'?'Complete':(b.task_status||'Not Started');}
+function colValue(b,key){return key==='status'?rowStatus(b):key==='task_status'?effectiveTaskStatus(b):(b[key]||'');}
 function uniqueValuesFor(key){
   if(key==='status')return['complete','progress','none'];
+  if(key==='task_status')return['Not Started','Cut','Bending','Assembly','Complete'];
   return[...new Set(scheduleBatches.map(b=>b[key]).filter(Boolean))].sort();
 }
 
@@ -1373,8 +1375,30 @@ function scheduleRowHtml(b){
     <td><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${b.scanned}/${b.total}</div></div></td>
     <td class="gc-num">${field('sheet_qty')}</td>
     <td class="gc-comment">${field('comment')}</td>
-    <td>${field('tasked')}</td>
+    <td>${taskStatusCell(b,state)}</td>
   </tr>`;
+}
+// Task Status is its own always-live control, independent of the row's
+// Edit/Save flow (Cut/Bending/Assembly is a quick one-off pick from the
+// shop floor, not a field someone edits alongside job name etc.) - saves
+// immediately on change, same pattern as saveMaterialStock. Complete is
+// never a selectable option: once every part in the batch is scanned, the
+// dropdown locks to a disabled "Complete" display instead - deriving it
+// from scanned===total keeps it from ever going stale like a manually-set
+// value could.
+function taskStatusCell(b,state){
+  if(state==='complete')return`<select class="ts-select" disabled><option selected>Complete</option></select>`;
+  const val=b.task_status||'';
+  const opts=['',"Cut","Bending","Assembly"].map(v=>`<option value="${v}" ${val===v?'selected':''}>${v||'Not Started'}</option>`).join('');
+  return`<select class="ts-select" onclick="event.stopPropagation()" onchange="event.stopPropagation();saveTaskStatus('${esc(b.batch)}',this.value)">${opts}</select>`;
+}
+async function saveTaskStatus(batch,value){
+  const b=scheduleBatches.find(x=>x.batch===batch);
+  if(b)b.task_status=value; // optimistic - re-render immediately, don't wait on the round-trip
+  try{
+    await api('/admin/api/schedule/'+encodeURIComponent(batch)+'/task-status',{method:'POST',body:JSON.stringify({task_status:value})});
+    await loadScheduleList();
+  }catch(e){alert('Could not save — check the admin key and try again.');}
 }
 function renderScheduleGrid(){
   let rows=scheduleBatches.filter(b=>{

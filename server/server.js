@@ -341,22 +341,35 @@ const getMaxSequenceNo = db.prepare('SELECT COALESCE(MAX(sequence_no),0) AS m FR
 // fields it didn't touch. extra_fields is the one flexible/ad hoc extension
 // point — a JSON object, stored stringified, for anything not worth a real
 // column yet.
-const SCHEDULE_FIELDS = ['job_name', 'floor_or_work_order', 'target_finish', 'material', 'finish', 'part_name', 'sheet_qty', 'comment', 'tasked'];
+const SCHEDULE_FIELDS = ['job_name', 'floor_or_work_order', 'target_finish', 'material', 'finish', 'part_name', 'sheet_qty', 'comment', 'tasked', 'task_status'];
 const upsertProductionSchedule = db.prepare(`
   INSERT INTO production_schedule
     (batch, job_name, floor_or_work_order, target_finish, material, finish,
-     part_name, sheet_qty, comment, tasked, extra_fields, source, created_at, updated_at, updated_by)
+     part_name, sheet_qty, comment, tasked, task_status, extra_fields, source, created_at, updated_at, updated_by)
   VALUES
     (@batch, @job_name, @floor_or_work_order, @target_finish, @material, @finish,
-     @part_name, @sheet_qty, @comment, @tasked, @extra_fields, @source, @now, @now, @updated_by)
+     @part_name, @sheet_qty, @comment, @tasked, @task_status, @extra_fields, @source, @now, @now, @updated_by)
   ON CONFLICT(batch) DO UPDATE SET
     job_name=excluded.job_name, floor_or_work_order=excluded.floor_or_work_order,
     target_finish=excluded.target_finish, material=excluded.material, finish=excluded.finish,
     part_name=excluded.part_name, sheet_qty=excluded.sheet_qty, comment=excluded.comment,
-    tasked=excluded.tasked, extra_fields=excluded.extra_fields,
+    tasked=excluded.tasked, task_status=excluded.task_status, extra_fields=excluded.extra_fields,
     source=excluded.source, updated_at=excluded.updated_at, updated_by=excluded.updated_by
 `);
 const getProductionSchedule = db.prepare('SELECT * FROM production_schedule WHERE batch = ?');
+// Separate from upsertSchedule below: that function's coalesce (skip a
+// field when the request sent it blank) means it can never SET task_status
+// back to blank once something's been picked — deliberate there, since it
+// protects every other field from an accidental wipe, but wrong here, since
+// "Not Started" (blank) is itself one of the four legitimate values a
+// person can pick. This statement writes task_status directly instead, so
+// picking blank actually clears it.
+const setTaskStatus = db.prepare(`
+  INSERT INTO production_schedule (batch, task_status, source, created_at, updated_at, updated_by)
+  VALUES (@batch, @task_status, 'MANUAL', @now, @now, @updated_by)
+  ON CONFLICT(batch) DO UPDATE SET
+    task_status=excluded.task_status, updated_at=excluded.updated_at, updated_by=excluded.updated_by
+`);
 
 function hasScheduleFields(body) {
   return SCHEDULE_FIELDS.some(f => body[f] !== undefined && body[f] !== null && String(body[f]).trim() !== '')
@@ -392,6 +405,7 @@ function formatSchedule(row) {
     sheet_qty: row.sheet_qty || null,
     comment: row.comment || null,
     tasked: row.tasked || null,
+    task_status: row.task_status || null,
     extra_fields: extra,
     schedule_source: row.source || null,
     schedule_updated_at: row.updated_at || null,
@@ -457,6 +471,27 @@ app.post('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
   const actor = actorFrom(req);
   upsertSchedule(batch, req.body || {}, 'MANUAL', actor);
   logAudit(actor, 'SCHEDULE_EDIT', batch, JSON.stringify(req.body || {}));
+  res.json({ ok: true, batch, schedule: formatSchedule(getProductionSchedule.get(batch)) });
+});
+
+// Manual process-stage pick (blank/Cut/Bending/Assembly) from the shop
+// floor — a one-field, save-immediately action separate from the general
+// schedule edit form above, and routed through setTaskStatus (not
+// upsertSchedule) specifically so picking blank actually clears it back to
+// "Not Started" instead of being ignored. "Complete" is never accepted here
+// — it's derived from scanned===total wherever it's displayed, never
+// stored, so it can't go stale.
+app.post('/admin/api/schedule/:batch/task-status', requireAdmin, (req, res) => {
+  const batch = String(req.params.batch || '').trim();
+  if (!batch) return res.status(400).json({ ok: false, error: 'batch required' });
+  const value = (req.body && typeof req.body.task_status === 'string') ? req.body.task_status : '';
+  if (!['', 'Cut', 'Bending', 'Assembly'].includes(value)) {
+    return res.status(400).json({ ok: false, error: 'invalid task_status' });
+  }
+  const actor = actorFrom(req);
+  const now = new Date().toISOString();
+  setTaskStatus.run({ batch, task_status: value || null, now, updated_by: actor || null });
+  logAudit(actor, 'TASK_STATUS_EDIT', batch, JSON.stringify({ task_status: value }));
   res.json({ ok: true, batch, schedule: formatSchedule(getProductionSchedule.get(batch)) });
 });
 
