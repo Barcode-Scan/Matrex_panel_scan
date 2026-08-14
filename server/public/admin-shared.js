@@ -862,7 +862,7 @@ function renderPackingTab(){
         <div class="name">${esc(s.slip_number)} — ${esc(s.batch)}</div>
         <div class="meta">${esc(s.department||'')}${s.department&&s.ship_to?' · ':''}${esc(s.ship_to||'')} · ${esc(s.slip_date)}</div>
       </div>
-      <span class="pill working">View / Print</span>
+      <span class="pill neutral">View / Print</span>
     </div>`).join(''):'<div class="empty">No packing slips created yet.</div>';
 }
 // Right-click a created packing slip for Edit/Delete - reuses the exact
