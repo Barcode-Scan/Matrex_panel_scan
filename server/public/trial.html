@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matrex — Engine Trial</title>
+<style>
+  :root{--bg:#F5F6FA;--white:#fff;--gray-100:#EEF0F3;--gray-200:#E4E7EC;--gray-500:#667085;--gray-900:#101828;
+    --blue-600:#2B59E1;--blue-50:#E8F0FE;--green-700:#027A48;--green-50:#ECFDF3;
+    --red-600:#D92D20;--red-50:#FEF3F2;--amber-700:#B54708;--amber-50:#FFFAEB;
+    --radius-sm:4px;--radius-md:8px;--radius-lg:12px;--radius-pill:100px;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--gray-900);padding:24px}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-size:25px;font-weight:800;letter-spacing:-.01em;margin-bottom:5px}
+  h2{font-size:16px;margin:0 0 4px}
+  .sub{font-size:13px;color:var(--gray-500);margin-bottom:20px}
+  .keybar{display:flex;gap:8px;margin-bottom:20px}
+  input{flex:1;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit}
+  button{padding:10px 16px;border-radius:8px;border:none;background:var(--blue-600);color:#fff;font-weight:600;cursor:pointer;font-size:13px;font-family:inherit}
+  .card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;transition:background .1s}
+  .card:hover{background:var(--blue-50)}
+  .card>div:first-child{flex:1;min-width:0}
+  .name{font-weight:700;font-size:14px}
+  .meta{font-size:12px;color:var(--gray-500);margin-top:2px}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;padding:3px 10px;border-radius:var(--radius-pill);text-transform:uppercase;letter-spacing:.4px;flex-shrink:0}
+  .pill::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+  .pill.ready{background:var(--green-50);color:var(--green-700)}
+  .pill.blocked{background:var(--red-50);color:var(--red-600)}
+  .pill.neutral{background:var(--gray-100);color:var(--gray-500)}
+  .slack-num{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0;min-width:70px;text-align:right}
+  .slack-num.neg{color:var(--red-600)}
+  .slack-num.pos{color:var(--green-700)}
+  .panel{background:var(--white);border:1.5px solid var(--gray-200);border-top:3px solid var(--blue-600);border-radius:12px;padding:16px 18px;margin-bottom:24px}
+  .panel-note{font-size:12px;color:var(--gray-500);background:var(--gray-100);border-radius:8px;padding:8px 12px;margin-top:10px;line-height:1.5}
+  .empty{color:var(--gray-500);font-size:13px;padding:20px;text-align:center}
+  .banner{background:var(--amber-50);border:1.5px solid #F6C453;color:var(--amber-700);border-radius:10px;padding:12px 14px;font-size:13px;margin-bottom:20px;line-height:1.5}
+  section{margin-bottom:32px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+    <div style="width:40px;height:40px;flex-shrink:0;border-radius:12px;background:linear-gradient(155deg,#FFFFFF,var(--blue-50));box-shadow:inset 0 0 0 1px rgba(43,89,225,.12);display:flex;align-items:center;justify-content:center">
+      <svg width="22" height="22" viewBox="0 0 200 200" fill="none">
+        <rect x="30" y="30" width="140" height="140" rx="6" transform="rotate(45 100 100)" stroke="#2B59E1" stroke-width="12" fill="none"/>
+        <path d="M55 145L55 70L100 115L145 70L145 145" stroke="#2B59E1" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+    </div>
+    <div>
+      <div style="font-size:19px;font-weight:800;letter-spacing:1.5px;color:var(--gray-900);line-height:1">MATREX</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--gray-500);margin-top:3px">Engine Trial — Experimental</div>
+    </div>
+  </div>
+
+  <h1>Engine Trial</h1>
+  <div class="sub">A trial of three ideas from the production-scheduler proposal, computed from your real, existing data — not a new system, not connected to anything else. Safe to ignore or delete.</div>
+
+  <div class="banner">
+    <strong>What this is and isn't:</strong> the full proposal calls for a Postgres/Supabase backend, a React rebuild, and a real capacity model seeded from weeks of per-operation timing data that doesn't exist yet. This page borrows the three highest-value <em>ideas</em> — Ready state, negative slack, workload by assignee — and computes them from what's actually in your database today (Target Finish, scan counts, on-hand material). Where the real spec needs data this system doesn't track (predecessor tasks, drawing revisions, hours-per-operation), it's noted below rather than faked.
+  </div>
+
+  <div class="keybar">
+    <input id="key" type="password" placeholder="Admin key">
+    <button onclick="saveKey()">Connect</button>
+  </div>
+
+  <div id="content" style="display:none">
+    <section>
+      <div class="panel">
+        <h2>Ready</h2>
+        <div class="sub" style="margin-top:2px">Open batches, split by whether their material is on hand. "Predecessor tasks" and "drawing revision" aren't tracked in this system, so Ready here means: not complete, and not blocked by a known material shortfall.</div>
+        <div id="readyList"></div>
+        <div class="panel-note">Material shortfall reuses the exact same on-hand numbers as the Material Demand tab — a batch is blocked here only if its material is already flagged short there.</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="panel">
+        <h2>Slack</h2>
+        <div class="sub" style="margin-top:2px">Days between "will finish at current scan pace" and "needs to finish by Target Finish." Negative means already behind at today's rate, whether or not it looks urgent yet.</div>
+        <div id="slackList"></div>
+        <div class="panel-note">Pace is each batch's own scanned-parts-per-elapsed-day so far — no historical standard times exist yet to seed a real capacity model, so this is a per-batch estimate, not the finite-capacity solver the real proposal describes. Batches with zero scans yet show no estimate — there's no pace to measure.</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="panel">
+        <h2>Workload by Tasked</h2>
+        <div class="sub" style="margin-top:2px">Remaining (unscanned) parts across open batches, grouped by who's tasked. A rough count, not an hours-based capacity check — this system doesn't track run-time-per-part, so there's no way to convert this into a real over/under-100%-loaded number yet.</div>
+        <div id="workloadList"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let KEY=localStorage.getItem('mx_admin_key')||'';
+$('key').value=KEY;
+function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function toISODate(v){
+  if(!v)return'';
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v))return v;
+  const d=new Date(v);
+  return isNaN(d.getTime())?'':d.toISOString().slice(0,10);
+}
+async function api(path){
+  const r=await fetch(path,{headers:{'X-Admin-Key':KEY}});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  return r.json();
+}
+function saveKey(){
+  KEY=$('key').value.trim();
+  localStorage.setItem('mx_admin_key',KEY);
+  load();
+}
+
+function parseQty(v){
+  const n=parseFloat(String(v||'').replace(/[^\d.-]/g,''));
+  return isNaN(n)?null:n;
+}
+
+async function load(){
+  if(!KEY)return;
+  $('content').style.display='none';
+  let batches,stock;
+  try{
+    const [bRes,sRes]=await Promise.all([api('/viewer/api/batches'),api('/admin/api/material-stock')]);
+    batches=bRes.batches||[];
+    stock={};
+    (sRes.stock||[]).forEach(s=>{stock[s.material]=s.on_hand_qty;});
+  }catch(e){
+    $('content').style.display='block';
+    $('readyList').innerHTML='<div class="empty">Wrong key, or server unreachable.</div>';
+    $('slackList').innerHTML='';$('workloadList').innerHTML='';
+    return;
+  }
+  $('content').style.display='block';
+
+  const open=batches.filter(b=>!(b.total>0&&b.scanned===b.total));
+
+  // ── READY — reuses the same shortfall math as Material Demand: total
+  // remaining Sheet Qty demand across every open batch for a material,
+  // compared to on-hand. A batch is blocked if ITS material is in
+  // shortfall, not because of anything specific to that one batch.
+  const demandByMaterial={};
+  open.forEach(b=>{
+    const m=b.material||'(No Material Specified)';
+    const q=parseQty(b.sheet_qty);
+    demandByMaterial[m]=(demandByMaterial[m]||0)+(q||0);
+  });
+  const shortMaterials=new Set(Object.keys(demandByMaterial).filter(m=>{
+    const onHand=stock.hasOwnProperty(m)?stock[m]:null;
+    return onHand!==null&&demandByMaterial[m]>onHand;
+  }));
+  const readyRows=open.map(b=>({b,blocked:shortMaterials.has(b.material||'(No Material Specified)')}))
+    .sort((a,b2)=>(a.blocked===b2.blocked)?0:a.blocked?1:-1);
+  $('readyList').innerHTML=readyRows.length?readyRows.map(({b,blocked})=>{
+    const sub=[b.job_name,b.material,b.finish,b.tasked].filter(Boolean).map(esc).join(' · ');
+    return`<div class="card">
+      <div>
+        <div class="name">${esc(b.batch)}</div>
+        <div class="meta">${sub}${sub?' · ':''}${b.scanned}/${b.total} scanned</div>
+      </div>
+      <span class="pill ${blocked?'blocked':'ready'}">${blocked?'Material Short':'Ready'}</span>
+    </div>`;
+  }).join(''):'<div class="empty">No open batches.</div>';
+
+  // ── SLACK — each batch's own pace (scanned ÷ elapsed calendar days)
+  // projected against remaining parts, compared to days left until
+  // Target Finish. No cross-batch capacity model - see the note above.
+  const now=new Date();now.setHours(0,0,0,0);
+  const slackRows=open.map(b=>{
+    const targetIso=toISODate(b.target_finish);
+    if(!targetIso)return null;
+    const target=new Date(targetIso+'T00:00:00');
+    const daysRemaining=Math.round((target-now)/86400000);
+    const remaining=b.total-b.scanned;
+    if(remaining<=0)return null;
+    const addedIso=toISODate(b.added_at)||targetIso;
+    const added=new Date(addedIso+'T00:00:00');
+    const elapsedDays=Math.max(1,Math.round((now-added)/86400000));
+    const rate=b.scanned/elapsedDays;
+    if(rate<=0)return{b,daysRemaining,slack:null};
+    const daysNeeded=Math.ceil(remaining/rate);
+    return{b,daysRemaining,slack:daysRemaining-daysNeeded};
+  }).filter(Boolean).sort((a,b2)=>{
+    if(a.slack===null)return 1;
+    if(b2.slack===null)return -1;
+    return a.slack-b2.slack;
+  });
+  $('slackList').innerHTML=slackRows.length?slackRows.map(({b,daysRemaining,slack})=>{
+    const sub=[b.job_name,b.material,b.tasked].filter(Boolean).map(esc).join(' · ');
+    const slackText=slack===null?'<span class="pill neutral">Not enough scans yet</span>':
+      `<div class="slack-num ${slack<0?'neg':'pos'}">${slack>0?'+':''}${slack}d</div>`;
+    return`<div class="card">
+      <div>
+        <div class="name">${esc(b.batch)}</div>
+        <div class="meta">${sub}${sub?' · ':''}${b.scanned}/${b.total} scanned · Due ${esc(toISODate(b.target_finish)||b.target_finish)} (${daysRemaining}d away)</div>
+      </div>
+      ${slackText}
+    </div>`;
+  }).join(''):'<div class="empty">No open batches with a Target Finish date.</div>';
+
+  // ── WORKLOAD — remaining parts summed per Tasked name, open batches only.
+  const byTasked={};
+  open.forEach(b=>{
+    const t=b.tasked||'(Unassigned)';
+    const remaining=Math.max(0,b.total-b.scanned);
+    const g=byTasked[t]=byTasked[t]||{remaining:0,batches:0};
+    g.remaining+=remaining;g.batches++;
+  });
+  const workloadRows=Object.entries(byTasked).sort((a,b2)=>b2[1].remaining-a[1].remaining);
+  $('workloadList').innerHTML=workloadRows.length?workloadRows.map(([t,g])=>`
+    <div class="card">
+      <div>
+        <div class="name">${esc(t)}</div>
+        <div class="meta">${g.batches} open batch${g.batches===1?'':'es'}</div>
+      </div>
+      <div class="slack-num" style="color:var(--gray-900)">${g.remaining}</div>
+    </div>`).join(''):'<div class="empty">No open batches.</div>';
+}
+if(KEY)load();
+</script>
+</body>
+</html>
