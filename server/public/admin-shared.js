@@ -595,7 +595,7 @@ function renderWeekDetail(key){
   $('weeklyDetailList').innerHTML=groupedBatchCardsHtml(items,b=>{
     const status=rowStatus(b);
     const sub=[b.job_name,b.material,b.finish,b.tasked].filter(Boolean).map(esc).join(' · ');
-    const meta=[sub,`${b.scanned}/${b.total} scanned`,b.target_finish?'Due '+esc(b.target_finish):''].filter(Boolean).join(' · ');
+    const meta=[sub,`${b.scanned}/${b.total} scanned`,b.target_finish?'Due '+esc(toISODate(b.target_finish)||b.target_finish):''].filter(Boolean).join(' · ');
     return`<div class="card" onclick="viewBatchLabels('${esc(b.batch)}')" style="cursor:pointer">
       <div>
         <div class="name">${esc(b.batch)}</div>
@@ -1171,7 +1171,7 @@ function renderAtRisk(){
     return`<div class="card" onclick="viewBatchLabels('${esc(b.batch)}')" style="cursor:pointer">
       <div>
         <div class="name">${esc(b.batch)}</div>
-        <div class="meta">${sub}${sub?' · ':''}${b.scanned}/${b.total} scanned (${Math.round(risk.completionPct)}%) · Due ${esc(b.target_finish)} · ${dueText}</div>
+        <div class="meta">${sub}${sub?' · ':''}${b.scanned}/${b.total} scanned (${Math.round(risk.completionPct)}%) · Due ${esc(toISODate(b.target_finish)||b.target_finish)} · ${dueText}</div>
       </div>
       <span class="pill notstarted">At Risk</span>
     </div>`;
@@ -1388,8 +1388,14 @@ function renderScheduleGrid(){
     // upsert-only-what's-present contract as before, just inline in the
     // grid row. Edit/Delete (or Save/Cancel while editing) now live on
     // the row's right-click menu instead of a dedicated Actions column.
+    // isDate display normalizes through toISODate too, not just the edit
+    // input's value - Target Finish is free-text from Excel/manual edits,
+    // so "2026/08/18" and "2026-08-18" both end up stored, and showed up
+    // raw before. Falls back to the original string if it can't be
+    // parsed, so nothing ever goes blank over a format toISODate doesn't
+    // recognize.
     const field=(key,isDate)=>{
-      if(!editing)return esc(b[key]||'');
+      if(!editing)return esc(isDate?(toISODate(b[key])||b[key]||''):(b[key]||''));
       const val=isDate?toISODate(b[key]):esc(b[key]||'');
       return`<input class="gc-input" type="${isDate?'date':'text'}" data-field="${key}" value="${val}" onclick="event.stopPropagation()">`;
     };
@@ -1508,7 +1514,7 @@ async function viewBatchLabels(batch){
   try{
     const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
     const sched=data.schedule||{};
-    const line=[sched.job_name,sched.target_finish,sched.material,sched.finish,sched.part_name,sched.tasked].filter(Boolean).join(' · ');
+    const line=[sched.job_name,sched.target_finish?(toISODate(sched.target_finish)||sched.target_finish):'',sched.material,sched.finish,sched.part_name,sched.tasked].filter(Boolean).join(' · ');
     $('labelsSub').textContent=line||'No production schedule details for this batch yet.';
     currentBatchLabels=data.labels||[];
     renderLabelFilterBar();
