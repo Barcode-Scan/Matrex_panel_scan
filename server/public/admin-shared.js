@@ -1289,7 +1289,21 @@ function sortGridBy(asc){
 document.addEventListener('click',e=>{
   if(!e.target.closest('#colFilterPopover')&&!e.target.closest('.colf-btn'))closeColFilter();
   if(!e.target.closest('#rowCtxMenu'))closeRowContextMenu();
+  if(!e.target.closest('#otherDashMenu')&&!e.target.closest('#otherDashBtn'))closeOtherDashboards();
 });
+// Not present on gm.html/damon.html/swar.html (only the main dashboard
+// links out to the others), so guarded like every other admin.html-only
+// control.
+function toggleOtherDashboards(evt){
+  const menu=$('otherDashMenu');
+  if(!menu)return;
+  evt.stopPropagation();
+  menu.style.display=menu.style.display==='block'?'none':'block';
+}
+function closeOtherDashboards(){
+  const menu=$('otherDashMenu');
+  if(menu)menu.style.display='none';
+}
 document.addEventListener('contextmenu',e=>{
   if(!e.target.closest('tr[data-batch], [data-slipid], [data-deviceid]'))closeRowContextMenu();
 });
