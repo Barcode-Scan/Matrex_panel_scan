@@ -568,49 +568,19 @@ function openWeekDetail(key){
   showTab('weeklyDetail');
   renderWeekDetail(key);
 }
-// Same material+finish grouping shape as groupByMaterial() (Material
-// Demand tab), scoped to one week's items instead of every open batch -
-// reuses parseQty so a non-numeric Sheet Qty is called out, not dropped
-// or crashed on.
-function renderWeekMaterialSummary(items){
-  const el=$('weeklyMaterialSummaryBody');
-  if(!el)return; // this table doesn't exist on every page
-  const open=items.filter(b=>rowStatus(b)!=='complete');
-  const groups={};
-  open.forEach(b=>{
-    const key=(b.material||'(No Material Specified)')+'|'+(b.finish||'(No Finish Specified)');
-    const g=groups[key]=groups[key]||{material:b.material||'(No Material Specified)',finish:b.finish||'(No Finish Specified)',total:0,unparsed:0};
-    const q=parseQty(b.sheet_qty);
-    q===null?g.unparsed++:g.total+=q;
-  });
-  const rows=Object.values(groups).sort((a,b)=>a.material.localeCompare(b.material)||a.finish.localeCompare(b.finish));
-  if(!rows.length){el.innerHTML='<div class="empty">No open batches with a Sheet Qty due this week.</div>';return;}
-  el.innerHTML=rows.map(r=>`<div class="card">
-    <div>
-      <div class="name">${esc(r.material)}</div>
-      <div class="meta">${esc(r.finish)}</div>
-    </div>
-    <div class="mrs-qty">${r.total}${r.unparsed?` <span style="font-size:11px;font-weight:400;color:var(--gray-500)">(+${r.unparsed})</span>`:''}</div>
-  </div>`).join('');
-}
+// Same look as Production Schedule now (scheduleRowHtml is the exact
+// same row markup, inline edit, and right-click Edit/Delete menu) -
+// just pre-filtered to one week's batches instead of showing every
+// batch with its own column-filter UI. No separate filter/sort state
+// for this grid: a week's batches are already a small, pre-narrowed
+// set, so the main grid's per-column filters aren't needed here too.
 function renderWeekDetail(key){
   const items=(groupByWeek()[key])||[];
   $('weeklyDetailTitle').textContent=key==='unscheduled'?'No Target Finish Date':weekLabel(key);
   $('weeklyDetailSub').textContent=items.length+' batch'+(items.length===1?'':'es');
-  renderWeekMaterialSummary(items);
-  if(!items.length){$('weeklyDetailList').innerHTML='<div class="empty">No batches.</div>';return;}
-  $('weeklyDetailList').innerHTML=groupedBatchCardsHtml(items,b=>{
-    const status=rowStatus(b);
-    const sub=[b.job_name,b.material,b.finish,b.tasked].filter(Boolean).map(esc).join(' · ');
-    const meta=[sub,`${b.scanned}/${b.total} scanned`,b.target_finish?'Due '+esc(toISODate(b.target_finish)||b.target_finish):''].filter(Boolean).join(' · ');
-    return`<div class="card" onclick="viewBatchLabels('${esc(b.batch)}')" style="cursor:pointer">
-      <div>
-        <div class="name">${esc(b.batch)}</div>
-        <div class="meta">${meta}</div>
-      </div>
-      <span class="pill ${statusPillClass(status)}">${statusLabel(status)}</span>
-    </div>`;
-  });
+  if(!items.length){$('weeklyDetailList').innerHTML='<tr><td colspan="11" class="empty">No batches.</td></tr>';return;}
+  const sorted=[...items].sort((a,b)=>(a.target_finish||'9999-99-99').localeCompare(b.target_finish||'9999-99-99'));
+  $('weeklyDetailList').innerHTML=sorted.map(scheduleRowHtml).join('');
 }
 $('bBackWeeklyDetail').onclick=()=>{currentWeekKey=null;showTab('weekly');};
 
@@ -1368,6 +1338,44 @@ function computeRisk(b){
   return{level,completionPct,elapsedPct,daysRemaining};
 }
 
+// One row's markup - shared by the main Production Schedule grid and
+// Weekly Detail's grid (same look, same inline edit/right-click menu,
+// same risk coloring), so the two never drift out of sync with each
+// other the way two independently-maintained copies eventually would.
+function scheduleRowHtml(b){
+  const pct=b.total?Math.round((b.scanned/b.total)*100):0;
+  const state=rowStatus(b);
+  const editing=editingBatches.has(b.batch);
+  // Editable text field, or a date-type one for target_finish - same
+  // upsert-only-what's-present contract as before, just inline in the
+  // grid row. Edit/Delete (or Save/Cancel while editing) now live on
+  // the row's right-click menu instead of a dedicated Actions column.
+  // isDate display normalizes through toISODate too, not just the edit
+  // input's value - Target Finish is free-text from Excel/manual edits,
+  // so "2026/08/18" and "2026-08-18" both end up stored, and showed up
+  // raw before. Falls back to the original string if it can't be
+  // parsed, so nothing ever goes blank over a format toISODate doesn't
+  // recognize.
+  const field=(key,isDate)=>{
+    if(!editing)return esc(isDate?(toISODate(b[key])||b[key]||''):(b[key]||''));
+    const val=isDate?toISODate(b[key]):esc(b[key]||'');
+    return`<input class="gc-input" type="${isDate?'date':'text'}" data-field="${key}" value="${val}" onclick="event.stopPropagation()">`;
+  };
+  const risk=computeRisk(b);
+  return`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}" onclick="viewBatchLabels('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')">
+    <td>${field('job_name')}</td>
+    <td>${field('floor_or_work_order')}</td>
+    <td>${field('target_finish',true)}</td>
+    <td>${field('material')}</td>
+    <td>${field('finish')}</td>
+    <td>${field('part_name')}</td>
+    <td class="gc-batch">${esc(b.batch)}</td>
+    <td><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${b.scanned}/${b.total}</div></div></td>
+    <td class="gc-num">${field('sheet_qty')}</td>
+    <td class="gc-comment">${field('comment')}</td>
+    <td>${field('tasked')}</td>
+  </tr>`;
+}
 function renderScheduleGrid(){
   let rows=scheduleBatches.filter(b=>{
     for(const key in columnFilters){
@@ -1387,40 +1395,7 @@ function renderScheduleGrid(){
     if(btn)btn.classList.toggle('active',!!columnFilters[key]);
   });
   if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="11" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;return;}
-  $('scheduleTbody').innerHTML=rows.map(b=>{
-    const pct=b.total?Math.round((b.scanned/b.total)*100):0;
-    const state=rowStatus(b);
-    const editing=editingBatches.has(b.batch);
-    // Editable text field, or a date-type one for target_finish - same
-    // upsert-only-what's-present contract as before, just inline in the
-    // grid row. Edit/Delete (or Save/Cancel while editing) now live on
-    // the row's right-click menu instead of a dedicated Actions column.
-    // isDate display normalizes through toISODate too, not just the edit
-    // input's value - Target Finish is free-text from Excel/manual edits,
-    // so "2026/08/18" and "2026-08-18" both end up stored, and showed up
-    // raw before. Falls back to the original string if it can't be
-    // parsed, so nothing ever goes blank over a format toISODate doesn't
-    // recognize.
-    const field=(key,isDate)=>{
-      if(!editing)return esc(isDate?(toISODate(b[key])||b[key]||''):(b[key]||''));
-      const val=isDate?toISODate(b[key]):esc(b[key]||'');
-      return`<input class="gc-input" type="${isDate?'date':'text'}" data-field="${key}" value="${val}" onclick="event.stopPropagation()">`;
-    };
-    const risk=computeRisk(b);
-    return`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}" onclick="viewBatchLabels('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')">
-      <td>${field('job_name')}</td>
-      <td>${field('floor_or_work_order')}</td>
-      <td>${field('target_finish',true)}</td>
-      <td>${field('material')}</td>
-      <td>${field('finish')}</td>
-      <td>${field('part_name')}</td>
-      <td class="gc-batch">${esc(b.batch)}</td>
-      <td><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${b.scanned}/${b.total}</div></div></td>
-      <td class="gc-num">${field('sheet_qty')}</td>
-      <td class="gc-comment">${field('comment')}</td>
-      <td>${field('tasked')}</td>
-    </tr>`;
-  }).join('');
+  $('scheduleTbody').innerHTML=rows.map(scheduleRowHtml).join('');
 }
 
 // Best-effort free text -> yyyy-mm-dd, for feeding an existing stored

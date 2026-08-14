@@ -54,14 +54,6 @@
   .pill.notstarted{background:var(--red-50);color:var(--red-600)}
   .pill.neutral{background:var(--gray-100);color:var(--gray-500)}
   .week-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
-  .mrs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
-  /* "Futuristic" kept inside the app's existing light palette rather than
-     a literal dark/neon reskin - that would clash sitting next to every
-     other plain white panel. Restraint everywhere except the number
-     itself: monospace, glowing blue, since that's the one thing this
-     panel actually exists to tell you. */
-  .mrs-grid .card{margin-bottom:0;background:linear-gradient(155deg,#fff,var(--blue-50) 220%);box-shadow:inset 3px 0 0 var(--blue-600)}
-  .mrs-qty{font-size:21px;font-weight:700;color:var(--blue-600);font-variant-numeric:tabular-nums;flex-shrink:0;font-family:ui-monospace,"Cascadia Code",Consolas,"SF Mono",monospace;letter-spacing:.02em;text-shadow:0 0 14px rgba(43,89,225,.35)}
   .week-card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:12px;padding:16px;cursor:pointer;transition:box-shadow .15s,background .1s}
   .week-card:hover{box-shadow:0 4px 14px rgba(16,24,40,.08);background:var(--blue-50)}
   .week-card.current{background:var(--green-50);border-color:var(--green-700)}
@@ -526,19 +518,21 @@
       </div>
       <button class="secondary" id="bBackWeeklyDetail">&larr; All Weeks</button>
     </div>
-    <div class="panel">
-      <div class="rep-sub">Material Requirement Summary</div>
-      <div class="sub" style="margin-top:-4px">Open batches due this week, grouped by Material and Finish. A batch already fully scanned isn't counted — its material's already been used.</div>
-      <!-- A wide table kept fighting the same problem no matter how the
-           columns were divided up: something always ends up absorbing
-           whatever's left of a panel that's simply wider than three
-           short columns of data need. A card grid (same pattern as
-           Weekly Schedule's week-grid) sizes each entry independently -
-           there's no "leftover space" to land anywhere awkward, cards
-           just wrap to a new row when they run out of width. -->
-      <div class="mrs-grid" id="weeklyMaterialSummaryBody"></div>
+    <!-- Same table/row markup as Production Schedule (scheduleRowHtml is
+         shared between them) - just pre-filtered to this week's batches,
+         sorted by Target Finish. No column-filter row here on purpose:
+         a week's batches are already a small, narrowed-down set. -->
+    <div style="overflow-x:auto">
+    <table class="sched-grid">
+      <thead>
+        <tr>
+          <th>Job</th><th>Floor or Work Order</th><th>Target Finish</th><th>Material</th><th>Finish</th>
+          <th>Part Name</th><th>Batch Name</th><th>Part Qty</th><th>Sheet Qty</th><th>Comment</th><th>Tasked</th>
+        </tr>
+      </thead>
+      <tbody id="weeklyDetailList"></tbody>
+    </table>
     </div>
-    <div id="weeklyDetailList"></div>
   </div>
 
   <div id="tabMaterial" style="display:none">
