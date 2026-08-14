@@ -498,7 +498,12 @@ function groupByWeek(){
   });
   return groups;
 }
-function statusPillClass(v){return v==='complete'?'done':v==='progress'?'working':'notstarted';}
+// 'notstarted'(red) is reserved for genuine problems elsewhere (a real
+// material shortfall) - a batch that simply hasn't been picked up yet
+// isn't inherently a problem the same way, and coloring it identically
+// to red-hot-urgent work makes red mean less everywhere it's used.
+// Actual urgency is already the At Risk tab's job, not this pill's.
+function statusPillClass(v){return v==='complete'?'done':v==='progress'?'working':'neutral';}
 // Shared by any batch-card list that mixes every status together (Weekly
 // Detail, Job Detail) - groups into Not Started / In Progress / Complete
 // sections instead of one flat list where a finished batch sits next to

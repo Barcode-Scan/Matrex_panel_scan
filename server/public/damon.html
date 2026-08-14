@@ -148,15 +148,15 @@
   .rep-tbl{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px}
   .rep-tbl th,.rep-tbl td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--gray-200)}
   .rep-tbl th{color:var(--gray-500);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px}
-  .rep-tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .rep-tbl td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:var(--gray-900)}
   .rep-sub{font-weight:700;font-size:14px;margin:18px 0 8px}
   .rep-actions{display:flex;gap:8px;align-items:center;margin-bottom:6px}
-  .panel{background:var(--white);border:1.5px solid var(--gray-200);border-radius:12px;padding:16px 18px;margin-bottom:18px}
+  .panel{background:var(--white);border:1.5px solid var(--gray-200);border-top:3px solid var(--blue-600);border-radius:12px;padding:16px 18px;margin-bottom:18px}
   .panel .rep-sub{margin-top:0}
-  .batch-group{margin-bottom:18px}
+  .batch-group{margin-bottom:28px}
   .batch-group:last-child{margin-bottom:0}
   .batch-group-head{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.3px;color:var(--gray-500);margin-bottom:8px}
-  .batch-group-count{background:var(--gray-100);color:var(--gray-500);font-size:11px;font-weight:800;padding:1px 8px;border-radius:100px}
+  .batch-group-count{background:var(--gray-200);color:var(--gray-500);font-size:11px;font-weight:800;padding:1px 8px;border-radius:100px}
   .daterange{display:flex;gap:8px;align-items:center;margin-bottom:10px}
   .daterange input{flex:none;width:140px}
 
@@ -363,7 +363,8 @@
     <div class="panel">
       <div class="rep-sub">Material Requirement Summary</div>
       <div class="sub" style="margin-top:-4px">Open batches due this week, grouped by Material and Finish. A batch already fully scanned isn't counted — its material's already been used.</div>
-      <table class="rep-tbl" style="margin-bottom:0">
+      <table class="rep-tbl" style="margin-bottom:0;table-layout:fixed">
+        <colgroup><col style="width:55%"><col style="width:25%"><col style="width:20%"></colgroup>
         <thead><tr><th>Material</th><th>Finish</th><th class="num">Sheet Qty</th></tr></thead>
         <tbody id="weeklyMaterialSummaryBody"></tbody>
       </table>
