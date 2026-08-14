@@ -521,16 +521,14 @@
     <div class="panel">
       <div class="rep-sub">Material Requirement Summary</div>
       <div class="sub" style="margin-top:-4px">Open batches due this week, grouped by Material and Finish. A batch already fully scanned isn't counted — its material's already been used.</div>
-      <table class="rep-tbl" style="margin-bottom:0;table-layout:fixed">
-        <!-- Percentage widths were proportionally right but still scale
-             with the panel - 20% of a wide desktop window is still
-             hundreds of pixels, leaving a right-aligned 2-digit number
-             stranded far from "Finish" with a dead gap between them.
-             Finish/Sheet Qty as fixed px means they never grow past
-             what their content actually needs, at any screen width -
-             Material (the only genuinely variable-length field) is the
-             one column left to absorb whatever space remains. -->
-        <colgroup><col><col style="width:180px"><col style="width:110px"></colgroup>
+      <!-- Every column fixed AND the table itself capped, not stretched
+           to width:100% - leaving any one column unconstrained just
+           moves the dead gap next to whichever column that is (Material
+           absorbed the whole panel's leftover width the first time this
+           was tried). A table narrower than its panel is normal and
+           unremarkable; a gap inside the data between columns isn't. -->
+      <table class="rep-tbl" style="margin-bottom:0;table-layout:fixed;width:auto;min-width:0">
+        <colgroup><col style="width:420px"><col style="width:200px"><col style="width:110px"></colgroup>
         <thead><tr><th>Material</th><th>Finish</th><th class="num">Sheet Qty</th></tr></thead>
         <tbody id="weeklyMaterialSummaryBody"></tbody>
       </table>
