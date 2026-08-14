@@ -55,8 +55,13 @@
   .pill.neutral{background:var(--gray-100);color:var(--gray-500)}
   .week-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
   .mrs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
-  .mrs-grid .card{margin-bottom:0}
-  .mrs-qty{font-size:20px;font-weight:800;color:var(--gray-900);font-variant-numeric:tabular-nums;flex-shrink:0}
+  /* "Futuristic" kept inside the app's existing light palette rather than
+     a literal dark/neon reskin - that would clash sitting next to every
+     other plain white panel. Restraint everywhere except the number
+     itself: monospace, glowing blue, since that's the one thing this
+     panel actually exists to tell you. */
+  .mrs-grid .card{margin-bottom:0;background:linear-gradient(155deg,#fff,var(--blue-50) 220%);box-shadow:inset 3px 0 0 var(--blue-600)}
+  .mrs-qty{font-size:21px;font-weight:700;color:var(--blue-600);font-variant-numeric:tabular-nums;flex-shrink:0;font-family:ui-monospace,"Cascadia Code",Consolas,"SF Mono",monospace;letter-spacing:.02em;text-shadow:0 0 14px rgba(43,89,225,.35)}
   .week-card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:12px;padding:16px;cursor:pointer;transition:box-shadow .15s,background .1s}
   .week-card:hover{box-shadow:0 4px 14px rgba(16,24,40,.08);background:var(--blue-50)}
   .week-card.current{background:var(--green-50);border-color:var(--green-700)}
