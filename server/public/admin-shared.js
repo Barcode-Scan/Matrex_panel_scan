@@ -1269,6 +1269,7 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#colFilterPopover')&&!e.target.closest('.colf-btn'))closeColFilter();
   if(!e.target.closest('#rowCtxMenu'))closeRowContextMenu();
   if(!e.target.closest('#otherDashMenu')&&!e.target.closest('#otherDashBtn'))closeOtherDashboards();
+  autoSaveRowsClickedAway(e.target);
 });
 // Not present on gm.html/damon.html/swar.html (only the main dashboard
 // links out to the others), so guarded like every other admin.html-only
@@ -1364,7 +1365,7 @@ function scheduleRowHtml(b){
     return`<input class="gc-input" type="${isDate?'date':'text'}" data-field="${key}" value="${val}" onclick="event.stopPropagation()">`;
   };
   const risk=computeRisk(b);
-  return`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}" onclick="viewBatchLabels('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')">
+  return`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}" onclick="handleRowClick('${esc(b.batch)}')" ondblclick="handleRowDblClick('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')">
     <td>${field('job_name')}</td>
     <td>${field('floor_or_work_order')}</td>
     <td>${field('target_finish',true)}</td>
@@ -1442,11 +1443,40 @@ const ICON_SAVE='&#10003;';  // ✓ check mark
 const ICON_CANCEL='&#10005;'; // ✕ multiplication x
 
 // Batches currently in inline-edit mode (their grid row shows inputs
-// instead of plain text). A row's own Edit/Save icons toggle membership.
+// instead of plain text). A row's own Edit/Save icons toggle membership,
+// same as double-clicking the row (see handleRowDblClick below) or right-
+// clicking it for the Edit/Cancel menu.
 let editingBatches=new Set();
 
 function toggleEditRow(batch){editingBatches.add(batch);renderScheduleGrid();}
 function cancelRowEdit(batch){editingBatches.delete(batch);renderScheduleGrid();}
+
+// A single click views that batch's labels; a double-click means "edit
+// this row" instead. Both fire on the same click, so the single-click
+// action is held for a beat - if a second click lands within that window
+// it's a double-click and the held action never runs. Already-editing rows
+// ignore the click entirely (no accidental navigate-away mid-edit).
+let rowClickTimer=null;
+function handleRowClick(batch){
+  if(editingBatches.has(batch))return;
+  if(rowClickTimer){clearTimeout(rowClickTimer);rowClickTimer=null;return;}
+  rowClickTimer=setTimeout(()=>{rowClickTimer=null;viewBatchLabels(batch);},250);
+}
+function handleRowDblClick(batch){
+  if(rowClickTimer){clearTimeout(rowClickTimer);rowClickTimer=null;}
+  if(!editingBatches.has(batch))toggleEditRow(batch);
+}
+// Clicking anywhere outside a row that's mid-edit auto-saves it - no Save
+// button to remember to click. Runs from the page-wide click listener
+// below. The context menu's explicit Save/Cancel still work too, for
+// discarding a change instead of keeping it.
+function autoSaveRowsClickedAway(target){
+  if(!editingBatches.size)return;
+  [...editingBatches].forEach(batch=>{
+    const row=document.querySelector(`tr[data-batch="${CSS.escape(batch)}"]`);
+    if(row&&!row.contains(target))saveRowEdit(batch);
+  });
+}
 
 // Reads every .gc-input in that batch's row (identified via data-batch,
 // since batch names are unique) and saves in one call - same upsert
