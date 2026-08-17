@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Matrex — Device Approvals</title>
+<title>Matrex — Main Dashboard</title>
+<link rel="manifest" href="manifest-admin.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#2B59E1">
 <style>
   :root{--bg:#F5F6FA;--white:#fff;--gray-200:#E4E7EC;--gray-500:#667085;--gray-900:#101828;
     --blue-600:#2B59E1;--blue-50:#E8F0FE;--green-700:#027A48;--green-50:#ECFDF3;--green-100:#D1FADF;
@@ -702,5 +705,6 @@
 
 <div class="ctx-menu" id="rowCtxMenu"></div>
 <script src="admin-shared.js"></script>
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});</script>
 </body>
 </html>

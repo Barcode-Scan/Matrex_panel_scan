@@ -1,0 +1,13 @@
+{
+  "name": "MATREX — Main Dashboard",
+  "short_name": "MATREX Admin",
+  "description": "Production Schedule, Weekly Schedule, Job Summary, Packing Slips, Completed Tasks, and Operations.",
+  "start_url": "/admin.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F5F6FA",
+  "theme_color": "#2B59E1",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
