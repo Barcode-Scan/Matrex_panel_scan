@@ -40,7 +40,8 @@ const TAB_CONTAINERS={
   weekly:'tabWeekly',weeklyDetail:'tabWeeklyDetail',
   material:'tabMaterial',stalled:'tabStalled',risk:'tabRisk',yieldTab:'tabYield',
   jobs:'tabJobSummary',jobDetail:'tabJobDetail',
-  packing:'tabPacking',packingForm:'tabPackingForm',packingPrint:'tabPackingPrint'
+  packing:'tabPacking',packingForm:'tabPackingForm',packingPrint:'tabPackingPrint',
+  completed:'tabCompleted'
 };
 // Which tab-bar button lights up "active" for a given tab name - several
 // names share one button (weekly + weeklyDetail both light up the one
@@ -51,7 +52,8 @@ const TAB_BUTTON_FOR={
   weekly:'tabBtnWeekly',weeklyDetail:'tabBtnWeekly',
   material:'tabBtnMaterial',stalled:'tabBtnStalled',risk:'tabBtnRisk',yieldTab:'tabBtnYield',
   jobs:'tabBtnJobs',jobDetail:'tabBtnJobs',
-  packing:'tabBtnPacking',packingForm:'tabBtnPacking',packingPrint:'tabBtnPacking'
+  packing:'tabBtnPacking',packingForm:'tabBtnPacking',packingPrint:'tabBtnPacking',
+  completed:'tabBtnCompleted'
 };
 function showTab(name){
   currentTab=name;
@@ -464,6 +466,7 @@ async function loadScheduleList(){
     if(currentTab==='yieldTab')renderThroughputYield();
     if(currentTab==='jobs'||currentTab==='jobDetail')renderJobSummary();
     if(currentTab==='packing')renderPackingTab();
+    if(currentTab==='completed')renderCompletedTasks();
     checkCompletionAlerts();
   }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
@@ -820,14 +823,17 @@ let currentPackingBatch=null;
 let currentPackingParts=[];
 let editingSlipId=null; // null = creating a new slip; set = editing an existing one
 
+// A packing slip being generated at all now means the batch's task is done
+// - it drops out of Ready to Pack the moment its first slip exists, and
+// shows up instead in Completed Tasks (renderCompletedTasks below), so a
+// batch no longer sits in both places at once the way it used to.
 function renderPackingTab(){
-  const ready=scheduleBatches.filter(b=>rowStatus(b)==='complete');
+  const ready=scheduleBatches.filter(b=>rowStatus(b)==='complete'&&!packingSlipsCache.some(s=>s.batch===b.batch));
   $('readyToPackList').innerHTML=ready.length?ready.map(b=>{
-    const slipCount=packingSlipsCache.filter(s=>s.batch===b.batch).length;
     return`<div class="card">
       <div>
         <div class="name">${esc(b.batch)}</div>
-        <div class="meta">${esc(b.job_name||'(no job)')} · ${b.scanned}/${b.total} scanned${slipCount?' · '+slipCount+' packing slip'+(slipCount===1?'':'s')+' already created':''}</div>
+        <div class="meta">${esc(b.job_name||'(no job)')} · ${b.scanned}/${b.total} scanned</div>
       </div>
       <button onclick="openPackingForm('${esc(b.batch)}')">Create Packing Slip</button>
     </div>`;
@@ -841,6 +847,41 @@ function renderPackingTab(){
       </div>
       <span class="pill neutral">View / Print</span>
     </div>`).join(''):'<div class="empty">No packing slips created yet.</div>';
+}
+// ── COMPLETED TASKS — every batch that has at least one packing slip,
+// grouped under its own card with the full production-schedule record
+// (same fields as the Production Schedule grid) plus its slip(s), so
+// there's one place to see everything about a finished task without
+// hunting across Production Schedule and Packing Slips separately.
+function renderCompletedTasks(){
+  const el=$('completedTasksList');
+  if(!el)return; // not every dashboard page has this tab
+  const done=scheduleBatches.filter(b=>packingSlipsCache.some(s=>s.batch===b.batch));
+  if(!done.length){el.innerHTML='<div class="empty">No completed tasks yet — a batch shows up here once its first packing slip is created.</div>';return;}
+  const sorted=[...done].sort((a,b)=>a.batch.localeCompare(b.batch));
+  el.innerHTML=sorted.map(b=>{
+    const slips=packingSlipsCache.filter(s=>s.batch===b.batch);
+    const fields=[
+      ['Job Name',b.job_name],['Floor / Work Order',b.floor_or_work_order],
+      ['Target Finish',toISODate(b.target_finish)||b.target_finish],['Material',b.material],
+      ['Finish',b.finish],['Part Name',b.part_name],['Sheet Qty',b.sheet_qty],['Comment',b.comment],
+      ['Task Status','Complete'],['Scanned',b.scanned+'/'+b.total]
+    ].filter(([,v])=>v).map(([k,v])=>`<div class="field-row"><span class="field-k">${esc(k)}</span><span class="field-v">${esc(v)}</span></div>`).join('');
+    const slipsHtml=slips.map(s=>`
+      <div class="card" data-slipid="${s.id}" onclick="viewPackingSlip(${s.id})" oncontextmenu="openPackingCtxMenu(event,${s.id})" style="cursor:pointer;margin-bottom:6px">
+        <div>
+          <div class="name">${esc(s.slip_number)}</div>
+          <div class="meta">${esc(s.department||'')}${s.department&&s.ship_to?' · ':''}${esc(s.ship_to||'')} · ${esc(s.slip_date)}</div>
+        </div>
+        <span class="pill neutral">View / Print</span>
+      </div>`).join('');
+    return`<div class="card" style="flex-direction:column;align-items:stretch;gap:2px;cursor:default;margin-bottom:14px">
+      <div class="name" style="font-size:16px;margin-bottom:4px">${esc(b.batch)}</div>
+      ${fields}
+      <div class="field-k" style="margin:10px 0 4px">PACKING SLIP${slips.length===1?'':'S'}</div>
+      ${slipsHtml}
+    </div>`;
+  }).join('');
 }
 // Right-click a created packing slip for Edit/Delete - reuses the exact
 // same shared context-menu element the Production Schedule grid already
@@ -870,6 +911,7 @@ async function loadPackingSlips(){
     const data=await api('/admin/api/packing-slips');
     packingSlipsCache=data.slips||[];
     if(currentTab==='packing')renderPackingTab();
+    if(currentTab==='completed')renderCompletedTasks();
   }catch(e){/* leave last-known cache showing rather than blank it on a transient error */}
 }
 
