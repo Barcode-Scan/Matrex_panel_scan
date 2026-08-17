@@ -1006,7 +1006,38 @@ app.post('/admin/api/packing-slips', requireAdmin, (req, res) => {
   const now = new Date().toISOString();
   const prefix = `PS-${new Date().getFullYear().toString().slice(-2)}-`;
   const schedule = getProductionSchedule.get(batch) || {};
-  const parts = getBatchParts.all(batch);
+  const authoritative = getBatchParts.all(batch);
+
+  // The admin UI lets someone reorder parts and cluster them into named
+  // groups before generating (e.g. "RAILINGS") - that arrangement comes
+  // back here as b.parts_snapshot. Never trust it for the actual part
+  // *data* though (tag/type/size/qty/colour always come from the
+  // authoritative query above, keyed by unique_id) - only its order and
+  // group labels are used. If the set of unique_ids doesn't exactly match
+  // what's actually on the batch (stale client, or the batch changed
+  // underneath it), reject rather than silently falling back, since that
+  // would quietly discard whatever arranging was just done.
+  let parts = authoritative;
+  if (Array.isArray(b.parts_snapshot) && b.parts_snapshot.length) {
+    const byId = new Map(authoritative.map(p => [p.unique_id, p]));
+    const seen = new Set();
+    const reordered = [];
+    let valid = authoritative.length === b.parts_snapshot.length;
+    if (valid) {
+      for (const item of b.parts_snapshot) {
+        const uid = item && item.unique_id;
+        const src = uid != null ? byId.get(uid) : null;
+        if (!src || seen.has(uid)) { valid = false; break; }
+        seen.add(uid);
+        const group = (item.group && typeof item.group === 'string') ? item.group.trim().slice(0, 60) : '';
+        reordered.push({ ...src, group });
+      }
+    }
+    if (!valid) {
+      return res.status(409).json({ ok: false, error: 'Part list has changed since you loaded it — reload this batch and try again.' });
+    }
+    parts = reordered;
+  }
   const actor = actorFrom(req);
   const insertFields = {
     batch,

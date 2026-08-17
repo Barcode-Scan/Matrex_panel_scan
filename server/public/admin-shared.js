@@ -120,7 +120,15 @@ function copyAdminKeyFromBoards(){
 
 async function api(path,opts){
   const r=await fetch(path,Object.assign({headers:{'X-Admin-Key':KEY,'X-Actor-Name':getActorName(),'Content-Type':'application/json'}},opts||{}));
-  if(!r.ok)throw new Error('HTTP '+r.status);
+  if(!r.ok){
+    // Surface the server's actual message (e.g. a validation reason) when
+    // it sends one, instead of every caller's alert() just saying "HTTP
+    // 409" - falls back to the bare status if the body isn't JSON or has
+    // no .error, so this never throws a worse error than before.
+    let msg='HTTP '+r.status;
+    try{const body=await r.json();if(body&&body.error)msg=body.error;}catch(e){}
+    throw new Error(msg);
+  }
   return r.json();
 }
 
@@ -973,15 +981,124 @@ async function openPackingForm(batch){
   $('pfCheckedBy').value='';
   $('pfComments').value='';
   $('pfSpecial').value='';
+  packingPartsSelected=new Set();
+  if($('pfPartsFilter'))$('pfPartsFilter').value='';
+  if($('pfGroupName'))$('pfGroupName').value='';
+  packingPartsEditable=true;
   $('packingFormPartsPreview').innerHTML='<div class="empty">Loading part list…</div>';
   showTab('packingForm');
   try{
     const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
-    currentPackingParts=(data.labels||[]).map(l=>({unique_id:l.unique_id,tag:l.tag,part_type:l.part_type,width:l.width,height:l.height,qty:l.qty,colour:l.colour}));
-    $('packingFormPartsPreview').innerHTML=tbl(['Tag','Part Type','Size','Qty','Colour'],currentPackingParts.map(p=>[p.tag||p.unique_id,p.part_type||'',[p.width,p.height].filter(Boolean).join(' X '),p.qty||'',p.colour||'']));
+    currentPackingParts=(data.labels||[]).map(l=>({unique_id:l.unique_id,tag:l.tag,part_type:l.part_type,width:l.width,height:l.height,qty:l.qty,colour:l.colour,group:''}));
+    renderPackingPartsPreview();
   }catch(e){
     $('packingFormPartsPreview').innerHTML='<div class="empty">Could not load part list.</div>';
   }
+}
+// ── PART LIST EDITOR (filter / reorder / group) — only meaningful while
+// creating a new slip (packingPartsEditable), since an already-issued
+// slip's parts_snapshot is locked (see openPackingEditForm below). A
+// "group" is just a label on a part; the UI's job is keeping every part
+// sharing a group contiguous in currentPackingParts so rendering it is a
+// simple "print a header whenever the group changes" pass, both here and
+// in the print view / read-only edit view.
+let packingPartsEditable=false;
+let packingPartsSelected=new Set();
+function getPackingBlockRange(parts,i){
+  const g=parts[i].group||'';
+  if(!g)return{start:i,end:i,group:''};
+  let start=i,end=i;
+  while(start>0&&parts[start-1].group===g)start--;
+  while(end<parts.length-1&&parts[end+1].group===g)end++;
+  return{start,end,group:g};
+}
+// Moves the whole block a part belongs to (a multi-part group moves as one
+// unit; an ungrouped part's "block" is just itself) past its neighboring
+// block in the given direction - so grouping something doesn't lose the
+// ability to reposition it, it just repositions as a section instead of
+// part by part.
+function movePackingPart(uid,dir){
+  const parts=currentPackingParts;
+  const i=parts.findIndex(p=>p.unique_id===uid);
+  if(i<0)return;
+  const block=getPackingBlockRange(parts,i);
+  if(dir<0){
+    if(block.start===0)return;
+    const prev=getPackingBlockRange(parts,block.start-1);
+    currentPackingParts=[...parts.slice(0,prev.start),...parts.slice(block.start,block.end+1),...parts.slice(prev.start,prev.end+1),...parts.slice(block.end+1)];
+  }else{
+    if(block.end===parts.length-1)return;
+    const next=getPackingBlockRange(parts,block.end+1);
+    currentPackingParts=[...parts.slice(0,block.start),...parts.slice(next.start,next.end+1),...parts.slice(block.start,block.end+1),...parts.slice(next.end+1)];
+  }
+  renderPackingPartsPreview();
+}
+function togglePackingPartSelect(uid,checked){
+  checked?packingPartsSelected.add(uid):packingPartsSelected.delete(uid);
+}
+// Pulls every selected part out of its current position and reinserts them
+// together as one contiguous block, right where the earliest-selected one
+// used to be - so grouping something roughly keeps it where you were
+// looking, rather than jumping to the top or bottom of the list.
+function groupSelectedPackingParts(){
+  const name=($('pfGroupName').value||'').trim();
+  if(!name){alert('Enter a group name first.');return;}
+  if(!packingPartsSelected.size){alert('Select at least one part to group.');return;}
+  const parts=currentPackingParts;
+  const firstIdx=parts.findIndex(p=>packingPartsSelected.has(p.unique_id));
+  const insertAt=parts.slice(0,firstIdx).filter(p=>!packingPartsSelected.has(p.unique_id)).length;
+  const grouped=parts.filter(p=>packingPartsSelected.has(p.unique_id)).map(p=>({...p,group:name}));
+  const rest=parts.filter(p=>!packingPartsSelected.has(p.unique_id));
+  currentPackingParts=[...rest.slice(0,insertAt),...grouped,...rest.slice(insertAt)];
+  packingPartsSelected=new Set();
+  $('pfGroupName').value='';
+  renderPackingPartsPreview();
+}
+function ungroupPackingGroup(group){
+  currentPackingParts=currentPackingParts.map(p=>p.group===group?{...p,group:''}:p);
+  renderPackingPartsPreview();
+}
+// Filter only narrows what's visible while arranging - it never removes a
+// part from currentPackingParts, so it can't accidentally leave something
+// off the actual slip. Selection is tracked by unique_id (not row index),
+// so it survives the filter changing what's currently shown.
+function renderPackingPartsPreview(){
+  const el=$('packingFormPartsPreview');
+  if(!el)return;
+  const parts=currentPackingParts;
+  if(!parts.length){el.innerHTML='<div class="empty">No parts on record for this batch.</div>';return;}
+  if(!packingPartsEditable){
+    el.innerHTML='<div class="sub" style="margin-bottom:8px">Part list is locked to what was packed when this slip was created — not editable here.</div>'
+      +'<table class="rep-tbl"><thead><tr><th>Tag</th><th>Part Type</th><th>Size</th><th>Qty</th><th>Colour</th></tr></thead><tbody>'
+      +parts.map((p,i)=>{
+        const header=p.group&&(i===0||parts[i-1].group!==p.group)?`<tr><td colspan="5" style="background:var(--gray-100);font-weight:700;text-align:left">${esc(p.group)}</td></tr>`:'';
+        return header+`<tr><td>${esc(p.tag||p.unique_id)}</td><td>${esc(p.part_type||'')}</td><td>${esc([p.width,p.height].filter(Boolean).join(' X '))}</td><td>${esc(p.qty||'')}</td><td>${esc(p.colour||'')}</td></tr>`;
+      }).join('')
+      +'</tbody></table>';
+    return;
+  }
+  const q=(($('pfPartsFilter')&&$('pfPartsFilter').value)||'').trim().toLowerCase();
+  const matches=p=>!q||[p.tag,p.part_type,p.colour].some(v=>String(v||'').toLowerCase().includes(q));
+  let rows='';
+  parts.forEach((p,i)=>{
+    if(!matches(p))return;
+    if(p.group&&(i===0||parts[i-1].group!==p.group)){
+      rows+=`<tr><td colspan="7" style="background:var(--gray-100);font-weight:700;text-align:left">${esc(p.group)} <button type="button" class="secondary" style="padding:2px 8px;font-size:12px;margin-left:8px" onclick="ungroupPackingGroup('${esc(p.group)}')">Ungroup</button></td></tr>`;
+    }
+    const block=getPackingBlockRange(parts,i);
+    rows+=`<tr>
+      <td><input type="checkbox" ${packingPartsSelected.has(p.unique_id)?'checked':''} onchange="togglePackingPartSelect('${esc(p.unique_id)}',this.checked)"></td>
+      <td>${esc(p.tag||p.unique_id)}</td><td>${esc(p.part_type||'')}</td>
+      <td>${esc([p.width,p.height].filter(Boolean).join(' X '))}</td>
+      <td>${esc(p.qty||'')}</td><td>${esc(p.colour||'')}</td>
+      <td style="white-space:nowrap">
+        <button type="button" onclick="movePackingPart('${esc(p.unique_id)}',-1)" ${block.start===0?'disabled':''} title="Move up">&#9650;</button>
+        <button type="button" onclick="movePackingPart('${esc(p.unique_id)}',1)" ${block.end===parts.length-1?'disabled':''} title="Move down">&#9660;</button>
+      </td>
+    </tr>`;
+  });
+  el.innerHTML=`<table class="rep-tbl"><thead><tr><th></th><th>Tag</th><th>Part Type</th><th>Size</th><th>Qty</th><th>Colour</th><th>Order</th></tr></thead>`
+    +`<tbody>${rows||'<tr><td colspan="7" class="empty">No parts match that filter.</td></tr>'}</tbody></table>`;
 }
 // Editing an existing slip only touches its metadata (same fields as
 // creation) - the part list stays whatever was snapshotted when it was
@@ -1005,8 +1122,8 @@ async function openPackingEditForm(id){
     $('pfComments').value=s.comments||'';
     $('pfSpecial').value=s.special_handling||'';
     currentPackingParts=s.parts_snapshot||[];
-    $('packingFormPartsPreview').innerHTML='<div class="sub" style="margin-bottom:8px">Part list is locked to what was packed when this slip was created — not editable here.</div>'
-      +tbl(['Tag','Part Type','Size','Qty','Colour'],currentPackingParts.map(p=>[p.tag||p.unique_id,p.part_type||'',[p.width,p.height].filter(Boolean).join(' X '),p.qty||'',p.colour||'']));
+    packingPartsEditable=false;
+    renderPackingPartsPreview();
     showTab('packingForm');
   }catch(e){alert('Could not load packing slip: '+e.message);}
 }
@@ -1027,7 +1144,7 @@ async function submitPackingForm(){
   try{
     const data=editingSlipId
       ?await api('/admin/api/packing-slips/'+editingSlipId,{method:'POST',body:JSON.stringify(fields)})
-      :await api('/admin/api/packing-slips',{method:'POST',body:JSON.stringify({...fields,batch:currentPackingBatch})});
+      :await api('/admin/api/packing-slips',{method:'POST',body:JSON.stringify({...fields,batch:currentPackingBatch,parts_snapshot:currentPackingParts})});
     editingSlipId=null;
     await loadPackingSlips();
     renderPackingSlip(data.slip);
@@ -1054,6 +1171,19 @@ $('bBackPackingPrint').onclick=()=>showTab('packing');
 // The signature/notes/footer block is a sibling AFTER the table, so it
 // only ever renders once, wherever the table's last row happens to end -
 // never repeated, never floating mid-document.
+// Item numbers stay sequential across the whole slip (a group header row
+// doesn't consume a number) - groups are a visual section break for
+// readability, not a renumbering, so "item 14" still means the same thing
+// whether or not it happens to fall inside a group.
+function packingSlipBodyRowsHtml(parts,cell){
+  let n=0;
+  return parts.map((p,i)=>{
+    const header=p.group&&(i===0||parts[i-1].group!==p.group)
+      ?`<tr class="ps-group-row"><td colspan="6">${cell(p.group)}</td></tr>`:'';
+    n++;
+    return header+`<tr><td>${n}</td><td>${cell(p.tag||p.unique_id)}</td><td>${cell(p.part_type)}</td><td>${cell([p.width,p.height].filter(Boolean).join(' X '))}</td><td>${cell(p.qty)}</td><td>${cell(p.colour)}</td></tr>`;
+  }).join('');
+}
 function renderPackingSlip(slip){
   const parts=slip.parts_snapshot||[];
   const cell=(v)=>v?esc(v):'';
@@ -1095,7 +1225,7 @@ function renderPackingSlip(slip){
         </td></tr>
         <tr><th>ITEM #</th><th>TAG / ID</th><th>PART TYPE</th><th>SIZE</th><th>QTY</th><th>COLOUR</th></tr>
       </thead>
-      <tbody>${parts.map((p,i)=>`<tr><td>${i+1}</td><td>${cell(p.tag||p.unique_id)}</td><td>${cell(p.part_type)}</td><td>${cell([p.width,p.height].filter(Boolean).join(' X '))}</td><td>${cell(p.qty)}</td><td>${cell(p.colour)}</td></tr>`).join('')}
+      <tbody>${packingSlipBodyRowsHtml(parts,cell)}
       ${!parts.length?'<tr><td colspan="6">No parts on record for this batch.</td></tr>':''}
       </tbody>
     </table>

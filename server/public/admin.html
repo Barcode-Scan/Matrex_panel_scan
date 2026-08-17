@@ -110,6 +110,7 @@
   .ps-row3>div:not(:first-child)>.ps-bar-val{border-left:none}
   .ps-doc thead th{background:#3a3a3a;color:#fff;padding:8px;border:1.5px solid #000;font-size:13px}
   .ps-doc tbody td{border:1.5px solid #000;padding:9px 8px;text-align:center;height:30px;font-size:14px}
+  .ps-group-row td{background:#e4e4e4;font-weight:800;text-align:left;letter-spacing:.4px}
   .ps-sign-row{display:grid;grid-template-columns:repeat(4,1fr);margin-top:8px}
   .ps-sign-row>div{border:1.5px solid #000;border-left:none;min-height:72px}
   .ps-sign-row>div:first-child{border-left:1.5px solid #000}
@@ -664,6 +665,14 @@
       <button onclick="submitPackingForm()" id="packingFormSubmitBtn" style="margin-top:4px">Generate Packing Slip</button>
     </div>
     <h2>Part List Preview</h2>
+    <div class="sub" style="margin-bottom:8px">Filter to find parts, group related ones under a shared heading for easier reading on the printed slip, and use the arrows to reorder (a group moves together as one section).</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <input id="pfPartsFilter" placeholder="Filter parts (tag, type, colour)..." oninput="renderPackingPartsPreview()" style="flex:1;min-width:200px">
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <input id="pfGroupName" placeholder="Group name (e.g. RAILINGS)" style="flex:1;min-width:200px">
+      <button type="button" class="secondary" onclick="groupSelectedPackingParts()" style="width:auto;padding:10px 18px">Group Selected</button>
+    </div>
     <div id="packingFormPartsPreview"></div>
   </div>
 
