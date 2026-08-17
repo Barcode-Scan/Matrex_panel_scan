@@ -23,6 +23,13 @@
   --red-50:#FFF1F0;--red-300:#FFB4AD;--red-600:#FF3B30;
   --green-50:#E9FBF0;--green-300:#8CE6B0;--green-700:#0D8A4E;
   --amber-50:#FFF8EA;--amber-700:#C1690A;
+  /* Deliberately NOT redefined under :root.dark, unlike every other token
+     here - this is for surfaces that need to stay dark in both themes
+     (the camera viewfinder box), not text/background pairs that are
+     supposed to invert. Using --gray-900 for that (as this file used to)
+     breaks the moment dark mode flips --gray-900 from near-black to
+     near-white for its real job as a text color. */
+  --surface-dark:#1D1D1F;
   --r:16px;--r-lg:22px;--pill:100px;
   --ease:cubic-bezier(.4,0,.2,1);
   --shadow-xs:0 1px 2px rgba(29,29,31,.04);
@@ -47,6 +54,19 @@
   --amber-50:#3A2A08;--amber-700:#F5A623;
 }
 :root.dark #scrLock{background:radial-gradient(120% 100% at 50% -10%,#1C1C1E 0%,#000000 45%,#000000 100%)}
+/* .topbar/.search-wrap's frosted-glass backgrounds below are hardcoded
+   rgba(255,255,255,.72) - a literal color, not a var(--x) token, so
+   :root.dark redefining the tokens above never touched them. Over the
+   black page background dark mode already sets, a 72%-white blur reads
+   as a washed-out mid-gray bar with low-contrast near-white text on top -
+   exactly the illegible topbar this was reported for. Same frosted-glass
+   treatment, dark version: a translucent near-black instead of a
+   translucent white. .tb-btn's icon-button tint is also flipped from a
+   faint black-on-white to a faint white-on-black wash, since the black
+   version is nearly invisible against a now-dark topbar. */
+:root.dark .topbar,:root.dark .search-wrap{background:rgba(28,28,30,.82);border-bottom-color:rgba(255,255,255,.09)}
+:root.dark .tb-btn{background:rgba(255,255,255,.08)}
+:root.dark .tb-btn:active{background:rgba(255,255,255,.16)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg);color:var(--gray-900);
   font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Segoe UI',Helvetica,Arial,sans-serif;
@@ -108,7 +128,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .c-flag .n{color:var(--red-600)}
 
 /* CAMERA */
-#cambox{position:relative;background:var(--gray-900);border-radius:var(--r-lg);overflow:hidden;margin-bottom:10px;height:240px;transition:height .12s ease-out;box-shadow:var(--shadow-md)}
+#cambox{position:relative;background:var(--surface-dark);border-radius:var(--r-lg);overflow:hidden;margin-bottom:10px;height:240px;transition:height .12s ease-out;box-shadow:var(--shadow-md)}
 
 /* CAMERA SIZE SLIDER */
 .camsize-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:0 2px}
