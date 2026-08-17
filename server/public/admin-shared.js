@@ -848,40 +848,83 @@ function renderPackingTab(){
       <span class="pill neutral">View / Print</span>
     </div>`).join(''):'<div class="empty">No packing slips created yet.</div>';
 }
-// ── COMPLETED TASKS — every batch that has at least one packing slip,
-// grouped under its own card with the full production-schedule record
-// (same fields as the Production Schedule grid) plus its slip(s), so
-// there's one place to see everything about a finished task without
-// hunting across Production Schedule and Packing Slips separately.
+// ── COMPLETED TASKS — every batch that has at least one packing slip, as
+// a compact table row rather than a full-detail card (this list only ever
+// grows, so a card per batch - each ten-plus lines tall - doesn't scale;
+// a row does). "Completed" date is the batch's most recent packing slip's
+// slip_date, since that's the moment the task was actually finished, not
+// target_finish (which is when it was *due*).
+function completedTaskDate(b){
+  const dates=packingSlipsCache.filter(s=>s.batch===b.batch).map(s=>toISODate(s.slip_date)).filter(Boolean).sort();
+  return dates.length?dates[dates.length-1]:null;
+}
+function completedTasksRaw(){
+  return scheduleBatches.filter(b=>packingSlipsCache.some(s=>s.batch===b.batch)).map(b=>({b,date:completedTaskDate(b)}));
+}
+const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+// Year -> Month -> Week is cascading: each dropdown's options are only the
+// values that actually appear given what's already picked above it (an
+// "August" with nothing completed in it never shows up), and a value that's
+// still valid after a parent changes is kept selected rather than reset -
+// only the ones that no longer apply fall back to "All".
+function populateCompletedFilterOptions(){
+  const yearSel=$('ctFilterYear'),monthSel=$('ctFilterMonth'),weekSel=$('ctFilterWeek');
+  if(!yearSel)return;
+  const items=completedTasksRaw().filter(x=>x.date);
+  const prevYear=yearSel.value,prevMonth=monthSel.value,prevWeek=weekSel.value;
+
+  const years=[...new Set(items.map(x=>x.date.slice(0,4)))].sort().reverse();
+  yearSel.innerHTML='<option value="">All Years</option>'+years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  yearSel.value=years.includes(prevYear)?prevYear:'';
+
+  const yearItems=yearSel.value?items.filter(x=>x.date.slice(0,4)===yearSel.value):items;
+  const months=[...new Set(yearItems.map(x=>parseInt(x.date.slice(5,7),10)))].sort((a,b)=>a-b);
+  monthSel.innerHTML='<option value="">All Months</option>'+months.map(m=>`<option value="${m}">${MONTH_NAMES[m-1]}</option>`).join('');
+  monthSel.value=months.map(String).includes(prevMonth)?prevMonth:'';
+
+  const monthItems=monthSel.value?yearItems.filter(x=>parseInt(x.date.slice(5,7),10)===parseInt(monthSel.value,10)):yearItems;
+  const weekKeys=[...new Set(monthItems.map(x=>weekKeyFor(x.date)).filter(Boolean))].sort();
+  weekSel.innerHTML='<option value="">All Weeks</option>'+weekKeys.map(k=>`<option value="${k}">${weekLabel(k)}</option>`).join('');
+  weekSel.value=weekKeys.includes(prevWeek)?prevWeek:'';
+}
+function completedTaskRowHtml(b,date,slips){
+  const latest=[...slips].sort((a,b2)=>(a.slip_date||'').localeCompare(b2.slip_date||'')||a.id-b2.id).pop();
+  const slipLabel=slips.length===1?slips[0].slip_number:slips.length+' slips';
+  return`<tr onclick="viewPackingSlip(${latest.id})" oncontextmenu="openPackingCtxMenu(event,${latest.id})" style="cursor:pointer">
+    <td class="gc-batch">${esc(b.batch)}</td>
+    <td>${esc(b.job_name||'')}</td>
+    <td>${esc(b.floor_or_work_order||'')}</td>
+    <td>${esc(b.material||'')}</td>
+    <td>${esc(b.part_name||'')}</td>
+    <td class="gc-num">${b.scanned}/${b.total}</td>
+    <td>${esc(slipLabel)}</td>
+    <td>${esc(date||'—')}</td>
+  </tr>`;
+}
 function renderCompletedTasks(){
-  const el=$('completedTasksList');
-  if(!el)return; // not every dashboard page has this tab
-  const done=scheduleBatches.filter(b=>packingSlipsCache.some(s=>s.batch===b.batch));
-  if(!done.length){el.innerHTML='<div class="empty">No completed tasks yet — a batch shows up here once its first packing slip is created.</div>';return;}
-  const sorted=[...done].sort((a,b)=>a.batch.localeCompare(b.batch));
-  el.innerHTML=sorted.map(b=>{
-    const slips=packingSlipsCache.filter(s=>s.batch===b.batch);
-    const fields=[
-      ['Job Name',b.job_name],['Floor / Work Order',b.floor_or_work_order],
-      ['Target Finish',toISODate(b.target_finish)||b.target_finish],['Material',b.material],
-      ['Finish',b.finish],['Part Name',b.part_name],['Sheet Qty',b.sheet_qty],['Comment',b.comment],
-      ['Task Status','Complete'],['Scanned',b.scanned+'/'+b.total]
-    ].filter(([,v])=>v).map(([k,v])=>`<div class="field-row"><span class="field-k">${esc(k)}</span><span class="field-v">${esc(v)}</span></div>`).join('');
-    const slipsHtml=slips.map(s=>`
-      <div class="card" data-slipid="${s.id}" onclick="viewPackingSlip(${s.id})" oncontextmenu="openPackingCtxMenu(event,${s.id})" style="cursor:pointer;margin-bottom:6px">
-        <div>
-          <div class="name">${esc(s.slip_number)}</div>
-          <div class="meta">${esc(s.department||'')}${s.department&&s.ship_to?' · ':''}${esc(s.ship_to||'')} · ${esc(s.slip_date)}</div>
-        </div>
-        <span class="pill neutral">View / Print</span>
-      </div>`).join('');
-    return`<div class="card" style="flex-direction:column;align-items:stretch;gap:2px;cursor:default;margin-bottom:14px">
-      <div class="name" style="font-size:16px;margin-bottom:4px">${esc(b.batch)}</div>
-      ${fields}
-      <div class="field-k" style="margin:10px 0 4px">PACKING SLIP${slips.length===1?'':'S'}</div>
-      ${slipsHtml}
-    </div>`;
-  }).join('');
+  const tbody=$('completedTasksList');
+  if(!tbody)return; // not every dashboard page has this tab
+  populateCompletedFilterOptions();
+  const yearSel=$('ctFilterYear'),monthSel=$('ctFilterMonth'),weekSel=$('ctFilterWeek');
+  const jobQ=($('ctSearchJob').value||'').trim().toLowerCase();
+  const floorQ=($('ctSearchFloor').value||'').trim().toLowerCase();
+  const batchQ=($('ctSearchBatch').value||'').trim().toLowerCase();
+
+  let rows=completedTasksRaw();
+  const anyCompleted=rows.length>0;
+  if(yearSel.value)rows=rows.filter(x=>x.date&&x.date.slice(0,4)===yearSel.value);
+  if(monthSel.value)rows=rows.filter(x=>x.date&&parseInt(x.date.slice(5,7),10)===parseInt(monthSel.value,10));
+  if(weekSel.value)rows=rows.filter(x=>x.date&&weekKeyFor(x.date)===weekSel.value);
+  if(jobQ)rows=rows.filter(x=>(x.b.job_name||'').toLowerCase().includes(jobQ));
+  if(floorQ)rows=rows.filter(x=>(x.b.floor_or_work_order||'').toLowerCase().includes(floorQ));
+  if(batchQ)rows=rows.filter(x=>(x.b.batch||'').toLowerCase().includes(batchQ));
+  rows.sort((x,y)=>(y.date||'').localeCompare(x.date||'')); // most recently completed first
+
+  if(!rows.length){
+    tbody.innerHTML=`<tr><td colspan="8" class="empty">${anyCompleted?'No matches.':'No completed tasks yet — a batch shows up here once its first packing slip is created.'}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML=rows.map(x=>completedTaskRowHtml(x.b,x.date,packingSlipsCache.filter(s=>s.batch===x.b.batch))).join('');
 }
 // Right-click a created packing slip for Edit/Delete - reuses the exact
 // same shared context-menu element the Production Schedule grid already

@@ -410,8 +410,28 @@
 
   <div id="tabCompleted" style="display:none">
     <h1>Completed Tasks</h1>
-    <div class="sub">Every batch that's had a packing slip generated - the full production schedule record and its packing slip(s), grouped together in one place.</div>
-    <div id="completedTasksList"></div>
+    <div class="sub">Every batch that's had a packing slip generated.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 10px">
+      <select id="ctFilterYear" onchange="renderCompletedTasks()" style="flex:1;min-width:110px"><option value="">All Years</option></select>
+      <select id="ctFilterMonth" onchange="renderCompletedTasks()" style="flex:1;min-width:130px"><option value="">All Months</option></select>
+      <select id="ctFilterWeek" onchange="renderCompletedTasks()" style="flex:2;min-width:180px"><option value="">All Weeks</option></select>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <input id="ctSearchJob" placeholder="Search Job..." oninput="renderCompletedTasks()" style="flex:1;min-width:160px">
+      <input id="ctSearchFloor" placeholder="Search Floor / Work Order..." oninput="renderCompletedTasks()" style="flex:1;min-width:160px">
+      <input id="ctSearchBatch" placeholder="Search Batch..." oninput="renderCompletedTasks()" style="flex:1;min-width:160px">
+    </div>
+    <div style="overflow-x:auto">
+    <table class="sched-grid">
+      <thead>
+        <tr>
+          <th>Batch</th><th>Job</th><th>Floor / Work Order</th><th>Material</th>
+          <th>Part Name</th><th>Scanned</th><th>Packing Slip</th><th>Completed</th>
+        </tr>
+      </thead>
+      <tbody id="completedTasksList"></tbody>
+    </table>
+    </div>
   </div>
 
   <div id="tabPackingForm" style="display:none">
