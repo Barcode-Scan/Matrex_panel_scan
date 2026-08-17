@@ -248,6 +248,8 @@
     <button class="tab-btn active" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
     <button class="tab-btn" id="tabBtnWeekly" onclick="showTab('weekly')">Weekly Schedule</button>
     <button class="tab-btn" id="tabBtnJobs" onclick="showTab('jobs')">Job Summary</button>
+    <button class="tab-btn" id="tabBtnPacking" onclick="showTab('packing')">Packing Slips</button>
+    <button class="tab-btn" id="tabBtnCompleted" onclick="showTab('completed')">Completed Tasks</button>
     <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()" style="margin-left:auto">&#128276; Enable Desktop Alerts</button>
   </div>
 
@@ -400,10 +402,36 @@
     <h1>Packing Slips</h1>
     <div class="sub">Generate a packing slip once a batch is fully scanned. The part list is captured from the batch at the moment you generate it, so it stays accurate even if the batch changes later.</div>
     <h2>Ready to Pack</h2>
-    <div class="sub" style="margin-bottom:10px">Fully-scanned batches. A batch can have more than one packing slip (e.g. partial shipments).</div>
+    <div class="sub" style="margin-bottom:10px">Fully-scanned batches with no packing slip yet. Once a slip is created, the batch moves to Completed Tasks.</div>
     <div id="readyToPackList"></div>
     <h2>Created Packing Slips</h2>
     <div id="packingSlipsList"></div>
+  </div>
+
+  <div id="tabCompleted" style="display:none">
+    <h1>Completed Tasks</h1>
+    <div class="sub">Every batch that's had a packing slip generated.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 10px">
+      <select id="ctFilterYear" onchange="renderCompletedTasks()" style="flex:1;min-width:110px"><option value="">All Years</option></select>
+      <select id="ctFilterMonth" onchange="renderCompletedTasks()" style="flex:1;min-width:130px"><option value="">All Months</option></select>
+      <select id="ctFilterWeek" onchange="renderCompletedTasks()" style="flex:2;min-width:180px"><option value="">All Weeks</option></select>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <input id="ctSearchJob" placeholder="Search Job..." oninput="renderCompletedTasks()" style="flex:1;min-width:160px">
+      <input id="ctSearchFloor" placeholder="Search Floor / Work Order..." oninput="renderCompletedTasks()" style="flex:1;min-width:160px">
+      <input id="ctSearchBatch" placeholder="Search Batch..." oninput="renderCompletedTasks()" style="flex:1;min-width:160px">
+    </div>
+    <div style="overflow-x:auto">
+    <table class="sched-grid">
+      <thead>
+        <tr>
+          <th>Batch</th><th>Job</th><th>Floor / Work Order</th><th>Material</th>
+          <th>Part Name</th><th>Scanned</th><th>Packing Slip</th><th>Completed</th>
+        </tr>
+      </thead>
+      <tbody id="completedTasksList"></tbody>
+    </table>
+    </div>
   </div>
 
   <div id="tabPackingForm" style="display:none">
