@@ -1061,14 +1061,20 @@ async function startScanner(){
   // The 2nd constructor arg is an options object (not a delay number —
   // passing a bare number here, as an earlier version of this file did,
   // is silently ignored and the library falls back to its default
-  // 500ms gap between every scan attempt, success or fail). Zeroing
-  // delayBetweenScanAttempts lets it retry as fast as each frame decodes
-  // instead of idling 500ms between tries — same decode algorithm/hints,
-  // just called far more often, so this is pure speed with no accuracy
-  // tradeoff. delayBetweenScanSuccess stays short too since our own
+  // 500ms gap between every scan attempt, success or fail).
+  //
+  // delayBetweenScanAttempts was 0 (retry as fast as every frame decodes)
+  // until iPhone 12 battery drain reports came in — a zero delay pins a
+  // CPU core decoding continuously the entire time the scan screen is
+  // open, camera on or not pointed at anything. 90ms still feels instant
+  // (SCAN_COOLDOWN_MS below is 2000ms between *accepted* scans anyway, so
+  // nothing downstream is waiting on sub-frame decode latency) but cuts
+  // decode attempts to ~11/sec instead of up to the camera's native frame
+  // rate (30-60/sec on most phones) — same decode algorithm/hints, called
+  // far less often. delayBetweenScanSuccess stays short since our own
   // SCAN_COOLDOWN_MS/SAME_CODE_COOLDOWN_MS below already guard against
   // re-committing too fast or the same code twice.
-  codeReader=new ZX.BrowserMultiFormatReader(hints,{delayBetweenScanAttempts:0,delayBetweenScanSuccess:150});
+  codeReader=new ZX.BrowserMultiFormatReader(hints,{delayBetweenScanAttempts:90,delayBetweenScanSuccess:150});
 
   // Camera permission must be granted once before device labels are
   // populated — otherwise back-camera auto-detection silently fails and
@@ -1139,9 +1145,19 @@ async function runWithDevice(deviceId){
     // problem they don't have.
     const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
     const idealW=isIOS?1920:1280,idealH=isIOS?1080:720;
+    // Frame rate is a separate axis from resolution above — capping it
+    // doesn't touch per-frame detail (so it doesn't reopen the iPhone 12
+    // decode-reliability issue that resolution was raised for), it just
+    // asks the camera to capture fewer frames per second. Left as "ideal"
+    // so a camera that can't hit it just gets as close as it can, same as
+    // width/height. A barcode isn't moving - it doesn't need 30-60fps of
+    // capture, sensor/ISP power scales with frame rate, and this is on
+    // the whole time the scan screen is open, so it's one of the bigger
+    // battery levers available here.
+    const idealFps=15;
     const videoConstraints=deviceId
-      ?{deviceId:{exact:deviceId},width:{ideal:idealW},height:{ideal:idealH}}
-      :{facingMode:'environment',width:{ideal:idealW},height:{ideal:idealH}};
+      ?{deviceId:{exact:deviceId},width:{ideal:idealW},height:{ideal:idealH},frameRate:{ideal:idealFps}}
+      :{facingMode:'environment',width:{ideal:idealW},height:{ideal:idealH},frameRate:{ideal:idealFps}};
     controls=await codeReader.decodeFromConstraints({video:videoConstraints},previewElem,(result,error)=>{
       if(result){
         if(!resultInAimBox(result,previewElem))return; // detected, but outside the visible scan frame — same as nothing found
