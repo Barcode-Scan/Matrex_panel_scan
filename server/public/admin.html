@@ -250,8 +250,12 @@
   .sched-grid tr.risk-yellow td:first-child{box-shadow:inset 4px 0 0 var(--amber-700)}
   .sched-grid tr.risk-green td:first-child{box-shadow:inset 4px 0 0 var(--green-700)}
   .sched-grid tr.gc-totals-row td:first-child{background:var(--gray-100)}
-  .sched-grid .gc-progress{display:flex;align-items:center;gap:6px;min-width:90px}
-  .sched-grid .gc-progress-track{flex:1;height:5px;border-radius:3px;background:var(--gray-200);overflow:hidden}
+  /* Stacked (status bar on top, count underneath) instead of side by
+     side - same shared class used by Production Schedule/Weekly Detail's
+     Part Qty column and Job Summary's Progress column, so this one
+     change keeps both consistent automatically. */
+  .sched-grid .gc-progress{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:90px}
+  .sched-grid .gc-progress-track{width:100%;height:5px;border-radius:3px;background:var(--gray-200);overflow:hidden}
   .sched-grid .gc-progress-fill{height:100%;border-radius:3px}
   .sched-grid .gc-progress-fill.complete{background:var(--green-700)}
   .sched-grid .gc-progress-fill.progress{background:var(--amber-700)}
