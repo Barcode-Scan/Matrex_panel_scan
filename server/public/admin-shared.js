@@ -577,7 +577,28 @@ function renderWeeklySchedule(){
 function openWeekDetail(key){
   currentWeekKey=key;
   showTab('weeklyDetail');
+  showWeekDetailSubTab(currentWeekDetailSubTab);
   renderWeekDetail(key);
+}
+// ── WEEK DETAIL SUB-TABS ─────────────────────────────────────
+// Batches and Material Requirement Summary used to both show at once,
+// stacked on the same page - moved to sub-tabs (same table-driven pattern
+// as Operations' showOpsSubTab) so only one shows at a time. Sticky across
+// which week you open next, same reasoning as Operations staying on
+// whichever of its sub-tabs you were last looking at.
+let currentWeekDetailSubTab='batches';
+const WEEKDETAIL_SUBTAB_CONTAINERS={batches:'weekDetailBatches',material:'weekDetailMaterial'};
+const WEEKDETAIL_SUBTAB_BUTTONS={batches:'weekDetailSubBtnBatches',material:'weekDetailSubBtnMaterial'};
+function showWeekDetailSubTab(name){
+  currentWeekDetailSubTab=name;
+  Object.entries(WEEKDETAIL_SUBTAB_CONTAINERS).forEach(([tab,id])=>{
+    const el=$(id);
+    if(el)el.style.display=(tab===name)?'':'none';
+  });
+  Object.values(WEEKDETAIL_SUBTAB_BUTTONS).forEach(btnId=>{
+    const el=$(btnId);
+    if(el)el.classList.toggle('active',btnId===WEEKDETAIL_SUBTAB_BUTTONS[name]);
+  });
 }
 // Same look as Production Schedule now (scheduleRowHtml is the exact
 // same row markup, inline edit, and right-click Edit/Delete menu) -

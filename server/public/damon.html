@@ -369,7 +369,26 @@
       </div>
       <button class="secondary" id="bBackWeeklyDetail">&larr; All Weeks</button>
     </div>
-    <h2>Material Requirement Summary</h2>
+    <div class="ops-subtabbar" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1.5px solid var(--gray-200)">
+      <button class="tab-btn active" id="weekDetailSubBtnBatches" onclick="showWeekDetailSubTab('batches')">Batches</button>
+      <button class="tab-btn" id="weekDetailSubBtnMaterial" onclick="showWeekDetailSubTab('material')">Material Requirement Summary</button>
+    </div>
+
+    <div id="weekDetailBatches">
+    <div style="overflow-x:auto">
+    <table class="sched-grid">
+      <thead>
+        <tr>
+          <th>Job</th><th>Floor or Work Order</th><th>Target Finish</th><th>Material</th><th>Finish</th>
+          <th>Part Name</th><th>Batch Name</th><th>Part Qty</th><th>Sheet Qty</th><th>Comment</th><th>Task Status</th>
+        </tr>
+      </thead>
+      <tbody id="weeklyDetailList"></tbody>
+    </table>
+    </div>
+    </div>
+
+    <div id="weekDetailMaterial" style="display:none">
     <div class="sub" style="margin-bottom:10px">Materials still needed for this week's open batches - a batch drops off the moment it's fully scanned, so this narrows on its own as parts get scanned.</div>
     <div style="overflow-x:auto">
     <table class="sched-grid">
@@ -381,17 +400,6 @@
       <tbody id="weeklyMaterialSummary"></tbody>
     </table>
     </div>
-    <h2 style="margin-top:20px">Batches</h2>
-    <div style="overflow-x:auto">
-    <table class="sched-grid">
-      <thead>
-        <tr>
-          <th>Job</th><th>Floor or Work Order</th><th>Target Finish</th><th>Material</th><th>Finish</th>
-          <th>Part Name</th><th>Batch Name</th><th>Part Qty</th><th>Sheet Qty</th><th>Comment</th><th>Task Status</th>
-        </tr>
-      </thead>
-      <tbody id="weeklyDetailList"></tbody>
-    </table>
     </div>
   </div>
 

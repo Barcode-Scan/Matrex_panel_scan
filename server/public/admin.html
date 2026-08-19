@@ -527,19 +527,12 @@
       </div>
       <button class="secondary" id="bBackWeeklyDetail">&larr; All Weeks</button>
     </div>
-    <h2>Material Requirement Summary</h2>
-    <div class="sub" style="margin-bottom:10px">Materials still needed for this week's open batches - a batch drops off the moment it's fully scanned, so this narrows on its own as parts get scanned.</div>
-    <div style="overflow-x:auto">
-    <table class="sched-grid">
-      <thead>
-        <tr>
-          <th>Material</th><th>Sheet Qty Remaining</th><th>Open Batches</th><th>Jobs</th><th>On Hand</th><th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="weeklyMaterialSummary"></tbody>
-    </table>
+    <div class="ops-subtabbar" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1.5px solid var(--gray-200)">
+      <button class="tab-btn active" id="weekDetailSubBtnBatches" onclick="showWeekDetailSubTab('batches')">Batches</button>
+      <button class="tab-btn" id="weekDetailSubBtnMaterial" onclick="showWeekDetailSubTab('material')">Material Requirement Summary</button>
     </div>
-    <h2 style="margin-top:20px">Batches</h2>
+
+    <div id="weekDetailBatches">
     <!-- Same table/row markup as Production Schedule (scheduleRowHtml is
          shared between them) - just pre-filtered to this week's batches,
          sorted by Target Finish. No column-filter row here on purpose:
@@ -554,6 +547,21 @@
       </thead>
       <tbody id="weeklyDetailList"></tbody>
     </table>
+    </div>
+    </div>
+
+    <div id="weekDetailMaterial" style="display:none">
+    <div class="sub" style="margin-bottom:10px">Materials still needed for this week's open batches - a batch drops off the moment it's fully scanned, so this narrows on its own as parts get scanned.</div>
+    <div style="overflow-x:auto">
+    <table class="sched-grid">
+      <thead>
+        <tr>
+          <th>Material</th><th>Sheet Qty Remaining</th><th>Open Batches</th><th>Jobs</th><th>On Hand</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="weeklyMaterialSummary"></tbody>
+    </table>
+    </div>
     </div>
   </div>
 
