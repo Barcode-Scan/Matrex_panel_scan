@@ -198,7 +198,16 @@
      one-size-fits-most estimate for the topbar+tabs+heading+controls
      above any given table, not tuned per tab - min-height keeps it from
      collapsing too small on a short window. */
-  .sched-grid-wrap{overflow:auto;max-height:calc(100vh - 280px);min-height:200px}
+  /* 280px undercounted what actually sits above Production Schedule's
+     table (topbar+tabbar+heading+search bar+totals bar, the tallest
+     stack of chrome any tab has above its table) - the wrap box came out
+     taller than the remaining viewport, so the outer page scrolled too,
+     on top of the inner scroll this box already provides. 380px is a
+     conservative measurement of that actual stack plus body padding,
+     with a small margin - the wrap box should never exceed the
+     viewport's remaining height now, so the page itself has nothing left
+     to scroll; only this box does. */
+  .sched-grid-wrap{overflow:auto;max-height:calc(100vh - 380px);min-height:200px}
   .sched-grid{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:16px;table-layout:auto}
   .sched-grid th{position:sticky;top:0;background:var(--white);border-bottom:2px solid var(--gray-200);padding:8px 10px;text-align:center;vertical-align:middle;font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;z-index:1}
   .colf-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:4px;border:none;background:var(--gray-200);color:var(--gray-500);border-radius:3px;font-size:9px;line-height:1;cursor:pointer;vertical-align:middle}
