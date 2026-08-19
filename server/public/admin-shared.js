@@ -589,6 +589,7 @@ function renderWeekDetail(key){
   const items=(groupByWeek()[key])||[];
   $('weeklyDetailTitle').textContent=key==='unscheduled'?'No Target Finish Date':weekLabel(key);
   $('weeklyDetailSub').textContent=items.length+' batch'+(items.length===1?'':'es');
+  renderWeekMaterialSummary(items);
   if(!items.length){$('weeklyDetailList').innerHTML='<tr><td colspan="11" class="empty">No batches.</td></tr>';return;}
   const sorted=[...items].sort((a,b)=>(a.target_finish||'9999-99-99').localeCompare(b.target_finish||'9999-99-99'));
   $('weeklyDetailList').innerHTML=sorted.map(scheduleRowHtml).join('');
@@ -607,13 +608,54 @@ function parseQty(v){
   const n=parseFloat(String(v||'').replace(/[^\d.-]/g,''));
   return isNaN(n)?null:n;
 }
-function groupByMaterial(){
+// items defaults to every batch (the standalone Material Demand tab's
+// scope); Weekly Detail passes just that week's batches instead, so the
+// exact same grouping/shortfall math works for both without duplicating
+// it - a batch drops out of both the instant it's fully scanned, since
+// that's just rowStatus() re-evaluating on the next 4s poll like
+// everything else here.
+function groupByMaterial(items){
   const groups={};
-  scheduleBatches.filter(b=>rowStatus(b)!=='complete').forEach(b=>{
+  (items||scheduleBatches).filter(b=>rowStatus(b)!=='complete').forEach(b=>{
     const key=b.material||'(No Material Specified)';
     (groups[key]=groups[key]||[]).push(b);
   });
   return groups;
+}
+// Shared by the card view (standalone tab) and the table view (Weekly
+// Detail) - one material's demand stats shouldn't be computed two
+// different ways depending which screen happens to be showing them.
+function materialDemandStats(m,items){
+  let total=0,unparsed=0;
+  items.forEach(b=>{const q=parseQty(b.sheet_qty);q===null?unparsed++:total+=q;});
+  const jobs=[...new Set(items.map(b=>b.job_name).filter(Boolean))].sort();
+  const onHand=materialStockCache.hasOwnProperty(m)?materialStockCache[m]:null;
+  const shortfall=onHand!==null?total-onHand:null;
+  const conflict=shortfall!==null&&shortfall>0;
+  return{total,unparsed,jobs,onHand,shortfall,conflict};
+}
+// Table version of the same data, styled like every other Production-
+// Schedule-family grid on this page (sched-grid) instead of the standalone
+// tab's card list - this is the one embedded inside Weekly Detail, scoped
+// to whatever week is currently open.
+function renderWeekMaterialSummary(items){
+  const el=$('weeklyMaterialSummary');
+  if(!el)return; // not every page has this section yet
+  const groups=groupByMaterial(items);
+  const materials=Object.keys(groups).sort();
+  if(!materials.length){el.innerHTML='<tr><td colspan="6" class="empty">No open batches this week — nothing currently demanding material.</td></tr>';return;}
+  el.innerHTML=materials.map(m=>{
+    const items=groups[m];
+    const{total,unparsed,jobs,onHand,shortfall,conflict}=materialDemandStats(m,items);
+    return`<tr>
+      <td class="gc-batch">${esc(m)}</td>
+      <td class="gc-num">${total}${unparsed?` <span style="color:var(--gray-500);font-weight:400">(+${unparsed} unparsed)</span>`:''}</td>
+      <td class="gc-num">${items.length}</td>
+      <td>${jobs.length?esc(jobs.join(', ')):''}</td>
+      <td class="gc-num"><input type="number" class="gc-input" value="${onHand!==null?onHand:''}" placeholder="—" style="width:80px" onclick="event.stopPropagation()" onchange="saveMaterialStock('${esc(m)}',this.value)"></td>
+      <td>${onHand===null?'':conflict?'<span style="color:var(--red-600);font-weight:700">Short by '+shortfall+'</span>':'<span style="color:var(--green-700);font-weight:700">Covered</span>'}</td>
+    </tr>`;
+  }).join('');
 }
 // ── MATERIAL STOCK (Cross-Job Material Conflict Detection, Phase 4) —
 // manual on-hand qty per material, loaded once (not on the 4s poll - it
@@ -636,6 +678,7 @@ async function saveMaterialStock(material,value){
   if(isNaN(qty))return;
   materialStockCache[material]=qty; // optimistic - re-render immediately, don't wait on the round-trip
   renderMaterialDemand();
+  if(currentWeekKey)renderWeekMaterialSummary((groupByWeek()[currentWeekKey])||[]);
   try{await api('/admin/api/material-stock/'+encodeURIComponent(material),{method:'POST',body:JSON.stringify({on_hand_qty:qty})});}
   catch(e){/* stays in the cache either way - worst case a stale value until the next successful save */}
 }
@@ -646,12 +689,7 @@ function renderMaterialDemand(){
   if(!materials.length){$('materialList').innerHTML='<div class="empty">No open batches — nothing currently demanding material.</div>';return;}
   $('materialList').innerHTML=materials.map(m=>{
     const items=groups[m];
-    let total=0,unparsed=0;
-    items.forEach(b=>{const q=parseQty(b.sheet_qty);q===null?unparsed++:total+=q;});
-    const jobs=[...new Set(items.map(b=>b.job_name).filter(Boolean))].sort();
-    const onHand=materialStockCache.hasOwnProperty(m)?materialStockCache[m]:null;
-    const shortfall=onHand!==null?total-onHand:null;
-    const conflict=shortfall!==null&&shortfall>0;
+    const{total,unparsed,jobs,onHand,shortfall,conflict}=materialDemandStats(m,items);
     return`<div class="card" style="align-items:flex-start;flex-direction:column;gap:6px">
       <div style="display:flex;justify-content:space-between;width:100%;align-items:center;gap:8px;flex-wrap:wrap">
         <div class="name" style="font-size:16px">${esc(m)}</div>
