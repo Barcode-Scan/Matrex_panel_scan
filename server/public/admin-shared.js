@@ -1404,6 +1404,22 @@ function enableCompletionNotifications(){
     $('bEnableAlerts').textContent=perm==='granted'?'🔔 Alerts Enabled':'🔔 Enable Desktop Alerts';
   });
 }
+// Installed as a desktop app (see manifest-*.json), this page has no
+// address bar or browser refresh icon to fall back on - this button is
+// the only obvious way to pull a fresh copy after a server-side update.
+// Unregisters any service worker first (sw.js is a pure passthrough
+// today with nothing to invalidate, but this makes the button correct
+// even if that ever changes) and reloads with a cache-busting query
+// param, forcing a genuinely fresh network fetch of the page itself
+// rather than trusting a normal reload's cache revalidation.
+function hardRefresh(){
+  const goFresh=()=>{location.href=location.pathname+'?_hr='+Date.now();};
+  if('serviceWorker' in navigator&&navigator.serviceWorker.getRegistrations){
+    navigator.serviceWorker.getRegistrations().then(regs=>Promise.all(regs.map(r=>r.unregister()))).catch(()=>{}).then(goFresh);
+  }else{
+    goFresh();
+  }
+}
 
 // ── STALLED BATCHES (Bottleneck Detection) — another read-only lens on
 // scheduleBatches. "Idle since" is last_scanned_at (added to the batches
