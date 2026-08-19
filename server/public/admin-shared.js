@@ -862,7 +862,16 @@ function sumProgress(items){
 function progressPillClass(pct){return pct>=100?'done':pct>0?'working':'notstarted';}
 let jobSummarySearchQuery='';
 function setJobSummarySearch(v){jobSummarySearchQuery=v.trim().toLowerCase();renderJobSummary();}
+// admin.html has the kanban board (#kanbanOngoing); gm/damon/swar still
+// have the plain table (#jobSummaryList) - same call site everywhere
+// (showTab's dispatch, setJobSummarySearch, the 4s poll) either way,
+// routed here by whichever container actually exists on that page.
 function renderJobSummary(){
+  if($('kanbanOngoing'))renderJobSummaryKanban();
+  else if($('jobSummaryList'))renderJobSummaryTable();
+  if(currentJobKey)renderJobDetail(currentJobKey); // keep an already-open job's detail live too
+}
+function renderJobSummaryTable(){
   const groups=groupByJob();
   let jobs=Object.keys(groups).sort();
   if(jobSummarySearchQuery)jobs=jobs.filter(j=>textMatches(jobSummarySearchQuery,j));
@@ -886,7 +895,68 @@ function renderJobSummary(){
     <td class="gc-num">${totalScanned}/${totalOfTotal}</td>
     <td></td>
   </tr>`;
-  if(currentJobKey)renderJobDetail(currentJobKey); // keep an already-open job's detail live too
+}
+// ── JOB SUMMARY BOARD (admin.html only) — two columns for now: Ongoing
+// (some scan activity, not finished) and Upcoming / Due (not started at
+// all yet), sorted soonest-due first within each. Finished jobs (100%)
+// aren't shown in either column - out of scope for this first pass, a
+// "Done" column is the obvious next one to add later. A job's card-accent
+// color is the worst risk level (computeRisk) across its own batches -
+// same red/amber/green language Production Schedule's row accent already
+// uses, so a card and a table row mean the same thing when they match.
+function daysUntil(dateStr){
+  const iso=toISODate(dateStr);
+  if(!iso)return null;
+  const target=new Date(iso+'T00:00:00');
+  const now=new Date();now.setHours(0,0,0,0);
+  return Math.round((target-now)/86400000);
+}
+function kanbanDueBadge(days){
+  if(days===null)return null;
+  if(days<0)return{label:Math.abs(days)+'d overdue',cls:'kanban-due-red'};
+  if(days===0)return{label:'Due today',cls:'kanban-due-red'};
+  if(days<=3)return{label:'Due in '+days+'d',cls:'kanban-due-amber'};
+  return{label:'Due in '+days+'d',cls:'kanban-due-neutral'};
+}
+function jobKanbanCardHtml(job,items){
+  const{scanned,total,pct}=sumProgress(items);
+  const floors=[...new Set(items.map(b=>b.floor_or_work_order).filter(Boolean))];
+  const dueDates=items.map(b=>toISODate(b.target_finish)).filter(Boolean).sort();
+  const badge=kanbanDueBadge(daysUntil(dueDates[0]));
+  const risks=items.map(b=>computeRisk(b)).filter(Boolean);
+  const accent=risks.some(r=>r.level==='red')?'var(--red-600)':risks.some(r=>r.level==='yellow')?'var(--amber-700)':(risks.length?'var(--green-700)':'var(--gray-200)');
+  const state=pct>=100?'complete':pct>0?'progress':'none';
+  return`<div class="kanban-card" style="border-left-color:${accent}" onclick="openJobDetail('${esc(job)}')">
+    <div class="kanban-card-title">${esc(job)}</div>
+    <div class="kanban-card-meta">${items.length} batch${items.length===1?'':'es'}${floors.length?' · '+esc(floors.join(', ')):''}</div>
+    <div class="kanban-progress-track"><div class="kanban-progress-fill ${state}" style="width:${pct}%"></div></div>
+    <div class="kanban-card-footer">
+      <span>${scanned}/${total} scanned</span>
+      ${badge?`<span class="kanban-card-due ${badge.cls}">${badge.label}</span>`:''}
+    </div>
+  </div>`;
+}
+function renderJobSummaryKanban(){
+  const groups=groupByJob();
+  let jobs=Object.keys(groups).sort();
+  if(jobSummarySearchQuery)jobs=jobs.filter(j=>textMatches(jobSummarySearchQuery,j));
+  const ongoing=[],upcoming=[];
+  jobs.forEach(j=>{
+    const{scanned,pct}=sumProgress(groups[j]);
+    if(pct>=100)return; // done - out of scope for now
+    (scanned>0?ongoing:upcoming).push(j);
+  });
+  const dueOf=j=>{
+    const dates=groups[j].map(b=>toISODate(b.target_finish)).filter(Boolean).sort();
+    return dates[0]||'9999-99-99';
+  };
+  ongoing.sort((a,b)=>dueOf(a).localeCompare(dueOf(b)));
+  upcoming.sort((a,b)=>dueOf(a).localeCompare(dueOf(b)));
+  const noMatches=Object.keys(groups).length?'No matches.':null;
+  $('kanbanOngoing').innerHTML=ongoing.length?ongoing.map(j=>jobKanbanCardHtml(j,groups[j])).join(''):`<div class="kanban-empty">${noMatches||'Nothing in progress right now.'}</div>`;
+  $('kanbanUpcoming').innerHTML=upcoming.length?upcoming.map(j=>jobKanbanCardHtml(j,groups[j])).join(''):`<div class="kanban-empty">${noMatches||'Nothing waiting to start.'}</div>`;
+  $('kanbanOngoingCount').textContent=ongoing.length;
+  $('kanbanUpcomingCount').textContent=upcoming.length;
 }
 function openJobDetail(job){
   currentJobKey=job;
