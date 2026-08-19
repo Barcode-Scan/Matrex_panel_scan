@@ -505,11 +505,12 @@ function renderScheduleHead(){
 async function loadScheduleList(){
   if(!$('scheduleHeadRow').children.length)renderScheduleHead();
   if(!KEY){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Enter the admin key to load.</td></tr>';return;}
-  // Skip while a row is mid-edit - a background refresh replaces the grid's
-  // innerHTML wholesale, which would silently wipe out whatever's typed
-  // into that row's inputs before it's saved. Resumes on its own within
-  // one poll interval of Save/Cancel, no explicit resume needed.
-  if(editingBatches.size)return;
+  // Skip while a cell is mid-edit - a background refresh replaces the
+  // grid's innerHTML wholesale, which would silently wipe out whatever's
+  // typed into that cell before it's saved. Resumes on its own within
+  // one poll interval of the edit committing/cancelling, no explicit
+  // resume needed.
+  if(editingCell)return;
   try{
     const data=await api('/viewer/api/batches');
     scheduleBatches=data.batches||[];
@@ -1601,7 +1602,6 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#colFilterPopover')&&!e.target.closest('.colf-btn'))closeColFilter();
   if(!e.target.closest('#rowCtxMenu'))closeRowContextMenu();
   if(!e.target.closest('#otherDashMenu')&&!e.target.closest('#otherDashBtn'))closeOtherDashboards();
-  autoSaveRowsClickedAway(e.target);
 });
 // Not present on gm.html/damon.html/swar.html (only the main dashboard
 // links out to the others), so guarded like every other admin.html-only
@@ -1619,20 +1619,14 @@ function closeOtherDashboards(){
 document.addEventListener('contextmenu',e=>{
   if(!e.target.closest('tr[data-batch], [data-slipid], [data-deviceid]'))closeRowContextMenu();
 });
-// Right-click a Production Schedule row for Edit/Delete (or Save/Cancel
-// if that row is already mid-edit) - same actions the old Actions column
-// had, just via a context menu instead of always-visible icons.
+// Right-click a Production Schedule row to delete it - editing now
+// happens per-cell (double-click a field), so there's no more row-wide
+// "Edit" mode for this menu to toggle into/out of.
 function openRowContextMenu(evt,batch){
   evt.preventDefault();
   evt.stopPropagation();
-  const editing=editingBatches.has(batch);
   const menu=$('rowCtxMenu');
-  menu.innerHTML=editing?`
-    <div class="ctx-menu-item" onclick="closeRowContextMenu();saveRowEdit('${esc(batch)}')">${ICON_SAVE} Save</div>
-    <div class="ctx-menu-item" onclick="closeRowContextMenu();cancelRowEdit('${esc(batch)}')">${ICON_CANCEL} Cancel</div>`
-    :`
-    <div class="ctx-menu-item" onclick="closeRowContextMenu();toggleEditRow('${esc(batch)}')">${ICON_EDIT} Edit</div>
-    <div class="ctx-menu-item danger" onclick="closeRowContextMenu();deleteBatchFromGrid('${esc(batch)}')">${ICON_DELETE} Delete</div>`;
+  menu.innerHTML=`<div class="ctx-menu-item danger" onclick="closeRowContextMenu();deleteBatchFromGrid('${esc(batch)}')">${ICON_DELETE} Delete</div>`;
   menu.style.top=evt.clientY+'px';
   menu.style.left=Math.min(evt.clientX,window.innerWidth-170)+'px';
   menu.style.display='block';
@@ -1673,41 +1667,46 @@ function computeRisk(b){
   return{level,completionPct,elapsedPct,daysRemaining};
 }
 
+// One editable cell, as a complete <td> - shared by every sched-grid row
+// on the page (Production Schedule, Weekly Detail). Double-click anywhere
+// in the cell to edit just that field; every other cell, including the
+// rest of this same row, stays plain text. isDate display normalizes
+// through toISODate too, not just the edit input's value - Target Finish
+// is free-text from Excel/manual edits, so "2026/08/18" and "2026-08-18"
+// both end up stored, and showed up raw before. Falls back to the
+// original string if it can't be parsed, so nothing ever goes blank over
+// a format toISODate doesn't recognize.
+function editableTd(b,key,isDate,extraClass){
+  const isEditingThis=editingCell&&editingCell.batch===b.batch&&editingCell.key===key;
+  const cls=extraClass?` class="${extraClass}"`:'';
+  if(isEditingThis){
+    const val=isDate?toISODate(b[key]):esc(b[key]||'');
+    return`<td${cls}><input class="gc-input" type="${isDate?'date':'text'}" value="${val}" onclick="event.stopPropagation()" onkeydown="handleCellEditKeydown(event,'${esc(b.batch)}','${key}')" onblur="onCellInputBlur('${esc(b.batch)}','${key}')"></td>`;
+  }
+  const text=esc(isDate?(toISODate(b[key])||b[key]||''):(b[key]||''));
+  return`<td${cls} ondblclick="event.stopPropagation();startCellEdit('${esc(b.batch)}','${key}',${!!isDate})">${text}</td>`;
+}
 // One row's markup - shared by the main Production Schedule grid and
-// Weekly Detail's grid (same look, same inline edit/right-click menu,
-// same risk coloring), so the two never drift out of sync with each
-// other the way two independently-maintained copies eventually would.
+// Weekly Detail's grid (same look, same cell-level inline edit/right-
+// click menu, same risk coloring), so the two never drift out of sync
+// with each other the way two independently-maintained copies eventually
+// would.
 function scheduleRowHtml(b){
   const pct=b.total?Math.round((b.scanned/b.total)*100):0;
   const state=rowStatus(b);
-  const editing=editingBatches.has(b.batch);
-  // Editable text field, or a date-type one for target_finish - same
-  // upsert-only-what's-present contract as before, just inline in the
-  // grid row. Edit/Delete (or Save/Cancel while editing) now live on
-  // the row's right-click menu instead of a dedicated Actions column.
-  // isDate display normalizes through toISODate too, not just the edit
-  // input's value - Target Finish is free-text from Excel/manual edits,
-  // so "2026/08/18" and "2026-08-18" both end up stored, and showed up
-  // raw before. Falls back to the original string if it can't be
-  // parsed, so nothing ever goes blank over a format toISODate doesn't
-  // recognize.
-  const field=(key,isDate)=>{
-    if(!editing)return esc(isDate?(toISODate(b[key])||b[key]||''):(b[key]||''));
-    const val=isDate?toISODate(b[key]):esc(b[key]||'');
-    return`<input class="gc-input" type="${isDate?'date':'text'}" data-field="${key}" value="${val}" onclick="event.stopPropagation()">`;
-  };
   const risk=computeRisk(b);
-  return`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}" onclick="handleRowClick('${esc(b.batch)}')" ondblclick="handleRowDblClick('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')">
-    <td>${field('job_name')}</td>
-    <td>${field('floor_or_work_order')}</td>
-    <td>${field('target_finish',true)}</td>
-    <td>${field('material')}</td>
-    <td>${field('finish')}</td>
-    <td>${field('part_name')}</td>
-    <td class="gc-batch">${editing&&typeof BATCH_NAME_EDITABLE!=='undefined'&&BATCH_NAME_EDITABLE?`<input class="gc-batch-input" type="text" value="${esc(b.batch)}" onclick="event.stopPropagation()">`:esc(b.batch)}</td>
+  const batchNameEditable=typeof BATCH_NAME_EDITABLE!=='undefined'&&BATCH_NAME_EDITABLE;
+  return`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}" onclick="handleRowClick('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')">
+    ${editableTd(b,'job_name')}
+    ${editableTd(b,'floor_or_work_order')}
+    ${editableTd(b,'target_finish',true)}
+    ${editableTd(b,'material')}
+    ${editableTd(b,'finish')}
+    ${editableTd(b,'part_name')}
+    ${batchNameEditable?editableTd(b,'batch',false,'gc-batch'):`<td class="gc-batch">${esc(b.batch)}</td>`}
     <td><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${b.scanned}/${b.total}</div></div></td>
-    <td class="gc-num">${field('sheet_qty')}</td>
-    <td class="gc-comment">${field('comment')}</td>
+    ${editableTd(b,'sheet_qty',false,'gc-num')}
+    ${editableTd(b,'comment',false,'gc-comment')}
     <td>${taskStatusCell(b,state)}</td>
   </tr>`;
 }
@@ -1798,82 +1797,98 @@ function toISODate(v){
 // happened here; a text character can't silently fail to render like that.
 const ICON_EDIT='&#9998;';   // ✎ pencil
 const ICON_DELETE='&#128465;'; // 🗑 wastebasket
-const ICON_SAVE='&#10003;';  // ✓ check mark
-const ICON_CANCEL='&#10005;'; // ✕ multiplication x
 
-// Batches currently in inline-edit mode (their grid row shows inputs
-// instead of plain text). A row's own Edit/Save icons toggle membership,
-// same as double-clicking the row (see handleRowDblClick below) or right-
-// clicking it for the Edit/Cancel menu.
-let editingBatches=new Set();
+// ── CELL-LEVEL INLINE EDIT (universal pattern - used anywhere a
+// sched-grid row has editable fields) ───────────────────────────────
+// Double-click ONE cell to edit just that field; every other cell on the
+// page stays plain read-only text. Only one cell is ever mid-edit at a
+// time - moving to a different cell blurs (and so commits) whatever was
+// being edited first, the same way moving between cells in a spreadsheet
+// commits the one you left.
+let editingCell=null; // {batch,key,isDate} | null
+// Set for one tick right before Escape blurs the input, so the blur
+// handler below can tell "Escape cancelled this" apart from "the user
+// clicked away" - both end in the same blur event, but only the second
+// one should save.
+let cellEditCancelling=false;
 
-function toggleEditRow(batch){editingBatches.add(batch);renderScheduleGrid();}
-function cancelRowEdit(batch){editingBatches.delete(batch);renderScheduleGrid();}
+// Re-renders just the one row (not the whole table) via outerHTML, then
+// refocuses the edit input if a cell on it is mid-edit - keeps the rest
+// of the grid, scroll position, and any other row's state untouched.
+function refreshRow(batch){
+  const b=scheduleBatches.find(x=>x.batch===batch);
+  const row=document.querySelector(`tr[data-batch="${CSS.escape(batch)}"]`);
+  if(!b||!row)return;
+  row.outerHTML=scheduleRowHtml(b);
+  const newRow=document.querySelector(`tr[data-batch="${CSS.escape(batch)}"]`);
+  const inp=newRow&&newRow.querySelector('.gc-input');
+  if(inp){inp.focus();if(inp.select)inp.select();}
+}
+function startCellEdit(batch,key,isDate){
+  editingCell={batch,key,isDate};
+  refreshRow(batch);
+}
+function cancelCellEdit(batch,key){
+  if(!editingCell||editingCell.batch!==batch||editingCell.key!==key)return;
+  editingCell=null;
+  refreshRow(batch);
+}
+// Enter commits (by blurring the input - onCellInputBlur below does the
+// actual save); Escape reverts without saving.
+function handleCellEditKeydown(evt,batch,key){
+  if(evt.key==='Enter'){evt.preventDefault();evt.target.blur();}
+  else if(evt.key==='Escape'){evt.preventDefault();cellEditCancelling=true;evt.target.blur();}
+}
+function onCellInputBlur(batch,key){
+  if(cellEditCancelling){cellEditCancelling=false;cancelCellEdit(batch,key);return;}
+  commitCellEdit(batch,key);
+}
+// Renaming (key==='batch') goes through its own confirm + dedicated
+// rename endpoint - batch is production_schedule's primary key and is
+// also referenced by parts_panel/scans/packing_slips, so it can't just be
+// PATCHed like a normal field (see the rename endpoint's own comment in
+// server.js for why). Every other field is a single-key PATCH to the
+// existing schedule-edit endpoint - upsertSchedule there already only
+// overwrites whichever key is actually present in the body, so sending
+// just {[key]:value} is safe and never touches any other field on the row.
+async function commitCellEdit(batch,key){
+  if(!editingCell||editingCell.batch!==batch||editingCell.key!==key)return;
+  const row=document.querySelector(`tr[data-batch="${CSS.escape(batch)}"]`);
+  const inp=row&&row.querySelector('.gc-input');
+  editingCell=null;
+  if(!inp)return;
+  const value=inp.value.trim();
+  const b=scheduleBatches.find(x=>x.batch===batch);
 
-// A single click views that batch's labels; a double-click means "edit
-// this row" instead. Both fire on the same click, so the single-click
-// action is held for a beat - if a second click lands within that window
-// it's a double-click and the held action never runs. Already-editing rows
-// ignore the click entirely (no accidental navigate-away mid-edit).
+  if(key==='batch'){
+    if(!value||value===batch){refreshRow(batch);return;}
+    if(!confirm(`Rename batch "${batch}" to "${value}"?\n\nThis updates every part, scan, and packing slip already tied to "${batch}".`)){refreshRow(batch);return;}
+    try{
+      await api('/admin/api/schedule/'+encodeURIComponent(batch)+'/rename',{method:'POST',body:JSON.stringify({new_batch:value})});
+      await loadScheduleList();
+    }catch(e){alert('Could not rename batch: '+e.message);await loadScheduleList();}
+    return;
+  }
+
+  const original=key==='target_finish'?(toISODate(b&&b[key])||''):String((b&&b[key])||'');
+  if(value===original){refreshRow(batch);return;} // nothing actually changed - close without a network call
+  try{
+    await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'POST',body:JSON.stringify({[key]:value})});
+    await loadScheduleList();
+  }catch(e){alert('Could not save — check the admin key and try again.');refreshRow(batch);}
+}
+
+// A single click views that batch's labels; a double-click on a specific
+// cell means "edit this field" instead (see startCellEdit above). Both
+// fire on the same click, so the single-click action is held for a beat -
+// if a second click lands within that window it's a double-click and the
+// held action never runs. A row with a cell mid-edit ignores the click
+// entirely (no accidental navigate-away while editing).
 let rowClickTimer=null;
 function handleRowClick(batch){
-  if(editingBatches.has(batch))return;
+  if(editingCell&&editingCell.batch===batch)return;
   if(rowClickTimer){clearTimeout(rowClickTimer);rowClickTimer=null;return;}
   rowClickTimer=setTimeout(()=>{rowClickTimer=null;viewBatchLabels(batch);},250);
-}
-function handleRowDblClick(batch){
-  if(rowClickTimer){clearTimeout(rowClickTimer);rowClickTimer=null;}
-  if(!editingBatches.has(batch))toggleEditRow(batch);
-}
-// Clicking anywhere outside a row that's mid-edit auto-saves it - no Save
-// button to remember to click. Runs from the page-wide click listener
-// below. The context menu's explicit Save/Cancel still work too, for
-// discarding a change instead of keeping it.
-function autoSaveRowsClickedAway(target){
-  if(!editingBatches.size)return;
-  [...editingBatches].forEach(batch=>{
-    const row=document.querySelector(`tr[data-batch="${CSS.escape(batch)}"]`);
-    if(row&&!row.contains(target))saveRowEdit(batch);
-  });
-}
-
-// Reads every .gc-input in that batch's row (identified via data-batch,
-// since batch names are unique) and saves in one call - same upsert
-// endpoint as before. extra_fields is deliberately omitted from the body
-// now that there's no UI for it; the backend only overwrites fields that
-// are actually present, so any extra_fields set before this change stays
-// intact even though nothing here can edit it anymore.
-// A rename runs first, on the OLD batch id, since it changes the primary
-// key everything else (parts_panel, scans, packing_slips) is keyed on -
-// the rest of this row's field edits below then apply against whatever
-// batch id is now current. Cancelling the confirmation (or a rejected
-// rename - e.g. the new name collides with a real batch) aborts the
-// whole save, including any other field edits made in the same pass,
-// rather than silently applying half of what was changed.
-async function saveRowEdit(batch){
-  const row=document.querySelector(`tr[data-batch="${CSS.escape(batch)}"]`);
-  if(!row)return;
-  let effectiveBatch=batch;
-  const batchInput=row.querySelector('.gc-batch-input');
-  if(batchInput){
-    const newName=batchInput.value.trim();
-    if(newName&&newName!==batch){
-      if(!confirm(`Rename batch "${batch}" to "${newName}"?\n\nThis updates every part, scan, and packing slip already tied to "${batch}".`))return;
-      try{
-        await api('/admin/api/schedule/'+encodeURIComponent(batch)+'/rename',{method:'POST',body:JSON.stringify({new_batch:newName})});
-        effectiveBatch=newName;
-        editingBatches.delete(batch);
-        editingBatches.add(newName);
-      }catch(e){alert('Could not rename batch: '+e.message);return;}
-    }
-  }
-  const body={};
-  row.querySelectorAll('.gc-input').forEach(inp=>{body[inp.dataset.field]=inp.value.trim();});
-  try{
-    await api('/admin/api/schedule/'+encodeURIComponent(effectiveBatch),{method:'POST',body:JSON.stringify(body)});
-    editingBatches.delete(effectiveBatch);
-    await loadScheduleList();
-  }catch(e){alert('Could not save — check the admin key and try again.');}
 }
 
 // Permanently deletes the batch: every registered part in it, their notes
@@ -1895,7 +1910,6 @@ async function deleteBatchFromGrid(batch){
   if(typed!==batch){alert('Batch name did not match — nothing deleted.');return;}
   try{
     await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'DELETE'});
-    editingBatches.delete(batch);
     await loadScheduleList();
   }catch(e){alert('Could not delete — check the admin key and try again.');}
 }
