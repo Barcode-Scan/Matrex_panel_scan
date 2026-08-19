@@ -1420,6 +1420,17 @@ function hardRefresh(){
     goFresh();
   }
 }
+// Ctrl+Shift+R (the usual "hard refresh" combo) is reserved by the
+// browser itself - it never reaches page JS to intercept, installed app
+// or not. Ctrl+Alt+R isn't reserved, so it's the one shortcut that can
+// actually be wired up here to trigger the same unregister-then-reload
+// as the button.
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&e.altKey&&!e.shiftKey&&(e.key==='r'||e.key==='R')){
+    e.preventDefault();
+    hardRefresh();
+  }
+});
 
 // ── STALLED BATCHES (Bottleneck Detection) — another read-only lens on
 // scheduleBatches. "Idle since" is last_scanned_at (added to the batches
