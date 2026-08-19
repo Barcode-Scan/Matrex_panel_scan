@@ -197,13 +197,6 @@
   .sched-grid-wrap{overflow:auto;max-height:calc(100vh - 380px);min-height:200px}
   .sched-grid{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:16px;table-layout:auto}
   .sched-grid th{position:sticky;top:0;background:var(--white);border-bottom:2px solid var(--gray-200);padding:8px 10px;text-align:center;vertical-align:middle;font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;z-index:1}
-  /* Column-level total, sitting right under the Part Qty/Sheet Qty
-     column labels - literally on top of that column, not a generic
-     number elsewhere on the page. Lives inside the same sticky <th>, so
-     it stays pinned with the rest of the header while scrolling. Reset
-     text-transform/letter-spacing/color since those are tuned for the
-     all-caps column label above it, not a number. */
-  .sched-grid th .col-total{text-transform:none;letter-spacing:0;font-weight:800;color:var(--blue-600);margin-top:2px;font-variant-numeric:tabular-nums}
   .colf-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:4px;border:none;background:var(--gray-200);color:var(--gray-500);border-radius:3px;font-size:9px;line-height:1;cursor:pointer;vertical-align:middle}
   .colf-btn.active{background:var(--blue-600);color:#fff}
   /* Styled to read as a real Excel AutoFilter menu: flat/square chrome,
@@ -456,7 +449,7 @@
       <thead>
         <tr>
           <th>Job</th><th>Floor or Work Order</th><th>Target Finish</th><th>Material</th><th>Finish</th>
-          <th>Part Name</th><th>Batch Name</th><th>Part Qty<div class="col-total" id="weekColTotal_status"></div></th><th>Sheet Qty<div class="col-total" id="weekColTotal_sheet_qty"></div></th><th>Comment</th><th>Task Status</th>
+          <th>Part Name</th><th>Batch Name</th><th>Part Qty</th><th>Sheet Qty</th><th>Comment</th><th>Task Status</th>
         </tr>
       </thead>
       <tbody id="weeklyDetailList"></tbody>

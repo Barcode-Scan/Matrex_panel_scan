@@ -498,29 +498,9 @@ const GRID_COLUMNS=[
   ['status','Part Qty'],['sheet_qty','Sheet Qty'],['comment','Comment'],['task_status','Task Status']
 ];
 function renderScheduleHead(){
-  $('scheduleHeadRow').innerHTML=GRID_COLUMNS.map(([key,label])=>{
-    const totalSlot=(key==='status'||key==='sheet_qty')?`<div class="col-total" id="colTotal_${key}"></div>`:'';
-    return`<th>${esc(label)}<button class="colf-btn" id="colfbtn_${key}" onclick="openColFilter(event,'${key}','${esc(label)}')">&#9660;</button>${totalSlot}</th>`;
-  }).join('');
-}
-// Injects the current scanned/total and Sheet Qty sums directly into the
-// Part Qty / Sheet Qty column headers - sitting right on top of each
-// column instead of in a generic bar that isn't tied to any specific
-// one, and pinned along with the rest of the header row since it lives
-// inside the same sticky <th>. idPrefix lets Production Schedule and
-// Weekly Detail's Batches table (two separate tables/ids) share this one
-// function - each just needs a `${idPrefix}status` and
-// `${idPrefix}sheet_qty` element somewhere in its header.
-function updateColumnTotals(rows,idPrefix){
-  let scanned=0,total=0,sheetQty=0,unparsed=0;
-  rows.forEach(b=>{
-    scanned+=b.scanned||0;total+=b.total||0;
-    const q=parseQty(b.sheet_qty);
-    q===null?unparsed++:sheetQty+=q;
-  });
-  const partEl=$(idPrefix+'status'),sheetEl=$(idPrefix+'sheet_qty');
-  if(partEl)partEl.textContent=rows.length?scanned+'/'+total:'';
-  if(sheetEl)sheetEl.textContent=rows.length?(sheetQty+(unparsed?' *':'')):'';
+  $('scheduleHeadRow').innerHTML=GRID_COLUMNS.map(([key,label])=>
+    `<th>${esc(label)}<button class="colf-btn" id="colfbtn_${key}" onclick="openColFilter(event,'${key}','${esc(label)}')">&#9660;</button></th>`
+  ).join('');
 }
 async function loadScheduleList(){
   if(!$('scheduleHeadRow').children.length)renderScheduleHead();
@@ -686,7 +666,6 @@ function renderWeekDetail(key){
   $('weeklyDetailSub').textContent=items.length+' batch'+(items.length===1?'':'es');
   renderWeekMaterialSummary(items);
   if($('weeklyDetailTotals'))$('weeklyDetailTotals').innerHTML=scheduleTotalsBarHtml(items);
-  updateColumnTotals(items,'weekColTotal_');
   if(!items.length){$('weeklyDetailList').innerHTML='<tr><td colspan="11" class="empty">No batches.</td></tr>';return;}
   const sorted=[...items].sort((a,b)=>(a.target_finish||'9999-99-99').localeCompare(b.target_finish||'9999-99-99'));
   $('weeklyDetailList').innerHTML=sorted.map(scheduleRowHtml).join('');
@@ -1768,19 +1747,21 @@ function setGlobalSearch(v){globalSearchQuery=v.trim().toLowerCase();renderSched
 // visible without scrolling down a long list - always reflects the
 // current rows even when that list is empty (search yields no matches).
 function scheduleTotalsBarHtml(rows){
-  let complete=0,progress=0,notStarted=0;
+  let scanned=0,total=0,sheetQty=0,unparsed=0,complete=0,progress=0,notStarted=0;
   rows.forEach(b=>{
+    scanned+=b.scanned||0;total+=b.total||0;
+    const q=parseQty(b.sheet_qty);
+    q===null?unparsed++:sheetQty+=q;
     const st=rowStatus(b);
     if(st==='complete')complete++;else if(st==='progress')progress++;else notStarted++;
   });
-  // Scanned/total and Sheet Qty totals live in the Part Qty/Sheet Qty
-  // column headers now (see updateColumnTotals) - right on top of their
-  // own column instead of repeated here too.
   return`<div class="totals-bar">
     <span>${rows.length} batch${rows.length===1?'':'es'}</span>
     <span>${complete} complete</span>
     <span>${progress} in progress</span>
     <span>${notStarted} not started</span>
+    <span>${scanned}/${total} scanned</span>
+    <span>${sheetQty}${unparsed?' *':''} sheet qty</span>
   </div>`;
 }
 function renderScheduleGrid(){
@@ -1803,7 +1784,6 @@ function renderScheduleGrid(){
     if(btn)btn.classList.toggle('active',!!columnFilters[key]);
   });
   if($('scheduleTotals'))$('scheduleTotals').innerHTML=scheduleTotalsBarHtml(rows);
-  updateColumnTotals(rows,'colTotal_');
   if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="11" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;return;}
   $('scheduleTbody').innerHTML=rows.map(scheduleRowHtml).join('');
 }
