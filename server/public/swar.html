@@ -217,6 +217,12 @@
      Batches, Job Summary) - visually set apart from data rows, never
      clickable, excluded from CSV export (see exportTableToCSV). */
   .sched-grid tr.gc-totals-row{cursor:default;font-weight:700;border-top:2px solid var(--gray-300);background:var(--gray-100)}
+  /* Standalone summary bar above the table (Production Schedule, Weekly
+     Detail's Batches table) - same stat this used to show as a bottom
+     row inside the table, moved above it so it's visible without
+     scrolling down a long list, plus a Complete/In Progress/Not Started
+     breakdown alongside the batch count. */
+  .totals-bar{display:flex;gap:18px;flex-wrap:wrap;align-items:center;padding:10px 14px;background:var(--gray-100);border-radius:8px;margin-bottom:12px;font-size:12.5px;font-weight:700;color:var(--gray-700)}
   .sched-grid tr.gc-totals-row:hover td{background:var(--gray-100)}
   .sched-grid tr.gc-totals-row td.gc-batch{font-weight:800}
   /* Freeze the identity column (always first - Job/Batch/Material
@@ -372,6 +378,7 @@
       <input placeholder="Search all columns..." oninput="setGlobalSearch(this.value)" style="flex:1;min-width:200px">
       <button class="secondary" onclick="exportTableToCSV('scheduleTbody','production-schedule')" style="width:auto;padding:10px 18px">Export CSV</button>
     </div>
+    <div id="scheduleTotals" class="totals-bar"></div>
     <div style="overflow-x:auto">
     <table class="sched-grid">
       <thead>
@@ -417,6 +424,7 @@
     <div style="text-align:right;margin-bottom:10px">
       <button class="secondary" onclick="exportTableToCSV('weeklyDetailList','weekly-batches')" style="width:auto;padding:10px 18px">Export CSV</button>
     </div>
+    <div id="weeklyDetailTotals" class="totals-bar"></div>
     <div style="overflow-x:auto">
     <table class="sched-grid">
       <thead>

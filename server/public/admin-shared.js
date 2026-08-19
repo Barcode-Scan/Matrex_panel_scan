@@ -665,9 +665,10 @@ function renderWeekDetail(key){
   $('weeklyDetailTitle').textContent=key==='unscheduled'?'No Target Finish Date':weekLabel(key);
   $('weeklyDetailSub').textContent=items.length+' batch'+(items.length===1?'':'es');
   renderWeekMaterialSummary(items);
+  if($('weeklyDetailTotals'))$('weeklyDetailTotals').innerHTML=scheduleTotalsBarHtml(items);
   if(!items.length){$('weeklyDetailList').innerHTML='<tr><td colspan="11" class="empty">No batches.</td></tr>';return;}
   const sorted=[...items].sort((a,b)=>(a.target_finish||'9999-99-99').localeCompare(b.target_finish||'9999-99-99'));
-  $('weeklyDetailList').innerHTML=sorted.map(scheduleRowHtml).join('')+scheduleTotalsRowHtml(sorted);
+  $('weeklyDetailList').innerHTML=sorted.map(scheduleRowHtml).join('');
 }
 $('bBackWeeklyDetail').onclick=()=>{currentWeekKey=null;showTab('weekly');};
 
@@ -1738,25 +1739,30 @@ async function saveTaskStatus(batch,value){
 // agree on what a column's value actually is.
 let globalSearchQuery='';
 function setGlobalSearch(v){globalSearchQuery=v.trim().toLowerCase();renderScheduleGrid();}
-// Batch count, total scanned/total, and total Sheet Qty across whatever
+// Batch count (broken down by Complete/In Progress/Not Started, not just
+// a total), total scanned/total, and total Sheet Qty across whatever
 // rows are currently shown (post filter/search/sort) - an AutoSum-style
-// closing row. Shared shape with Weekly Detail's Batches table below
-// (same 11 columns). Marked gc-totals-row so it's excluded from CSV
-// export (a display summary, not a data row) and styled non-interactive.
-function scheduleTotalsRowHtml(rows){
-  let scanned=0,total=0,sheetQty=0,unparsed=0;
+// summary. Lives in its own bar above the table (#scheduleTotals /
+// #weeklyDetailTotals) rather than as the table's last row, so it's
+// visible without scrolling down a long list - always reflects the
+// current rows even when that list is empty (search yields no matches).
+function scheduleTotalsBarHtml(rows){
+  let scanned=0,total=0,sheetQty=0,unparsed=0,complete=0,progress=0,notStarted=0;
   rows.forEach(b=>{
     scanned+=b.scanned||0;total+=b.total||0;
     const q=parseQty(b.sheet_qty);
     q===null?unparsed++:sheetQty+=q;
+    const st=rowStatus(b);
+    if(st==='complete')complete++;else if(st==='progress')progress++;else notStarted++;
   });
-  return`<tr class="gc-totals-row">
-    <td class="gc-batch">TOTAL — ${rows.length} batch${rows.length===1?'':'es'}</td>
-    <td></td><td></td><td></td><td></td><td></td><td></td>
-    <td class="gc-num">${scanned}/${total}</td>
-    <td class="gc-num">${sheetQty}${unparsed?' *':''}</td>
-    <td></td><td></td>
-  </tr>`;
+  return`<div class="totals-bar">
+    <span>${rows.length} batch${rows.length===1?'':'es'}</span>
+    <span>${complete} complete</span>
+    <span>${progress} in progress</span>
+    <span>${notStarted} not started</span>
+    <span>${scanned}/${total} scanned</span>
+    <span>${sheetQty}${unparsed?' *':''} sheet qty</span>
+  </div>`;
 }
 function renderScheduleGrid(){
   let rows=scheduleBatches.filter(b=>{
@@ -1777,8 +1783,9 @@ function renderScheduleGrid(){
     const btn=$('colfbtn_'+key);
     if(btn)btn.classList.toggle('active',!!columnFilters[key]);
   });
+  if($('scheduleTotals'))$('scheduleTotals').innerHTML=scheduleTotalsBarHtml(rows);
   if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="11" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;return;}
-  $('scheduleTbody').innerHTML=rows.map(scheduleRowHtml).join('')+scheduleTotalsRowHtml(rows);
+  $('scheduleTbody').innerHTML=rows.map(scheduleRowHtml).join('');
 }
 
 // Best-effort free text -> yyyy-mm-dd, for feeding an existing stored
