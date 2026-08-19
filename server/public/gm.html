@@ -176,6 +176,16 @@
   .sched-table input{border:none;background:none;font-size:13px;font-weight:600;width:100%;font-family:inherit;padding:0;color:var(--gray-900);outline:none}
   .sched-table input::placeholder{color:var(--gray-400);font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.3px}
   .sched-table input:focus{outline:1.5px solid var(--blue-600);border-radius:4px}
+  /* Bounds every list to its own scrollable box instead of letting the
+     whole page grow with it - a long list scrolls inside itself, header
+     row pinned via .sched-grid th's existing position:sticky (that only
+     works once there's an actual clipped scroll container above it,
+     which this provides), while the tab bar/search bar/totals bar above
+     it and everything else on the page stays put. The 280px budget is a
+     one-size-fits-most estimate for the topbar+tabs+heading+controls
+     above any given table, not tuned per tab - min-height keeps it from
+     collapsing too small on a short window. */
+  .sched-grid-wrap{overflow:auto;max-height:calc(100vh - 280px);min-height:200px}
   .sched-grid{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:16px;table-layout:auto}
   .sched-grid th{position:sticky;top:0;background:var(--white);border-bottom:2px solid var(--gray-200);padding:8px 10px;text-align:center;vertical-align:middle;font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;z-index:1}
   .colf-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:4px;border:none;background:var(--gray-200);color:var(--gray-500);border-radius:3px;font-size:9px;line-height:1;cursor:pointer;vertical-align:middle}
@@ -379,7 +389,7 @@
       <button class="secondary" onclick="exportTableToCSV('scheduleTbody','production-schedule')" style="width:auto;padding:10px 18px">Export CSV</button>
     </div>
     <div id="scheduleTotals" class="totals-bar"></div>
-    <div style="overflow-x:auto">
+    <div class="sched-grid-wrap">
     <table class="sched-grid">
       <thead>
         <tr id="scheduleHeadRow"></tr>
@@ -425,7 +435,7 @@
       <button class="secondary" onclick="exportTableToCSV('weeklyDetailList','weekly-batches')" style="width:auto;padding:10px 18px">Export CSV</button>
     </div>
     <div id="weeklyDetailTotals" class="totals-bar"></div>
-    <div style="overflow-x:auto">
+    <div class="sched-grid-wrap">
     <table class="sched-grid">
       <thead>
         <tr>
@@ -443,7 +453,7 @@
     <div style="text-align:right;margin-bottom:10px">
       <button class="secondary" onclick="exportTableToCSV('weeklyMaterialSummary','weekly-material-demand')" style="width:auto;padding:10px 18px">Export CSV</button>
     </div>
-    <div style="overflow-x:auto">
+    <div class="sched-grid-wrap">
     <table class="sched-grid static">
       <thead>
         <tr>
@@ -463,7 +473,7 @@
       <input placeholder="Search jobs..." oninput="setJobSummarySearch(this.value)" style="flex:1;min-width:200px">
       <button class="secondary" onclick="exportTableToCSV('jobSummaryList','job-summary')" style="width:auto;padding:10px 18px">Export CSV</button>
     </div>
-    <div style="overflow-x:auto">
+    <div class="sched-grid-wrap">
     <table class="sched-grid">
       <thead>
         <tr>
@@ -512,7 +522,7 @@
       <input id="ctSearchFloor" placeholder="Search Floor / Work Order..." oninput="renderCompletedTasks()" style="flex:1;min-width:160px">
       <input id="ctSearchBatch" placeholder="Search Batch..." oninput="renderCompletedTasks()" style="flex:1;min-width:160px">
     </div>
-    <div style="overflow-x:auto">
+    <div class="sched-grid-wrap">
     <table class="sched-grid">
       <thead>
         <tr>

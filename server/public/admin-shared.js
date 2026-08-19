@@ -410,7 +410,7 @@ function textMatches(query,...values){
 // grid table on this page.
 function tbl(headers,rows){
   if(!rows.length)return'<div class="empty">No data yet.</div>';
-  return`<div style="overflow-x:auto"><table class="sched-grid static"><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
+  return`<div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
     <tbody>${rows.map(r=>`<tr>${r.map((c,i)=>i===0?`<td class="gc-batch">${esc(c)}</td>`:`<td class="gc-num">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
