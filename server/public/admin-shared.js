@@ -355,10 +355,17 @@ function loadReports(){
   loadReportDaily();
 }
 function fmtNum(n){return(n||0).toLocaleString();}
+// Same sched-grid look as Production Schedule/Weekly Detail/Completed
+// Tasks, not the older rep-tbl style - "static" since none of tbl()'s
+// callers make their rows clickable, so they get the plain look without
+// the pointer cursor/hover highlight that would misleadingly suggest
+// otherwise. Wrapped in its own overflow-x:auto since callers just drop
+// this straight into a plain container div, same as every other sched-
+// grid table on this page.
 function tbl(headers,rows){
   if(!rows.length)return'<div class="empty">No data yet.</div>';
-  return`<table class="rep-tbl"><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
-    <tbody>${rows.map(r=>`<tr>${r.map((c,i)=>i===0?`<td>${esc(c)}</td>`:`<td class="num">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  return`<div style="overflow-x:auto"><table class="sched-grid static"><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r=>`<tr>${r.map((c,i)=>i===0?`<td class="gc-batch">${esc(c)}</td>`:`<td class="gc-num">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
 async function loadReportSummary(){
@@ -655,28 +662,35 @@ function materialDemandStats(m,items){
   const conflict=shortfall!==null&&shortfall>0;
   return{total,unparsed,jobs,onHand,shortfall,conflict};
 }
-// Table version of the same data, styled like every other Production-
-// Schedule-family grid on this page (sched-grid) instead of the standalone
-// tab's card list - this is the one embedded inside Weekly Detail, scoped
-// to whatever week is currently open.
-function renderWeekMaterialSummary(items){
-  const el=$('weeklyMaterialSummary');
-  if(!el)return; // not every page has this section yet
+// Shared table-row builder - the standalone Material Demand tab and the
+// Weekly Detail summary show the exact same columns (Material, Sheet Qty
+// Remaining, Open Batches, Jobs, On Hand, Status), just scoped to
+// different sets of batches, so there's one place that builds the actual
+// <tr> markup instead of two copies that could drift apart.
+function materialDemandRowsHtml(items){
   const groups=groupByMaterial(items);
   const materials=Object.keys(groups).sort();
-  if(!materials.length){el.innerHTML='<tr><td colspan="6" class="empty">No open batches this week — nothing currently demanding material.</td></tr>';return;}
-  el.innerHTML=materials.map(m=>{
-    const items=groups[m];
-    const{total,unparsed,jobs,onHand,shortfall,conflict}=materialDemandStats(m,items);
+  if(!materials.length)return null;
+  return materials.map(m=>{
+    const mItems=groups[m];
+    const{total,unparsed,jobs,onHand,shortfall,conflict}=materialDemandStats(m,mItems);
     return`<tr>
       <td class="gc-batch">${esc(m)}</td>
       <td class="gc-num">${total}${unparsed?` <span style="color:var(--gray-500);font-weight:400">(+${unparsed} unparsed)</span>`:''}</td>
-      <td class="gc-num">${items.length}</td>
+      <td class="gc-num">${mItems.length}</td>
       <td>${jobs.length?esc(jobs.join(', ')):''}</td>
       <td class="gc-num"><input type="number" class="gc-input" value="${onHand!==null?onHand:''}" placeholder="—" style="width:80px" onclick="event.stopPropagation()" onchange="saveMaterialStock('${esc(m)}',this.value)"></td>
       <td>${onHand===null?'':conflict?'<span style="color:var(--red-600);font-weight:700">Short by '+shortfall+'</span>':'<span style="color:var(--green-700);font-weight:700">Covered</span>'}</td>
     </tr>`;
   }).join('');
+}
+// Styled like every other Production-Schedule-family grid on this page
+// (sched-grid) - this is the one embedded inside Weekly Detail, scoped to
+// whatever week is currently open.
+function renderWeekMaterialSummary(items){
+  const el=$('weeklyMaterialSummary');
+  if(!el)return; // not every page has this section yet
+  el.innerHTML=materialDemandRowsHtml(items)||'<tr><td colspan="6" class="empty">No open batches this week — nothing currently demanding material.</td></tr>';
 }
 // ── MATERIAL STOCK (Cross-Job Material Conflict Detection, Phase 4) —
 // manual on-hand qty per material, loaded once (not on the 4s poll - it
@@ -705,29 +719,7 @@ async function saveMaterialStock(material,value){
 }
 function renderMaterialDemand(){
   if(!$('materialList'))return; // this tab doesn't exist on every page (gm.html) - loadMaterialStock() calls this unconditionally at boot
-  const groups=groupByMaterial();
-  const materials=Object.keys(groups).sort();
-  if(!materials.length){$('materialList').innerHTML='<div class="empty">No open batches — nothing currently demanding material.</div>';return;}
-  $('materialList').innerHTML=materials.map(m=>{
-    const items=groups[m];
-    const{total,unparsed,jobs,onHand,shortfall,conflict}=materialDemandStats(m,items);
-    return`<div class="card" style="align-items:flex-start;flex-direction:column;gap:6px">
-      <div style="display:flex;justify-content:space-between;width:100%;align-items:center;gap:8px;flex-wrap:wrap">
-        <div class="name" style="font-size:16px">${esc(m)}</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          ${conflict?'<span class="pill notstarted">Short by '+shortfall+'</span>':''}
-          <span class="pill working">${items.length} open batch${items.length===1?'':'es'}</span>
-        </div>
-      </div>
-      <div class="meta">Sheet Qty remaining: <strong style="color:var(--gray-900)">${total}</strong>${unparsed?` (+${unparsed} batch${unparsed===1?'':'es'} with a non-numeric Sheet Qty, not counted)`:''}</div>
-      <div class="meta">Jobs: ${jobs.length?esc(jobs.join(', ')):'(none specified)'}</div>
-      <div class="meta" style="display:flex;align-items:center;gap:6px">On hand:
-        <input type="number" value="${onHand!==null?onHand:''}" placeholder="Enter qty" style="width:90px;padding:4px 8px"
-          onchange="saveMaterialStock('${esc(m)}',this.value)">
-        ${onHand!==null?(conflict?'<span style="color:var(--red-600);font-weight:700">shortfall</span>':'<span style="color:var(--green-700);font-weight:700">covered</span>'):''}
-      </div>
-    </div>`;
-  }).join('');
+  $('materialList').innerHTML=materialDemandRowsHtml()||'<tr><td colspan="6" class="empty">No open batches — nothing currently demanding material.</td></tr>';
 }
 
 // ── THROUGHPUT & YIELD ANALYTICS — completed-batch-only metrics (nothing
@@ -820,19 +812,18 @@ function progressPillClass(pct){return pct>=100?'done':pct>0?'working':'notstart
 function renderJobSummary(){
   const groups=groupByJob();
   const jobs=Object.keys(groups).sort();
-  if(!jobs.length){$('jobSummaryList').innerHTML='<div class="empty">No batches in Production Schedule yet.</div>';return;}
+  if(!jobs.length){$('jobSummaryList').innerHTML='<tr><td colspan="4" class="empty">No batches in Production Schedule yet.</td></tr>';return;}
   $('jobSummaryList').innerHTML=jobs.map(j=>{
     const items=groups[j];
     const{scanned,total,pct}=sumProgress(items);
     const floors=[...new Set(items.map(b=>b.floor_or_work_order).filter(Boolean))];
-    return`<div class="card" style="align-items:flex-start;flex-direction:column;gap:6px;cursor:pointer" onclick="openJobDetail('${esc(j)}')">
-      <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
-        <div class="name" style="font-size:16px">${esc(j)}</div>
-        <span class="pill ${progressPillClass(pct)}">${pct}% complete</span>
-      </div>
-      <div class="job-progress"><div class="job-progress-track"><div class="job-progress-fill" style="width:${pct}%"></div></div></div>
-      <div class="meta">${items.length} batch${items.length===1?'':'es'} · ${scanned}/${total} scanned${floors.length?' · '+floors.length+' floor'+(floors.length===1?'':'s')+': '+esc(floors.join(', ')):''}</div>
-    </div>`;
+    const state=pct>=100?'complete':pct>0?'progress':'none';
+    return`<tr onclick="openJobDetail('${esc(j)}')">
+      <td class="gc-batch">${esc(j)}</td>
+      <td class="gc-num">${items.length}</td>
+      <td><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${scanned}/${total}</div></div></td>
+      <td>${floors.length?esc(floors.join(', ')):''}</td>
+    </tr>`;
   }).join('');
   if(currentJobKey)renderJobDetail(currentJobKey); // keep an already-open job's detail live too
 }
@@ -1388,16 +1379,17 @@ function renderStalledBatches(){
     return{b,idleDays,refDate,started:b.scanned>0};
   }).filter(r=>r.idleDays!==null&&r.idleDays>=threshold)
     .sort((a,b)=>b.idleDays-a.idleDays);
-  if(!stalled.length){$('stalledList').innerHTML='<div class="empty">No batches idle '+threshold+'+ working days — nothing stalled right now.</div>';return;}
+  if(!stalled.length){$('stalledList').innerHTML='<tr><td colspan="7" class="empty">No batches idle '+threshold+'+ working days — nothing stalled right now.</td></tr>';return;}
   $('stalledList').innerHTML=stalled.map(({b,idleDays,refDate,started})=>{
-    const sub=[b.job_name,b.material,b.floor_or_work_order].filter(Boolean).map(esc).join(' · ');
-    return`<div class="card" onclick="viewBatchLabels('${esc(b.batch)}')" style="cursor:pointer">
-      <div>
-        <div class="name">${esc(b.batch)}</div>
-        <div class="meta">${sub}${sub?' · ':''}${b.scanned}/${b.total} scanned · ${started?'last scan':'registered, never scanned'} ${fmt(refDate)}</div>
-      </div>
-      <span class="pill notstarted">${idleDays} working day${idleDays===1?'':'s'} idle</span>
-    </div>`;
+    return`<tr onclick="viewBatchLabels('${esc(b.batch)}')">
+      <td class="gc-batch">${esc(b.batch)}</td>
+      <td>${esc(b.job_name||'')}</td>
+      <td>${esc(b.material||'')}</td>
+      <td>${esc(b.floor_or_work_order||'')}</td>
+      <td class="gc-num">${b.scanned}/${b.total}</td>
+      <td>${started?'Last scan':'Registered, never scanned'} ${esc(fmt(refDate))}</td>
+      <td><span class="pill notstarted">${idleDays}d idle</span></td>
+    </tr>`;
   }).join('');
 }
 // Guarded (not every page has this tab - see the showTab comment above)
@@ -1415,17 +1407,18 @@ function renderAtRisk(){
     .map(b=>({b,risk:computeRisk(b)}))
     .filter(r=>r.risk&&r.risk.level==='red')
     .sort((a,b)=>a.risk.daysRemaining-b.risk.daysRemaining);
-  if(!atRisk.length){$('riskList').innerHTML='<div class="empty">Nothing at risk right now.</div>';return;}
+  if(!atRisk.length){$('riskList').innerHTML='<tr><td colspan="7" class="empty">Nothing at risk right now.</td></tr>';return;}
   $('riskList').innerHTML=atRisk.map(({b,risk})=>{
-    const sub=[b.job_name,b.material,b.floor_or_work_order].filter(Boolean).map(esc).join(' · ');
     const dueText=risk.daysRemaining<0?Math.abs(risk.daysRemaining)+' day'+(Math.abs(risk.daysRemaining)===1?'':'s')+' overdue':risk.daysRemaining+' day'+(risk.daysRemaining===1?'':'s')+' left';
-    return`<div class="card" onclick="viewBatchLabels('${esc(b.batch)}')" style="cursor:pointer">
-      <div>
-        <div class="name">${esc(b.batch)}</div>
-        <div class="meta">${sub}${sub?' · ':''}${b.scanned}/${b.total} scanned (${Math.round(risk.completionPct)}%) · Due ${esc(toISODate(b.target_finish)||b.target_finish)} · ${dueText}</div>
-      </div>
-      <span class="pill notstarted">At Risk</span>
-    </div>`;
+    return`<tr onclick="viewBatchLabels('${esc(b.batch)}')">
+      <td class="gc-batch">${esc(b.batch)}</td>
+      <td>${esc(b.job_name||'')}</td>
+      <td>${esc(b.material||'')}</td>
+      <td>${esc(b.floor_or_work_order||'')}</td>
+      <td class="gc-num">${b.scanned}/${b.total} (${Math.round(risk.completionPct)}%)</td>
+      <td>${esc(toISODate(b.target_finish)||b.target_finish)}</td>
+      <td><span class="pill notstarted">${dueText}</span></td>
+    </tr>`;
   }).join('');
 }
 

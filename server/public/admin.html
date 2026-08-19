@@ -224,6 +224,12 @@
   .sched-grid tbody tr.risk-yellow{box-shadow:inset 4px 0 0 var(--amber-700)}
   .sched-grid tbody tr.risk-green{box-shadow:inset 4px 0 0 var(--green-700)}
   .sched-grid tbody tr:hover td{background:var(--blue-50)}
+  /* Modifier for a sched-grid table whose rows aren't clickable (Material
+     Demand, tbl()'s reporting tables) - same visual language (borders,
+     header style, spacing) without the pointer cursor/hover highlight
+     that would otherwise falsely suggest a row can be clicked. */
+  .sched-grid.static tbody tr{cursor:default}
+  .sched-grid.static tbody tr:hover td{background:transparent}
   .sched-grid td.gc-batch{font-weight:700}
   .sched-grid .gc-progress{display:flex;align-items:center;gap:6px;min-width:90px}
   .sched-grid .gc-progress-track{flex:1;height:5px;border-radius:3px;background:var(--gray-200);overflow:hidden}
@@ -553,7 +559,7 @@
     <div id="weekDetailMaterial" style="display:none">
     <div class="sub" style="margin-bottom:10px">Materials still needed for this week's open batches - a batch drops off the moment it's fully scanned, so this narrows on its own as parts get scanned.</div>
     <div style="overflow-x:auto">
-    <table class="sched-grid">
+    <table class="sched-grid static">
       <thead>
         <tr>
           <th>Material</th><th>Sheet Qty Remaining</th><th>Open Batches</th><th>Jobs</th><th>On Hand</th><th>Status</th>
@@ -568,7 +574,16 @@
   <div id="tabMaterial" style="display:none">
     <h1>Material Demand Forecast</h1>
     <div class="sub">Every open (not-yet-complete) batch, grouped by Material — total Sheet Qty still needed, how many batches are contributing, and which Jobs they belong to. For purchasing decisions before running short on stock.</div>
-    <div id="materialList"></div>
+    <div style="overflow-x:auto">
+    <table class="sched-grid static">
+      <thead>
+        <tr>
+          <th>Material</th><th>Sheet Qty Remaining</th><th>Open Batches</th><th>Jobs</th><th>On Hand</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="materialList"></tbody>
+    </table>
+    </div>
   </div>
 
   <div id="tabStalled" style="display:none">
@@ -579,13 +594,31 @@
       <input id="stalledThreshold" type="number" min="1" value="3" style="flex:0 0 70px">
       <label style="font-size:13px;color:var(--gray-500);white-space:nowrap">working days idle</label>
     </div>
-    <div id="stalledList"></div>
+    <div style="overflow-x:auto">
+    <table class="sched-grid">
+      <thead>
+        <tr>
+          <th>Batch</th><th>Job</th><th>Material</th><th>Floor / Work Order</th><th>Scanned</th><th>Last Activity</th><th>Idle</th>
+        </tr>
+      </thead>
+      <tbody id="stalledList"></tbody>
+    </table>
+    </div>
   </div>
 
   <div id="tabRisk" style="display:none">
     <h1>At Risk</h1>
     <div class="sub">Batches that are behind pace or overdue — under 20% complete with 70%+ of the time to Target Finish already gone, or past Target Finish and still incomplete. Same red rows as Production Schedule, surfaced here on their own.</div>
-    <div id="riskList"></div>
+    <div style="overflow-x:auto">
+    <table class="sched-grid">
+      <thead>
+        <tr>
+          <th>Batch</th><th>Job</th><th>Material</th><th>Floor / Work Order</th><th>Scanned</th><th>Due Date</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="riskList"></tbody>
+    </table>
+    </div>
   </div>
 
   <div id="tabYield" style="display:none">
@@ -612,7 +645,16 @@
   <div id="tabJobSummary" style="display:none">
     <h1>Job Summary</h1>
     <div class="sub">Every batch rolled up to one overall completion % per Job — for reporting without digging through individual batch rows. Click a Job for its floor-by-floor breakdown.</div>
-    <div id="jobSummaryList"></div>
+    <div style="overflow-x:auto">
+    <table class="sched-grid">
+      <thead>
+        <tr>
+          <th>Job</th><th>Batches</th><th>Progress</th><th>Floors</th>
+        </tr>
+      </thead>
+      <tbody id="jobSummaryList"></tbody>
+    </table>
+    </div>
   </div>
 
   <div id="tabJobDetail" style="display:none">
