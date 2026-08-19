@@ -213,6 +213,25 @@
   .sched-grid.static tbody tr{cursor:default}
   .sched-grid.static tbody tr:hover td{background:transparent}
   .sched-grid td.gc-batch{font-weight:700}
+  /* AutoSum-style closing row (Production Schedule, Weekly Detail
+     Batches, Job Summary) - visually set apart from data rows, never
+     clickable, excluded from CSV export (see exportTableToCSV). */
+  .sched-grid tr.gc-totals-row{cursor:default;font-weight:700;border-top:2px solid var(--gray-300);background:var(--gray-100)}
+  .sched-grid tr.gc-totals-row:hover td{background:var(--gray-100)}
+  .sched-grid tr.gc-totals-row td.gc-batch{font-weight:800}
+  /* Freeze the identity column (always first - Job/Batch/Material
+     depending on the table) while scrolling a wide table sideways. A
+     sticky cell needs its own opaque background (it sits in front of
+     whatever scrolls underneath it), which would otherwise silently
+     cover the hover tint and the risk accent bar on that one cell - both
+     redeclared here on top of it so they still show through. */
+  .sched-grid th:first-child,.sched-grid td:first-child{position:sticky;left:0;background:var(--white);z-index:1}
+  .sched-grid th:first-child{z-index:2}
+  .sched-grid tbody tr:hover td:first-child{background:var(--blue-50)}
+  .sched-grid tr.risk-red td:first-child{box-shadow:inset 4px 0 0 var(--red-600)}
+  .sched-grid tr.risk-yellow td:first-child{box-shadow:inset 4px 0 0 var(--amber-700)}
+  .sched-grid tr.risk-green td:first-child{box-shadow:inset 4px 0 0 var(--green-700)}
+  .sched-grid tr.gc-totals-row td:first-child{background:var(--gray-100)}
   .sched-grid .gc-progress{display:flex;align-items:center;gap:6px;min-width:90px}
   .sched-grid .gc-progress-track{flex:1;height:5px;border-radius:3px;background:var(--gray-200);overflow:hidden}
   .sched-grid .gc-progress-fill{height:100%;border-radius:3px}
@@ -339,6 +358,10 @@
   <div id="tabSchedule">
     <h1>Production Schedule</h1>
     <div class="sub">Job name, work order, target finish, material, and more — one row per batch. Filled in automatically by the Excel label generator, or click any row to edit manually. Click a column header's arrow to filter or sort it, same as Excel's AutoFilter — filters on different columns combine (AND).</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <input placeholder="Search all columns..." oninput="setGlobalSearch(this.value)" style="flex:1;min-width:200px">
+      <button class="secondary" onclick="exportTableToCSV('scheduleTbody','production-schedule')" style="width:auto;padding:10px 18px">Export CSV</button>
+    </div>
     <div style="overflow-x:auto">
     <table class="sched-grid">
       <thead>
@@ -381,6 +404,9 @@
     </div>
 
     <div id="weekDetailBatches">
+    <div style="text-align:right;margin-bottom:10px">
+      <button class="secondary" onclick="exportTableToCSV('weeklyDetailList','weekly-batches')" style="width:auto;padding:10px 18px">Export CSV</button>
+    </div>
     <div style="overflow-x:auto">
     <table class="sched-grid">
       <thead>
@@ -396,6 +422,9 @@
 
     <div id="weekDetailMaterial" style="display:none">
     <div class="sub" style="margin-bottom:10px">Materials still needed for this week's open batches - a batch drops off the moment it's fully scanned, so this narrows on its own as parts get scanned.</div>
+    <div style="text-align:right;margin-bottom:10px">
+      <button class="secondary" onclick="exportTableToCSV('weeklyMaterialSummary','weekly-material-demand')" style="width:auto;padding:10px 18px">Export CSV</button>
+    </div>
     <div style="overflow-x:auto">
     <table class="sched-grid static">
       <thead>
@@ -412,6 +441,10 @@
   <div id="tabJobSummary" style="display:none">
     <h1>Job Summary</h1>
     <div class="sub">Every batch rolled up to one overall completion % per Job — for reporting without digging through individual batch rows. Click a Job for its floor-by-floor breakdown.</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <input placeholder="Search jobs..." oninput="setJobSummarySearch(this.value)" style="flex:1;min-width:200px">
+      <button class="secondary" onclick="exportTableToCSV('jobSummaryList','job-summary')" style="width:auto;padding:10px 18px">Export CSV</button>
+    </div>
     <div style="overflow-x:auto">
     <table class="sched-grid">
       <thead>

@@ -355,6 +355,52 @@ function loadReports(){
   loadReportDaily();
 }
 function fmtNum(n){return(n||0).toLocaleString();}
+
+// ── EXPORT TO CSV — generic, works on any sched-grid table by reading its
+// <thead> and <tbody> straight out of the live DOM, so it always matches
+// exactly what's currently on screen (whatever filters/sort/search are
+// active) without needing its own copy of each tab's data/state. Skips
+// the empty-state row and any totals row (that's a display summary, not
+// a data row - Excel users compute their own sums after importing).
+function csvCell(v){
+  v=String(v==null?'':v);
+  return/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
+}
+// A cell might hold a <select> (Task Status) or <input> (inline edit,
+// On Hand qty) instead of plain text - read the actual value in either
+// case rather than exporting empty/misleading text.
+function csvCellText(td){
+  const sel=td.querySelector('select');
+  if(sel)return sel.options[sel.selectedIndex]?sel.options[sel.selectedIndex].text:'';
+  const inp=td.querySelector('input');
+  if(inp)return inp.value;
+  return td.textContent.trim();
+}
+function exportTableToCSV(tbodyId,baseName){
+  const tbody=$(tbodyId);
+  const table=tbody&&tbody.closest('table');
+  if(!table){alert('Nothing to export.');return;}
+  const headers=[...table.querySelectorAll('thead th')].map(th=>th.textContent.trim().replace(/\s+/g,' '));
+  const rows=[...tbody.querySelectorAll('tr')].filter(tr=>!tr.querySelector('td.empty')&&!tr.classList.contains('gc-totals-row'));
+  if(!rows.length){alert('Nothing to export.');return;}
+  const lines=[headers.map(csvCell).join(',')];
+  rows.forEach(tr=>{lines.push([...tr.children].map(td=>csvCell(csvCellText(td))).join(','));});
+  const blob=new Blob([lines.join('\r\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=baseName+'-'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ── GLOBAL SEARCH (Find) — one box searching across every field already
+// shown for that row, instead of a filter per column. Just a case-
+// insensitive substring test; each tab wires its own query variable into
+// its render function's existing filter step.
+function textMatches(query,...values){
+  if(!query)return true;
+  return values.some(v=>String(v||'').toLowerCase().includes(query));
+}
 // Same sched-grid look as Production Schedule/Weekly Detail/Completed
 // Tasks, not the older rep-tbl style - "static" since none of tbl()'s
 // callers make their rows clickable, so they get the plain look without
@@ -620,7 +666,7 @@ function renderWeekDetail(key){
   renderWeekMaterialSummary(items);
   if(!items.length){$('weeklyDetailList').innerHTML='<tr><td colspan="11" class="empty">No batches.</td></tr>';return;}
   const sorted=[...items].sort((a,b)=>(a.target_finish||'9999-99-99').localeCompare(b.target_finish||'9999-99-99'));
-  $('weeklyDetailList').innerHTML=sorted.map(scheduleRowHtml).join('');
+  $('weeklyDetailList').innerHTML=sorted.map(scheduleRowHtml).join('')+scheduleTotalsRowHtml(sorted);
 }
 $('bBackWeeklyDetail').onclick=()=>{currentWeekKey=null;showTab('weekly');};
 
@@ -667,9 +713,10 @@ function materialDemandStats(m,items){
 // Remaining, Open Batches, Jobs, On Hand, Status), just scoped to
 // different sets of batches, so there's one place that builds the actual
 // <tr> markup instead of two copies that could drift apart.
-function materialDemandRowsHtml(items){
+function materialDemandRowsHtml(items,searchQuery){
   const groups=groupByMaterial(items);
-  const materials=Object.keys(groups).sort();
+  let materials=Object.keys(groups).sort();
+  if(searchQuery)materials=materials.filter(m=>textMatches(searchQuery,m,...groups[m].map(b=>b.job_name)));
   if(!materials.length)return null;
   return materials.map(m=>{
     const mItems=groups[m];
@@ -717,9 +764,11 @@ async function saveMaterialStock(material,value){
   try{await api('/admin/api/material-stock/'+encodeURIComponent(material),{method:'POST',body:JSON.stringify({on_hand_qty:qty})});}
   catch(e){/* stays in the cache either way - worst case a stale value until the next successful save */}
 }
+let materialSearchQuery='';
+function setMaterialSearch(v){materialSearchQuery=v.trim().toLowerCase();renderMaterialDemand();}
 function renderMaterialDemand(){
   if(!$('materialList'))return; // this tab doesn't exist on every page (gm.html) - loadMaterialStock() calls this unconditionally at boot
-  $('materialList').innerHTML=materialDemandRowsHtml()||'<tr><td colspan="6" class="empty">No open batches — nothing currently demanding material.</td></tr>';
+  $('materialList').innerHTML=materialDemandRowsHtml(undefined,materialSearchQuery)||`<tr><td colspan="6" class="empty">${materialSearchQuery?'No matches.':'No open batches — nothing currently demanding material.'}</td></tr>`;
 }
 
 // ── THROUGHPUT & YIELD ANALYTICS — completed-batch-only metrics (nothing
@@ -809,13 +858,18 @@ function sumProgress(items){
   return{scanned,total,pct:total?Math.round(scanned/total*100):0};
 }
 function progressPillClass(pct){return pct>=100?'done':pct>0?'working':'notstarted';}
+let jobSummarySearchQuery='';
+function setJobSummarySearch(v){jobSummarySearchQuery=v.trim().toLowerCase();renderJobSummary();}
 function renderJobSummary(){
   const groups=groupByJob();
-  const jobs=Object.keys(groups).sort();
-  if(!jobs.length){$('jobSummaryList').innerHTML='<tr><td colspan="4" class="empty">No batches in Production Schedule yet.</td></tr>';return;}
+  let jobs=Object.keys(groups).sort();
+  if(jobSummarySearchQuery)jobs=jobs.filter(j=>textMatches(jobSummarySearchQuery,j));
+  if(!jobs.length){$('jobSummaryList').innerHTML=`<tr><td colspan="4" class="empty">${Object.keys(groups).length?'No matches.':'No batches in Production Schedule yet.'}</td></tr>`;return;}
+  let totalBatches=0,totalScanned=0,totalOfTotal=0;
   $('jobSummaryList').innerHTML=jobs.map(j=>{
     const items=groups[j];
     const{scanned,total,pct}=sumProgress(items);
+    totalBatches+=items.length;totalScanned+=scanned;totalOfTotal+=total;
     const floors=[...new Set(items.map(b=>b.floor_or_work_order).filter(Boolean))];
     const state=pct>=100?'complete':pct>0?'progress':'none';
     return`<tr onclick="openJobDetail('${esc(j)}')">
@@ -824,7 +878,12 @@ function renderJobSummary(){
       <td><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${scanned}/${total}</div></div></td>
       <td>${floors.length?esc(floors.join(', ')):''}</td>
     </tr>`;
-  }).join('');
+  }).join('')+`<tr class="gc-totals-row">
+    <td class="gc-batch">TOTAL — ${jobs.length} job${jobs.length===1?'':'s'}</td>
+    <td class="gc-num">${totalBatches}</td>
+    <td class="gc-num">${totalScanned}/${totalOfTotal}</td>
+    <td></td>
+  </tr>`;
   if(currentJobKey)renderJobDetail(currentJobKey); // keep an already-open job's detail live too
 }
 function openJobDetail(job){
@@ -1367,18 +1426,21 @@ function workingDaysSince(dateStr){
   }
   return days;
 }
+let stalledSearchQuery='';
+function setStalledSearch(v){stalledSearchQuery=v.trim().toLowerCase();renderStalledBatches();}
 function renderStalledBatches(){
   if(!$('stalledThreshold'))return; // not every page has this tab (gm.html)
   const saved=localStorage.getItem(LS_STALLED_THRESHOLD);
   if(saved)$('stalledThreshold').value=saved;
   const threshold=Math.max(1,parseInt($('stalledThreshold').value,10)||3);
   const open=scheduleBatches.filter(b=>rowStatus(b)!=='complete');
-  const stalled=open.map(b=>{
+  let stalled=open.map(b=>{
     const refDate=b.scanned>0?b.last_scanned_at:b.added_at;
     const idleDays=workingDaysSince(refDate);
     return{b,idleDays,refDate,started:b.scanned>0};
   }).filter(r=>r.idleDays!==null&&r.idleDays>=threshold)
     .sort((a,b)=>b.idleDays-a.idleDays);
+  if(stalledSearchQuery)stalled=stalled.filter(({b})=>textMatches(stalledSearchQuery,b.batch,b.job_name,b.material,b.floor_or_work_order));
   if(!stalled.length){$('stalledList').innerHTML='<tr><td colspan="7" class="empty">No batches idle '+threshold+'+ working days — nothing stalled right now.</td></tr>';return;}
   $('stalledList').innerHTML=stalled.map(({b,idleDays,refDate,started})=>{
     return`<tr onclick="viewBatchLabels('${esc(b.batch)}')">
@@ -1401,12 +1463,15 @@ if($('stalledThreshold'))$('stalledThreshold').addEventListener('input',e=>{
 // ── AT RISK — the auto-escalation panel the spec asks for: same computeRisk()
 // used to color Production Schedule rows, filtered to just 'red' and sorted
 // worst-first (most overdue, or least complete with the least time left).
+let riskSearchQuery='';
+function setRiskSearch(v){riskSearchQuery=v.trim().toLowerCase();renderAtRisk();}
 function renderAtRisk(){
   if(!$('riskList'))return; // not every page has this tab (gm.html)
-  const atRisk=scheduleBatches
+  let atRisk=scheduleBatches
     .map(b=>({b,risk:computeRisk(b)}))
     .filter(r=>r.risk&&r.risk.level==='red')
     .sort((a,b)=>a.risk.daysRemaining-b.risk.daysRemaining);
+  if(riskSearchQuery)atRisk=atRisk.filter(({b})=>textMatches(riskSearchQuery,b.batch,b.job_name,b.material,b.floor_or_work_order));
   if(!atRisk.length){$('riskList').innerHTML='<tr><td colspan="7" class="empty">Nothing at risk right now.</td></tr>';return;}
   $('riskList').innerHTML=atRisk.map(({b,risk})=>{
     const dueText=risk.daysRemaining<0?Math.abs(risk.daysRemaining)+' day'+(Math.abs(risk.daysRemaining)===1?'':'s')+' overdue':risk.daysRemaining+' day'+(risk.daysRemaining===1?'':'s')+' left';
@@ -1668,11 +1733,38 @@ async function saveTaskStatus(batch,value){
     await loadScheduleList();
   }catch(e){alert('Could not save — check the admin key and try again.');}
 }
+// One search box across every GRID_COLUMNS field at once (Find), ANDed
+// with whatever per-column filters are already active - same colValue()
+// each column's own filter already uses, so "search" and "filter" always
+// agree on what a column's value actually is.
+let globalSearchQuery='';
+function setGlobalSearch(v){globalSearchQuery=v.trim().toLowerCase();renderScheduleGrid();}
+// Batch count, total scanned/total, and total Sheet Qty across whatever
+// rows are currently shown (post filter/search/sort) - an AutoSum-style
+// closing row. Shared shape with Weekly Detail's Batches table below
+// (same 11 columns). Marked gc-totals-row so it's excluded from CSV
+// export (a display summary, not a data row) and styled non-interactive.
+function scheduleTotalsRowHtml(rows){
+  let scanned=0,total=0,sheetQty=0,unparsed=0;
+  rows.forEach(b=>{
+    scanned+=b.scanned||0;total+=b.total||0;
+    const q=parseQty(b.sheet_qty);
+    q===null?unparsed++:sheetQty+=q;
+  });
+  return`<tr class="gc-totals-row">
+    <td class="gc-batch">TOTAL — ${rows.length} batch${rows.length===1?'':'es'}</td>
+    <td></td><td></td><td></td><td></td><td></td><td></td>
+    <td class="gc-num">${scanned}/${total}</td>
+    <td class="gc-num">${sheetQty}${unparsed?' *':''}</td>
+    <td></td><td></td>
+  </tr>`;
+}
 function renderScheduleGrid(){
   let rows=scheduleBatches.filter(b=>{
     for(const key in columnFilters){
       if(!columnFilters[key].has(colValue(b,key)))return false;
     }
+    if(globalSearchQuery&&!textMatches(globalSearchQuery,...GRID_COLUMNS.map(([key])=>colValue(b,key))))return false;
     return true;
   });
   if(gridSort){
@@ -1687,7 +1779,7 @@ function renderScheduleGrid(){
     if(btn)btn.classList.toggle('active',!!columnFilters[key]);
   });
   if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="11" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;return;}
-  $('scheduleTbody').innerHTML=rows.map(scheduleRowHtml).join('');
+  $('scheduleTbody').innerHTML=rows.map(scheduleRowHtml).join('')+scheduleTotalsRowHtml(rows);
 }
 
 // Best-effort free text -> yyyy-mm-dd, for feeding an existing stored
