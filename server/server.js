@@ -530,6 +530,43 @@ app.delete('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
   res.json({ ok: true, deleted_parts: uids.length });
 });
 
+// Renames a batch everywhere it's referenced - parts_panel (what actually
+// groups labels into this batch), production_schedule (its metadata row -
+// batch is that table's primary key), scans (DIRECTED-mode rows carry the
+// batch they were scanned against), and packing_slips (which batch a slip
+// was issued for). All four in one transaction so a batch can never end
+// up split across two names if something fails partway through. Rejects
+// if new_batch already names a different real batch, rather than silently
+// merging two unrelated batches' parts/history together.
+app.post('/admin/api/schedule/:batch/rename', requireAdmin, (req, res) => {
+  const batch = String(req.params.batch || '').trim();
+  const newBatch = String((req.body && req.body.new_batch) || '').trim();
+  if (!batch) return res.status(400).json({ ok: false, error: 'batch required' });
+  if (!newBatch) return res.status(400).json({ ok: false, error: 'new batch name required' });
+  if (newBatch.length > 100) return res.status(400).json({ ok: false, error: 'new batch name is too long' });
+  if (newBatch === batch) return res.status(400).json({ ok: false, error: 'new name is the same as the current name' });
+
+  const exists = db.prepare('SELECT 1 FROM parts_panel WHERE batch = ? UNION SELECT 1 FROM production_schedule WHERE batch = ?').get(batch, batch);
+  if (!exists) return res.status(404).json({ ok: false, error: 'batch not found' });
+  const collision = db.prepare('SELECT 1 FROM parts_panel WHERE batch = ? UNION SELECT 1 FROM production_schedule WHERE batch = ?').get(newBatch, newBatch);
+  if (collision) return res.status(409).json({ ok: false, error: `"${newBatch}" is already in use by another batch` });
+
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE parts_panel SET batch = ? WHERE batch = ?').run(newBatch, batch);
+    db.prepare('UPDATE production_schedule SET batch = ? WHERE batch = ?').run(newBatch, batch);
+    db.prepare('UPDATE scans SET batch = ? WHERE batch = ?').run(newBatch, batch);
+    db.prepare('UPDATE packing_slips SET batch = ? WHERE batch = ?').run(newBatch, batch);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+  logAudit(actorFrom(req), 'BATCH_RENAME', newBatch, `renamed from "${batch}"`);
+
+  res.json({ ok: true, old_batch: batch, new_batch: newBatch, schedule: formatSchedule(getProductionSchedule.get(newBatch)) });
+});
+
 // ── SCAN-TIME MATCH — the phone calls this for every scanned ID, live.
 // parts_index is checked first (universal, fast); only if a match exists
 // there do we join into that department's detail table. Adding a new

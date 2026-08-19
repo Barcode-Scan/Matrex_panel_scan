@@ -1704,7 +1704,7 @@ function scheduleRowHtml(b){
     <td>${field('material')}</td>
     <td>${field('finish')}</td>
     <td>${field('part_name')}</td>
-    <td class="gc-batch">${esc(b.batch)}</td>
+    <td class="gc-batch">${editing&&typeof BATCH_NAME_EDITABLE!=='undefined'&&BATCH_NAME_EDITABLE?`<input class="gc-batch-input" type="text" value="${esc(b.batch)}" onclick="event.stopPropagation()">`:esc(b.batch)}</td>
     <td><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${b.scanned}/${b.total}</div></div></td>
     <td class="gc-num">${field('sheet_qty')}</td>
     <td class="gc-comment">${field('comment')}</td>
@@ -1843,14 +1843,35 @@ function autoSaveRowsClickedAway(target){
 // now that there's no UI for it; the backend only overwrites fields that
 // are actually present, so any extra_fields set before this change stays
 // intact even though nothing here can edit it anymore.
+// A rename runs first, on the OLD batch id, since it changes the primary
+// key everything else (parts_panel, scans, packing_slips) is keyed on -
+// the rest of this row's field edits below then apply against whatever
+// batch id is now current. Cancelling the confirmation (or a rejected
+// rename - e.g. the new name collides with a real batch) aborts the
+// whole save, including any other field edits made in the same pass,
+// rather than silently applying half of what was changed.
 async function saveRowEdit(batch){
   const row=document.querySelector(`tr[data-batch="${CSS.escape(batch)}"]`);
   if(!row)return;
+  let effectiveBatch=batch;
+  const batchInput=row.querySelector('.gc-batch-input');
+  if(batchInput){
+    const newName=batchInput.value.trim();
+    if(newName&&newName!==batch){
+      if(!confirm(`Rename batch "${batch}" to "${newName}"?\n\nThis updates every part, scan, and packing slip already tied to "${batch}".`))return;
+      try{
+        await api('/admin/api/schedule/'+encodeURIComponent(batch)+'/rename',{method:'POST',body:JSON.stringify({new_batch:newName})});
+        effectiveBatch=newName;
+        editingBatches.delete(batch);
+        editingBatches.add(newName);
+      }catch(e){alert('Could not rename batch: '+e.message);return;}
+    }
+  }
   const body={};
   row.querySelectorAll('.gc-input').forEach(inp=>{body[inp.dataset.field]=inp.value.trim();});
   try{
-    await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'POST',body:JSON.stringify(body)});
-    editingBatches.delete(batch);
+    await api('/admin/api/schedule/'+encodeURIComponent(effectiveBatch),{method:'POST',body:JSON.stringify(body)});
+    editingBatches.delete(effectiveBatch);
     await loadScheduleList();
   }catch(e){alert('Could not save — check the admin key and try again.');}
 }
