@@ -159,6 +159,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 @keyframes scanMove{0%{top:15%}50%{top:83%}100%{top:15%}}
 #camStatus{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(0,0,0,.85);color:var(--white);font-size:15px;text-align:center;padding:20px;line-height:1.6}
 #camStatus.gone{display:none}
+#camStatus.idle-tap{cursor:pointer}
 .spin{animation:spin 1s linear infinite;display:block;width:28px;height:28px}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
@@ -946,39 +947,53 @@ if(typeof Capacitor!=='undefined'&&Capacitor.isNativePlatform&&Capacitor.isNativ
 // ── WAKE LOCK ─────────────────────────────────────────────
 let wakeLock=null;
 async function reqWake(){if('wakeLock' in navigator){try{wakeLock=await navigator.wakeLock.request('screen');}catch(e){}}}
-document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible'&&!wakeLock)await reqWake();});
+document.addEventListener('visibilitychange',async()=>{
+  if(document.visibilityState!=='visible')return;
+  if(scannerIdlePaused&&onScanScreen())resumeFromIdle();
+  else if(!wakeLock)await reqWake();
+});
 
-// A held wake lock keeps the screen on for as long as the scan screen is
-// open, no matter how long it's actually been since the last real scan —
-// on a slow shift that's the phone sitting there unlocked/awake for
-// hours. Releasing OUR lock after 30s with no accepted scan lets the
-// phone's own lock-screen timeout take over again; the next accepted
-// scan re-requests the lock, so it comes right back once scanning
-// resumes. This only controls this app's own wakeLock hold — it can't
-// force a lock the OS itself won't allow (Guided Access with its own
-// Auto-Lock set to Never is a device setting no web page can reach), it
-// just makes sure this app stops being an extra reason the screen can't
-// sleep once nobody's actually scanning with it.
-const SCAN_IDLE_WAKE_RELEASE_MS=30000;
+// Releasing our own Wake Lock alone isn't enough on iOS: WebKit keeps the
+// screen awake on its own, independent of the Wake Lock API, for as long
+// as a <video> element has an actively playing camera stream attached —
+// which describes this app's camera preview continuously, whether or not
+// anything has actually been decoded recently. The only way to remove
+// that obstacle from a web page is to actually stop the stream, so idle
+// timeout here fully stops the scanner (same stopScanner() used when
+// navigating away, which already releases the wake lock too) rather than
+// just dropping the wake lock and leaving the camera running. This still
+// can't force an immediate lock - it only removes every reason THIS APP
+// gives iOS to stay awake, so the phone's own Auto-Lock timeout (30s, if
+// that's how it's configured) can actually fire.
+const SCAN_IDLE_PAUSE_MS=30000;
 let lastScanAt=Date.now();
 let idleWakeTimer=null;
-function noteScanActivity(){
-  lastScanAt=Date.now();
-  if(!wakeLock)reqWake();
-}
+let scannerIdlePaused=false;
+function onScanScreen(){return $('scrScan').classList.contains('on')||$('scrDirected').classList.contains('on');}
+function noteScanActivity(){lastScanAt=Date.now();}
 function startIdleWakeWatch(){
   lastScanAt=Date.now();
   if(idleWakeTimer)clearInterval(idleWakeTimer);
   idleWakeTimer=setInterval(()=>{
-    if(wakeLock&&Date.now()-lastScanAt>=SCAN_IDLE_WAKE_RELEASE_MS){
-      try{wakeLock.release();}catch(e){}
-      wakeLock=null;
-    }
+    if(!scannerIdlePaused&&Date.now()-lastScanAt>=SCAN_IDLE_PAUSE_MS)pauseForIdle();
   },5000);
 }
 function stopIdleWakeWatch(){
   if(idleWakeTimer){clearInterval(idleWakeTimer);idleWakeTimer=null;}
 }
+function pauseForIdle(){
+  scannerIdlePaused=true;
+  stopScanner();
+  setCamMsg('Idle for 30 seconds.\nCamera stopped so the phone can lock.\nTap here to resume scanning.');
+  $('camStatus').classList.add('idle-tap');
+}
+function resumeFromIdle(){
+  if(!scannerIdlePaused)return;
+  scannerIdlePaused=false;
+  $('camStatus').classList.remove('idle-tap');
+  startScanner();
+}
+$('camStatus').addEventListener('click',()=>{if(scannerIdlePaused)resumeFromIdle();});
 
 // ── HTTPS CHECK ───────────────────────────────────────────
 function isSecure(){return location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'||location.hostname==='';}
