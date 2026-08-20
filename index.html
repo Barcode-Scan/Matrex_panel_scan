@@ -129,6 +129,10 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .cbox .l{font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
 .c-scan .n{color:var(--blue-600)}
 .c-flag .n{color:var(--red-600)}
+.c-scan,.c-flag{cursor:pointer}
+.c-scan:active,.c-flag:active{transform:scale(.96)}
+.list-filter-chip{display:none;align-items:center;gap:6px;background:var(--red-50);color:var(--red-600);font-size:12px;font-weight:700;padding:6px 10px;border-radius:var(--pill);margin-bottom:10px;width:fit-content}
+.list-filter-chip button{background:none;border:none;color:inherit;font-size:16px;line-height:1;cursor:pointer;padding:0 0 0 2px}
 
 /* CAMERA */
 #cambox{position:relative;background:var(--surface-dark);border-radius:var(--r-lg);overflow:hidden;margin-bottom:10px;height:240px;transition:height .12s ease-out;box-shadow:var(--shadow-md)}
@@ -460,8 +464,8 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
     </div>
 
     <div class="counters">
-      <div class="cbox c-scan"><div class="n" id="nTotal">0</div><div class="l">Scanned</div></div>
-      <div class="cbox c-flag"><div class="n" id="nFlag">0</div><div class="l">Flagged</div></div>
+      <div class="cbox c-scan" id="cScanned" onclick="openListScreen('all')"><div class="n" id="nTotal">0</div><div class="l">Scanned</div></div>
+      <div class="cbox c-flag" id="cFlagged" onclick="openListScreen('flagged')"><div class="n" id="nFlag">0</div><div class="l">Flagged</div></div>
       <div class="cbox"><div class="n" id="nSkid" style="font-size:22px;padding-top:6px">—</div><div class="l">Skid</div></div>
     </div>
 
@@ -562,6 +566,9 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       <button class="s-btn" id="bListDownload" type="button" style="flex-shrink:0">CSV</button>
     </div>
     <input class="search-inp" id="searchInp" placeholder="Search part name or project…" autocapitalize="characters">
+  </div>
+  <div style="padding:0 16px">
+    <div class="list-filter-chip" id="listFilterChip">Flagged only<button onclick="clearListFilter()" aria-label="Clear filter" type="button">&times;</button></div>
   </div>
   <div id="fullList"></div>
 </div>
@@ -1422,12 +1429,18 @@ function renderRecent(){
 }
 function renderFull(q){
   q=(q||'').trim().toUpperCase();
+  // list stays the full unfiltered date range - group-building below looks
+  // up each row's index via list.indexOf(s), and those indices have to
+  // line up with the global scans[] array (scansForDate(today) IS scans,
+  // not a copy), so only rows (the rendered subset) gets filtered.
   const list=scansForDate(viewDate);
   const editable=viewDate===today;
-  $('listSub').textContent=fmtDateNice(viewDate)+' · '+list.length+' part'+(list.length===1?'':'s');
+  $('listFilterChip').style.display=listFilterMode==='flagged'?'flex':'none';
+  let rows=listFilterMode==='flagged'?list.filter(s=>s.flag):list;
+  if(q)rows=rows.filter(s=>s.partName.toUpperCase().includes(q)||(s.project||'').toUpperCase().includes(q));
+  $('listSub').textContent=fmtDateNice(viewDate)+' · '+rows.length+' part'+(rows.length===1?'':'s')+(listFilterMode==='flagged'?' flagged':'');
   const el=$('fullList');
-  const rows=q?list.filter(s=>s.partName.toUpperCase().includes(q)||(s.project||'').toUpperCase().includes(q)):list;
-  if(!rows.length){el.innerHTML='<div class="empty-box"><div class="et">'+(q?'No matches':'No scans yet')+'</div></div>';return;}
+  if(!rows.length){el.innerHTML='<div class="empty-box"><div class="et">'+(q?'No matches':listFilterMode==='flagged'?'No flagged parts':'No scans yet')+'</div></div>';return;}
   const groups={};
   rows.forEach((s)=>{const k=s.skid||'__';(groups[k]=groups[k]||[]).push({s,i:list.indexOf(s)});});
   let html='';
@@ -1685,12 +1698,19 @@ $('manCancel').onclick=()=>modal('mManual',false);
 $('bDone').onclick=()=>{if(!scans.length){showFlash('bad','Nothing scanned yet.');return;}downloadCSV();showFlash('ok','CSV saved to Downloads');};
 
 // ── NAV ────────────────────────────────────────────────────
-function openListScreen(){
+// 'all' | 'flagged' - which counter card (if any) opened this screen.
+// Kept as page-level state (not a renderFull param) since the date
+// picker and search box both re-render through renderFull() too and
+// need the filter to stay applied across those, not just on open.
+let listFilterMode='all';
+function openListScreen(mode){
   stopScanner(); // camera has no business running while the user isn't on the scan screen
+  listFilterMode=mode||'all';
   viewDate=today;populateDatePicker();$('searchInp').value='';renderFull();show('scrList');
 }
-$('bList').onclick=openListScreen;
-$('bExpandList').onclick=openListScreen;
+function clearListFilter(){listFilterMode='all';renderFull($('searchInp').value);}
+$('bList').onclick=()=>openListScreen('all');
+$('bExpandList').onclick=()=>openListScreen('all');
 $('bBackList').onclick=()=>{show('scrScan');startScanner();};
 
 // ── BATCH STATUS ─────────────────────────────────────────────
