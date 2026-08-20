@@ -111,6 +111,10 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .tb-menu-wrap{position:relative}
 .tb-dropdown{display:none;flex-direction:column;gap:4px;position:absolute;top:calc(100% + 8px);right:0;z-index:25;background:var(--white);border-radius:var(--r);box-shadow:var(--shadow-md);padding:6px}
 .tb-dropdown.open{display:flex}
+/* Red dot on Hard Refresh when checkAppUpdate() finds this page's own
+   URL now serves a newer Last-Modified than what loaded it. */
+#bHardRefresh{position:relative}
+#bHardRefresh.has-update::after{content:'';position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#FF3B30;border:2px solid var(--white)}
 
 /* ENGINE / STATUS PILL */
 .eng-pill{display:inline-flex;align-items:center;gap:6px;background:var(--white);border:none;border-radius:var(--pill);padding:6px 13px;font-size:13px;font-weight:600;color:var(--gray-500);margin-bottom:12px;box-shadow:var(--shadow-sm)}
@@ -2342,6 +2346,27 @@ function hardRefresh(){
   }
 }
 $('bHardRefresh').onclick=hardRefresh;
+
+// Red dot on Hard Refresh when a newer deploy of this same page exists.
+// No server/build step here (static GitHub Pages file) to hand out a
+// version number, so this re-fetches the page's own URL and compares
+// Last-Modified against whatever it was the first time this ran after
+// load - same "baseline never moves again" logic as the admin
+// dashboards' checkAppVersion(), just sourced from an HTTP header
+// instead of a JSON endpoint since there's no backend here to ask.
+let pageBuildBaseline=null;
+async function checkAppUpdate(){
+  try{
+    const r=await fetch(location.pathname+'?_v='+Date.now(),{cache:'no-store',method:'HEAD'});
+    const lm=r.headers.get('last-modified');
+    if(!lm)return;
+    if(pageBuildBaseline===null){pageBuildBaseline=lm;return;}
+    if(lm!==pageBuildBaseline)$('bHardRefresh').classList.add('has-update');
+  }catch(e){}
+}
+checkAppUpdate();
+setInterval(checkAppUpdate,120000);
+
 $('bTbMenu').onclick=e=>{e.stopPropagation();$('tbDropdown').classList.toggle('open');};
 $('tbDropdown').addEventListener('click',e=>{
   if(e.target.closest('.tb-btn'))$('tbDropdown').classList.remove('open');

@@ -14,7 +14,7 @@ if($('actorName')){
   $('actorName').addEventListener('change',e=>localStorage.setItem(LS_ACTOR_NAME,e.target.value.trim()));
 }
 
-function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();loadMaterialStock();loadPackingSlips();loadDeletedBatchesCount();}
+function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();loadMaterialStock();loadPackingSlips();loadDeletedBatchesCount();checkAppVersion();}
 
 // ── TABS ─────────────────────────────────────────────────────
 // Production Schedule is the landing view now, open to whoever has the
@@ -1501,6 +1501,27 @@ document.addEventListener('keydown',e=>{
     hardRefresh();
   }
 });
+
+// Red dot on Hard Refresh when a newer deploy exists. appVersionBaseline
+// is set on the FIRST check after this page loaded and never updated
+// again from here - it stays "the version this page is running", so a
+// later mismatch means something changed since load, not since the last
+// poll. hardRefresh() reloads the whole page fresh, which re-runs this
+// script and captures a new (now-current) baseline, clearing the dot.
+let appVersionBaseline=null;
+async function checkAppVersion(){
+  if(!KEY)return;
+  try{
+    const data=await api('/admin/api/app-version');
+    if(appVersionBaseline===null){appVersionBaseline=data.version;return;}
+    if(data.version>appVersionBaseline){
+      const btn=$('bHardRefresh');
+      if(btn)btn.classList.add('has-update');
+    }
+  }catch(e){}
+}
+checkAppVersion();
+setInterval(checkAppVersion,120000);
 
 // ── STALLED BATCHES (Bottleneck Detection) — another read-only lens on
 // scheduleBatches. "Idle since" is last_scanned_at (added to the batches

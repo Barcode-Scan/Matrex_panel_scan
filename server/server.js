@@ -174,6 +174,23 @@ app.get('/admin/api/tunnel-url', requireAdmin, (req, res) => {
   }
 });
 
+// Lets every admin dashboard detect "a newer version of this app was
+// deployed since I loaded" without any manual version-bumping - the
+// live server serves public/ straight off disk (no build/pull step), so
+// the newest mtime across the shared JS + all four dashboard HTML files
+// IS the deploy time, updated the moment any of them is edited.
+const APP_VERSION_FILES = ['admin-shared.js', 'admin.html', 'gm.html', 'damon.html', 'swar.html'];
+app.get('/admin/api/app-version', requireAdmin, (req, res) => {
+  let latest = 0;
+  for (const f of APP_VERSION_FILES) {
+    try {
+      const mtime = fs.statSync(path.join(__dirname, 'public', f)).mtimeMs;
+      if (mtime > latest) latest = mtime;
+    } catch (e) { /* file missing shouldn't block the others */ }
+  }
+  res.json({ ok: true, version: latest });
+});
+
 app.post('/devices/register', (req, res) => {
   const { device_id, device_name } = req.body || {};
   if (!device_id) return res.status(400).json({ ok: false, error: 'device_id required' });
