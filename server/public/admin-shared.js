@@ -14,7 +14,7 @@ if($('actorName')){
   $('actorName').addEventListener('change',e=>localStorage.setItem(LS_ACTOR_NAME,e.target.value.trim()));
 }
 
-function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();loadMaterialStock();loadPackingSlips();}
+function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();loadMaterialStock();loadPackingSlips();loadDeletedBatchesCount();}
 
 // ── TABS ─────────────────────────────────────────────────────
 // Production Schedule is the landing view now, open to whoever has the
@@ -1700,6 +1700,7 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#colFilterPopover')&&!e.target.closest('.colf-btn'))closeColFilter();
   if(!e.target.closest('#rowCtxMenu'))closeRowContextMenu();
   if(!e.target.closest('#otherDashMenu')&&!e.target.closest('#otherDashBtn'))closeOtherDashboards();
+  if(!e.target.closest('#deletedBatchesPopover')&&!e.target.closest('#bDeletedBatches'))closeDeletedBatchesPanel();
 });
 // Not present on gm.html/damon.html/swar.html (only the main dashboard
 // links out to the others), so guarded like every other admin.html-only
@@ -2004,9 +2005,9 @@ function handleRowClick(batch){
 async function deleteBatchFromGrid(batch){
   const b=scheduleBatches.find(x=>x.batch===batch);
   const total=b?b.total:0,scannedCount=b?b.scanned:0;
-  let warning=`This permanently deletes batch "${batch}" and all ${total} registered part(s) in it. This cannot be undone.`;
+  let warning=`This removes batch "${batch}" and all ${total} registered part(s) in it from Production Schedule. It's recoverable afterward from Deleted Batches (above Export CSV) until discarded from there.`;
   if(scannedCount>0){
-    warning+=`\n\nWARNING: ${scannedCount} of ${total} part(s) in this batch have ALREADY BEEN SCANNED. Deleting will permanently lose that scan history.`;
+    warning+=`\n\n${scannedCount} of ${total} part(s) in this batch have already been scanned - that scan history goes with it into Deleted Batches too, and comes back if restored.`;
   }
   warning+=`\n\nType the batch name exactly to confirm:\n${batch}`;
   const typed=prompt(warning);
@@ -2015,7 +2016,71 @@ async function deleteBatchFromGrid(batch){
   try{
     await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'DELETE'});
     await loadScheduleList();
+    loadDeletedBatchesCount();
   }catch(e){alert('Could not delete — check the admin key and try again.');}
+}
+
+// ── DELETED BATCHES (recycle bin) — a small popover under its own button
+// above Export CSV, listing every batch deleted from this grid so it can
+// be brought back. Count badge is fetched once on connect (and after any
+// delete/restore/discard) so it's visible without opening the panel; the
+// panel's own list is (re)fetched fresh each time it's opened.
+let deletedBatchesCache=[];
+async function loadDeletedBatchesCount(){
+  if(!KEY)return;
+  try{
+    const data=await api('/admin/api/deleted-batches');
+    deletedBatchesCache=data.deleted||[];
+    const el=$('deletedBatchesCount');
+    if(el)el.textContent=deletedBatchesCache.length?String(deletedBatchesCache.length):'';
+  }catch(e){/* leave last-known cache/badge showing rather than blank it on a transient error */}
+}
+function renderDeletedBatchesPanel(){
+  const el=$('deletedBatchesList');
+  if(!el)return;
+  if(!deletedBatchesCache.length){el.innerHTML='<div class="empty" style="padding:16px 4px">Nothing deleted recently.</div>';return;}
+  el.innerHTML=deletedBatchesCache.map(d=>`
+    <div class="deleted-row">
+      <div class="deleted-row-info">
+        <div class="deleted-row-name">${esc(d.batch)}</div>
+        <div class="deleted-row-meta">${d.part_count} part${d.part_count===1?'':'s'} (${d.scanned_count} scanned) · ${esc(fmt(d.deleted_at))}${d.deleted_by?' · by '+esc(d.deleted_by):''}</div>
+      </div>
+      <div class="deleted-row-actions">
+        <button onclick="restoreDeletedBatch(${d.id})">Restore</button>
+        <button class="danger" onclick="purgeDeletedBatch(${d.id})">Discard</button>
+      </div>
+    </div>`).join('');
+}
+async function toggleDeletedBatchesPanel(evt){
+  evt.stopPropagation();
+  const pop=$('deletedBatchesPopover');
+  if(!pop)return;
+  if(pop.style.display==='block'){pop.style.display='none';return;}
+  pop.style.display='block';
+  await loadDeletedBatchesCount();
+  renderDeletedBatchesPanel();
+}
+function closeDeletedBatchesPanel(){
+  const pop=$('deletedBatchesPopover');
+  if(pop)pop.style.display='none';
+}
+async function restoreDeletedBatch(id){
+  try{
+    const data=await api('/admin/api/deleted-batches/'+id+'/restore',{method:'POST'});
+    await loadDeletedBatchesCount();
+    renderDeletedBatchesPanel();
+    await loadScheduleList();
+    showToast('✓ Restored '+data.batch);
+  }catch(e){alert('Could not restore: '+e.message);}
+}
+async function purgeDeletedBatch(id){
+  const d=deletedBatchesCache.find(x=>x.id===id);
+  if(!confirm('Permanently discard the deleted record for "'+(d?d.batch:id)+'"?\n\nThis cannot be undone - it will no longer be restorable afterward.'))return;
+  try{
+    await api('/admin/api/deleted-batches/'+id,{method:'DELETE'});
+    await loadDeletedBatchesCount();
+    renderDeletedBatchesPanel();
+  }catch(e){alert('Could not discard: '+e.message);}
 }
 
 // Read-only: clicking anywhere on a row that isn't an icon/input shows

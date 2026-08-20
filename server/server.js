@@ -495,24 +495,61 @@ app.post('/admin/api/schedule/:batch/task-status', requireAdmin, (req, res) => {
   res.json({ ok: true, batch, schedule: formatSchedule(getProductionSchedule.get(batch)) });
 });
 
+// ── DELETED BATCHES (recycle bin) — see schema.sql for why this is a
+// snapshot-then-hard-delete rather than a soft-delete flag on four
+// different tables. insertDeletedBatch here; list/restore/purge routes
+// sit right after the DELETE route below, since restoring is really just
+// "undo" for what that route just did.
+const insertDeletedBatch = db.prepare(`
+  INSERT INTO deleted_batches (batch, deleted_at, deleted_by, part_count, scanned_count, snapshot)
+  VALUES (@batch, @deleted_at, @deleted_by, @part_count, @scanned_count, @snapshot)
+`);
+const listDeletedBatches = db.prepare('SELECT id, batch, deleted_at, deleted_by, part_count, scanned_count FROM deleted_batches ORDER BY deleted_at DESC');
+const getDeletedBatch = db.prepare('SELECT * FROM deleted_batches WHERE id = ?');
+
 // Permanently deletes a batch: every registered part in it (parts_index +
 // parts_panel), their notes and scan-log entries, and the production
 // schedule row itself. Deliberately allowed even if parts were already
 // scanned (the admin UI warns and requires typing the batch name first) —
 // this is for cleaning up mistaken/test batches, not a safety-gated
 // operation like void. Now logged to audit_log below (previously wasn't).
+// A full snapshot of everything about to be removed is captured into
+// deleted_batches first, in the same transaction, so this is undoable
+// via POST /admin/api/deleted-batches/:id/restore below.
 app.delete('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
   const batch = String(req.params.batch || '').trim();
   if (!batch) return res.status(400).json({ ok: false, error: 'batch required' });
 
   const uids = db.prepare('SELECT unique_id FROM parts_panel WHERE batch = ?').all(batch).map(r => r.unique_id);
+  const scheduleRow = db.prepare('SELECT * FROM production_schedule WHERE batch = ?').get(batch) || null;
+  if (!uids.length && !scheduleRow) return res.status(404).json({ ok: false, error: 'batch not found' });
+
+  const getIndexRow = db.prepare('SELECT * FROM parts_index WHERE unique_id = ?');
+  const getPanelRow = db.prepare('SELECT * FROM parts_panel WHERE unique_id = ?');
+  const getNotesFor = db.prepare('SELECT * FROM part_notes WHERE unique_id = ?');
+  const getScansFor = db.prepare('SELECT * FROM scans WHERE unique_id = ?');
+  const parts = uids.map(uid => ({
+    index: getIndexRow.get(uid),
+    panel: getPanelRow.get(uid),
+    notes: getNotesFor.all(uid),
+    scans: getScansFor.all(uid)
+  }));
+  const scannedCount = parts.filter(p => p.index && p.index.scanned === 'Yes').length;
+
   const delNotes = db.prepare('DELETE FROM part_notes WHERE unique_id = ?');
   const delScans = db.prepare('DELETE FROM scans WHERE unique_id = ?');
   const delPanel = db.prepare('DELETE FROM parts_panel WHERE unique_id = ?');
   const delIndex = db.prepare('DELETE FROM parts_index WHERE unique_id = ?');
+  const now = new Date().toISOString();
+  const actor = actorFrom(req);
 
   db.exec('BEGIN');
   try {
+    insertDeletedBatch.run({
+      batch, deleted_at: now, deleted_by: actor || null,
+      part_count: uids.length, scanned_count: scannedCount,
+      snapshot: JSON.stringify({ schedule: scheduleRow, parts })
+    });
     for (const uid of uids) {
       delNotes.run(uid);
       delScans.run(uid);
@@ -525,9 +562,76 @@ app.delete('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
     db.exec('ROLLBACK');
     return res.status(500).json({ ok: false, error: e.message });
   }
-  logAudit(actorFrom(req), 'SCHEDULE_DELETE', batch, `deleted ${uids.length} parts`);
+  logAudit(actor, 'SCHEDULE_DELETE', batch, `deleted ${uids.length} parts`);
 
   res.json({ ok: true, deleted_parts: uids.length });
+});
+
+app.get('/admin/api/deleted-batches', requireAdmin, (req, res) => {
+  res.json({ ok: true, deleted: listDeletedBatches.all() });
+});
+
+// Re-inserts everything from one deleted_batches snapshot back into the
+// live tables, exactly as captured (original timestamps, original
+// sequence_no, original scan history) rather than recreating it fresh -
+// this is meant to look like the delete never happened. Rejects if the
+// batch name is already in use by a real batch now (same collision-
+// avoidance reasoning as rename), rather than silently merging two
+// unrelated batches' history together. Any single row failing (e.g. a
+// unique_id that's since been reused by something else) rolls back the
+// whole restore rather than leaving it half-applied.
+app.post('/admin/api/deleted-batches/:id/restore', requireAdmin, (req, res) => {
+  const row = getDeletedBatch.get(req.params.id);
+  if (!row) return res.status(404).json({ ok: false, error: 'nothing here to restore' });
+
+  const collision = db.prepare('SELECT 1 FROM parts_panel WHERE batch = ? UNION SELECT 1 FROM production_schedule WHERE batch = ?').get(row.batch, row.batch);
+  if (collision) return res.status(409).json({ ok: false, error: `"${row.batch}" is already in use by a current batch — rename or delete that one first` });
+
+  let snap;
+  try { snap = JSON.parse(row.snapshot); } catch (e) { return res.status(500).json({ ok: false, error: 'stored snapshot is corrupt' }); }
+
+  const insertIndex = db.prepare(`INSERT INTO parts_index (unique_id,department,scanned,void,notes,created_at,scanned_at,scanned_by_device,voided_at,voided_by_device) VALUES (@unique_id,@department,@scanned,@void,@notes,@created_at,@scanned_at,@scanned_by_device,@voided_at,@voided_by_device)`);
+  const insertPanel = db.prepare(`INSERT INTO parts_panel (unique_id,batch,sheet_name,project,floor,tag,part_type,width,height,qty,colour,generated_on,sequence_no) VALUES (@unique_id,@batch,@sheet_name,@project,@floor,@tag,@part_type,@width,@height,@qty,@colour,@generated_on,@sequence_no)`);
+  const insertNote = db.prepare(`INSERT INTO part_notes (unique_id,category,note,action,device_id,device,created_at) VALUES (@unique_id,@category,@note,@action,@device_id,@device,@created_at)`);
+  const insertScan = db.prepare(`INSERT INTO scans (scan_id,date,scanned_at,received_at,device,device_id,unique_id,match_status,batch_sheet,project,floor,part_type,part_name,size,qty,colour,skid,method,flag,raw,mode,batch,acknowledged,acknowledged_at) VALUES (@scan_id,@date,@scanned_at,@received_at,@device,@device_id,@unique_id,@match_status,@batch_sheet,@project,@floor,@part_type,@part_name,@size,@qty,@colour,@skid,@method,@flag,@raw,@mode,@batch,@acknowledged,@acknowledged_at)`);
+  const insertSchedule = db.prepare(`INSERT INTO production_schedule (batch,job_name,floor_or_work_order,target_finish,material,finish,part_name,sheet_qty,comment,tasked,task_status,extra_fields,source,created_at,updated_at,updated_by) VALUES (@batch,@job_name,@floor_or_work_order,@target_finish,@material,@finish,@part_name,@sheet_qty,@comment,@tasked,@task_status,@extra_fields,@source,@created_at,@updated_at,@updated_by)`);
+
+  db.exec('BEGIN');
+  try {
+    if (snap.schedule) insertSchedule.run(snap.schedule);
+    for (const p of (snap.parts || [])) {
+      if (p.index) insertIndex.run(p.index);
+      if (p.panel) insertPanel.run(p.panel);
+      // part_notes/scans both have an autoincrement id in the snapshot
+      // (captured via SELECT *) that isn't one of insertNote/insertScan's
+      // named params - node:sqlite rejects an object with an extra key
+      // the query never references, so it has to be stripped rather than
+      // passed straight through. A fresh id on restore is also correct
+      // here regardless: the old one has no meaning to preserve.
+      (p.notes || []).forEach(n => { const { id, ...rest } = n; insertNote.run(rest); });
+      (p.scans || []).forEach(s => { const { id, ...rest } = s; insertScan.run(rest); });
+    }
+    db.prepare('DELETE FROM deleted_batches WHERE id = ?').run(req.params.id);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+  logAudit(actorFrom(req), 'SCHEDULE_RESTORE', row.batch, `restored ${row.part_count} parts`);
+
+  res.json({ ok: true, batch: row.batch });
+});
+
+// Permanently forgets one recycle-bin entry — no restore possible after
+// this. Kept as its own explicit action (not part of restore) so
+// clearing old entries out is never one accidental click away from
+// losing something recoverable.
+app.delete('/admin/api/deleted-batches/:id', requireAdmin, (req, res) => {
+  const row = getDeletedBatch.get(req.params.id);
+  if (!row) return res.status(404).json({ ok: false, error: 'nothing here to remove' });
+  db.prepare('DELETE FROM deleted_batches WHERE id = ?').run(req.params.id);
+  logAudit(actorFrom(req), 'DELETED_BATCH_PURGE', row.batch, 'permanently discarded recycle-bin entry');
+  res.json({ ok: true });
 });
 
 // Renames a batch everywhere it's referenced - parts_panel (what actually

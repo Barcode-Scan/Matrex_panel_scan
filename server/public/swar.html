@@ -203,6 +203,20 @@
      icon+label menu rows with a hover highlight, thin dividers between
      groups - not a rounded card. */
   .colf-pop{display:none;position:fixed;z-index:50;width:280px;background:var(--white);border:1px solid #B7B7B7;border-radius:3px;box-shadow:0 4px 14px rgba(0,0,0,.22);padding:4px 0;font-size:13px;font-family:Calibri,Segoe UI,-apple-system,sans-serif;text-align:left}
+  /* Deleted Batches recycle-bin popover, anchored under its own button
+     above Export CSV - same dropdown-under-button pattern as
+     .other-dash-menu, just its own styling since not every page has
+     that one. */
+  .deleted-pop{display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:55;width:340px;max-height:360px;overflow-y:auto;background:var(--white);border:1px solid var(--gray-200);border-radius:var(--radius-md);box-shadow:0 8px 24px rgba(16,24,40,.14);padding:10px}
+  .deleted-pop-head{font-size:11px;font-weight:800;color:var(--gray-500);text-transform:uppercase;letter-spacing:.3px;padding:2px 4px 8px;border-bottom:1px solid var(--gray-200);margin-bottom:6px}
+  .deleted-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--gray-100)}
+  .deleted-row:last-child{border-bottom:none}
+  .deleted-row-info{min-width:0}
+  .deleted-row-name{font-weight:700;font-size:13px;color:var(--gray-900);word-break:break-word}
+  .deleted-row-meta{font-size:11px;color:var(--gray-500);margin-top:2px}
+  .deleted-row-actions{display:flex;gap:6px;flex-shrink:0}
+  .deleted-row-actions button{width:auto;padding:5px 10px;font-size:11.5px}
+  .deleted-count-badge{background:var(--gray-200);color:var(--gray-700);font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:var(--radius-pill)}
   .colf-menuitem{display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;color:var(--gray-900)}
   .colf-menuitem:hover{background:var(--blue-50)}
   .colf-menuitem.disabled{color:var(--gray-400);cursor:default}
@@ -394,6 +408,13 @@
   <div id="tabSchedule">
     <h1>Production Schedule</h1>
     <div class="sub">Job name, work order, target finish, material, and more — one row per batch. Filled in automatically by the Excel label generator, or click any row to edit manually. Click a column header's arrow to filter or sort it, same as Excel's AutoFilter — filters on different columns combine (AND).</div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:6px;position:relative">
+      <button class="secondary" id="bDeletedBatches" onclick="toggleDeletedBatchesPanel(event)" style="width:auto;padding:6px 12px;font-size:12px">&#128465; Deleted Batches<span class="deleted-count-badge" id="deletedBatchesCount" style="margin-left:6px"></span></button>
+      <div class="deleted-pop" id="deletedBatchesPopover">
+        <div class="deleted-pop-head">Deleted Batches</div>
+        <div id="deletedBatchesList"></div>
+      </div>
+    </div>
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <input placeholder="Search all columns..." oninput="setGlobalSearch(this.value)" style="flex:1;min-width:200px">
       <button class="secondary" onclick="exportTableToCSV('scheduleTbody','production-schedule')" style="width:auto;padding:10px 18px">Export CSV</button>

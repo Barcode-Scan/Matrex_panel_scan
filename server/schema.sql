@@ -190,3 +190,24 @@ CREATE TABLE IF NOT EXISTS audit_log (
   details TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_audit_log_at ON audit_log(at);
+
+-- ── DELETED BATCHES (recycle bin) — a snapshot of everything a batch
+-- delete is about to remove (its production_schedule row, every part's
+-- parts_index/parts_panel rows, their notes, and their scan history),
+-- captured right before the real DELETE runs. The live tables still get
+-- a real hard delete afterward - this table is what makes "restore" a
+-- normal reversible action instead of the batch just being gone, without
+-- having to soft-delete (and filter out everywhere) four different
+-- tables. snapshot is one JSON blob rather than reconstructing the delete
+-- across several tables, since it's only ever read back as a whole on
+-- restore, never queried piecemeal.
+CREATE TABLE IF NOT EXISTS deleted_batches (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch          TEXT NOT NULL,
+  deleted_at     TEXT NOT NULL,
+  deleted_by     TEXT,
+  part_count     INTEGER NOT NULL,
+  scanned_count  INTEGER NOT NULL,
+  snapshot       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_deleted_batches_at ON deleted_batches(deleted_at);
