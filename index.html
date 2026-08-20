@@ -948,6 +948,38 @@ let wakeLock=null;
 async function reqWake(){if('wakeLock' in navigator){try{wakeLock=await navigator.wakeLock.request('screen');}catch(e){}}}
 document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible'&&!wakeLock)await reqWake();});
 
+// A held wake lock keeps the screen on for as long as the scan screen is
+// open, no matter how long it's actually been since the last real scan —
+// on a slow shift that's the phone sitting there unlocked/awake for
+// hours. Releasing OUR lock after 30s with no accepted scan lets the
+// phone's own lock-screen timeout take over again; the next accepted
+// scan re-requests the lock, so it comes right back once scanning
+// resumes. This only controls this app's own wakeLock hold — it can't
+// force a lock the OS itself won't allow (Guided Access with its own
+// Auto-Lock set to Never is a device setting no web page can reach), it
+// just makes sure this app stops being an extra reason the screen can't
+// sleep once nobody's actually scanning with it.
+const SCAN_IDLE_WAKE_RELEASE_MS=30000;
+let lastScanAt=Date.now();
+let idleWakeTimer=null;
+function noteScanActivity(){
+  lastScanAt=Date.now();
+  if(!wakeLock)reqWake();
+}
+function startIdleWakeWatch(){
+  lastScanAt=Date.now();
+  if(idleWakeTimer)clearInterval(idleWakeTimer);
+  idleWakeTimer=setInterval(()=>{
+    if(wakeLock&&Date.now()-lastScanAt>=SCAN_IDLE_WAKE_RELEASE_MS){
+      try{wakeLock.release();}catch(e){}
+      wakeLock=null;
+    }
+  },5000);
+}
+function stopIdleWakeWatch(){
+  if(idleWakeTimer){clearInterval(idleWakeTimer);idleWakeTimer=null;}
+}
+
 // ── HTTPS CHECK ───────────────────────────────────────────
 function isSecure(){return location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'||location.hostname==='';}
 
@@ -1168,6 +1200,7 @@ async function startScanner(){
 
   pick.addEventListener('change',()=>runWithDevice(pick.value));
   await reqWake();
+  startIdleWakeWatch();
   runWithDevice(pick.value||devices[0].deviceId);
 }
 
@@ -1212,6 +1245,7 @@ async function runWithDevice(deviceId){
         if(!resultInAimBox(result,previewElem))return; // detected, but outside the visible scan frame — same as nothing found
         const raw=shouldAcceptScan(result.getText(),Date.now());
         if(!raw)return;
+        noteScanActivity();
         setEngine('Got scan! Resuming…','ready');
         setTimeout(()=>setEngine('Scanning…','scanning'),1200);
         scanMode==='DIRECTED'?handleDirectedRaw(raw):handleRaw(raw,'SCAN');
@@ -1235,6 +1269,7 @@ async function runWithDevice(deviceId){
 function stopScanner(){
   if(controls){try{controls.stop();}catch(e){}controls=null;}
   if(wakeLock){try{wakeLock.release();}catch(e){}wakeLock=null;}
+  stopIdleWakeWatch();
   trackRef=null;torchOn=false;
 }
 
