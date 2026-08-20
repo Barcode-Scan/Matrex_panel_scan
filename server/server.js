@@ -1286,7 +1286,17 @@ app.get('/viewer/api/batches', requireViewer, (req, res) => {
            SUM(pi.scanned='Yes' AND pi.void='No') AS scanned,
            SUM(pi.void='Yes') AS voided,
            MIN(pi.created_at) AS added_at,
-           MAX(pi.scanned_at) AS last_scanned_at
+           MAX(pi.scanned_at) AS last_scanned_at,
+           -- Kanban "blocked" signal: an unscanned part with a logged defect
+           -- note is plausibly still an open problem; a note on a part that
+           -- went on to scan successfully was presumably resolved or worked
+           -- around. part_notes has no resolved/open flag of its own, so
+           -- this is the closest honest proxy available without adding one.
+           (SELECT COUNT(DISTINCT pn.unique_id) FROM part_notes pn
+            JOIN parts_index pi2 ON pi2.unique_id = pn.unique_id
+            JOIN parts_panel pp2 ON pp2.unique_id = pi2.unique_id
+            WHERE pp2.batch = pp.batch AND pi2.scanned = 'No' AND pi2.void = 'No'
+           ) AS open_note_count
     FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
     WHERE pp.batch IS NOT NULL AND pp.batch != ''
     GROUP BY pp.batch ORDER BY added_at DESC

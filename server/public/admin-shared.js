@@ -896,14 +896,14 @@ function renderJobSummaryTable(){
     <td></td>
   </tr>`;
 }
-// ── JOB SUMMARY BOARD (admin.html only) — two columns for now: Ongoing
-// (some scan activity, not finished) and Upcoming / Due (not started at
-// all yet), sorted soonest-due first within each. Finished jobs (100%)
-// aren't shown in either column - out of scope for this first pass, a
-// "Done" column is the obvious next one to add later. A job's card-accent
-// color is the worst risk level (computeRisk) across its own batches -
-// same red/amber/green language Production Schedule's row accent already
-// uses, so a card and a table row mean the same thing when they match.
+// ── JOB SUMMARY BOARD (admin.html only) — one card per BATCH, not per
+// job (a job with several batches used to average them into one bar,
+// which hid a struggling batch behind healthy siblings under the same
+// job). Ongoing / Upcoming / Done, plus a pinned Expedite lane above
+// both that pulls a batch out of its normal column rather than
+// duplicating it. A card's accent color is computeRisk() on that one
+// batch - same red/amber/green language Production Schedule's row
+// accent already uses.
 function daysUntil(dateStr){
   const iso=toISODate(dateStr);
   if(!iso)return null;
@@ -918,45 +918,154 @@ function kanbanDueBadge(days){
   if(days<=3)return{label:'Due in '+days+'d',cls:'kanban-due-amber'};
   return{label:'Due in '+days+'d',cls:'kanban-due-neutral'};
 }
-function jobKanbanCardHtml(job,items){
-  const{scanned,total,pct}=sumProgress(items);
-  const floors=[...new Set(items.map(b=>b.floor_or_work_order).filter(Boolean))];
-  const dueDates=items.map(b=>toISODate(b.target_finish)).filter(Boolean).sort();
-  const badge=kanbanDueBadge(daysUntil(dueDates[0]));
-  const risks=items.map(b=>computeRisk(b)).filter(Boolean);
-  const accent=risks.some(r=>r.level==='red')?'var(--red-600)':risks.some(r=>r.level==='yellow')?'var(--amber-700)':(risks.length?'var(--green-700)':'var(--gray-200)');
+function isExpedited(b){return!!(b.extra_fields&&b.extra_fields.expedite);}
+// Idle-days reuses the exact same calculation and the exact same
+// user-set threshold as Stalled Batches (workingDaysSince /
+// LS_STALLED_THRESHOLD, defined below) rather than inventing a second
+// "days idle" number that could disagree with the first one.
+function batchAgingDays(b){
+  const refDate=b.scanned>0?b.last_scanned_at:b.added_at;
+  const idleDays=workingDaysSince(refDate);
+  const threshold=Math.max(1,parseInt(localStorage.getItem(LS_STALLED_THRESHOLD),10)||3);
+  return(idleDays!==null&&idleDays>=threshold)?idleDays:null;
+}
+function batchKanbanCardHtml(b){
+  const total=b.total||0,scanned=b.scanned||0;
+  const pct=total?Math.round(scanned/total*100):0;
   const state=pct>=100?'complete':pct>0?'progress':'none';
-  return`<div class="kanban-card" style="border-left-color:${accent}" onclick="openJobDetail('${esc(job)}')">
-    <div class="kanban-card-title">${esc(job)}</div>
-    <div class="kanban-card-meta">${items.length} batch${items.length===1?'':'es'}${floors.length?' · '+esc(floors.join(', ')):''}</div>
+  const risk=computeRisk(b);
+  const accent=risk?(risk.level==='red'?'var(--red-600)':risk.level==='yellow'?'var(--amber-700)':'var(--green-700)'):'var(--gray-200)';
+  const badge=kanbanDueBadge(daysUntil(b.target_finish));
+  const expedited=isExpedited(b);
+  const blocked=(b.open_note_count||0)>0;
+  const agingDays=batchAgingDays(b);
+  const chips=[
+    b.material?`<span class="kanban-chip">${esc(b.material)}</span>`:'',
+    b.sheet_qty?`<span class="kanban-chip">${esc(b.sheet_qty)} sh</span>`:''
+  ].filter(Boolean).join('');
+  return`<div class="kanban-card${agingDays!==null?' aging':''}" style="border-left-color:${accent}" onclick="viewBatchLabels('${esc(b.batch)}')">
+    <div class="kanban-card-top">
+      <div class="kanban-card-eyebrow">${esc(b.job_name||'(No Job)')}${b.floor_or_work_order?' · '+esc(b.floor_or_work_order):''}</div>
+      <button class="kanban-star${expedited?' on':''}" onclick="toggleExpedite('${esc(b.batch)}',event)" title="${expedited?'Remove from Expedite':'Mark Expedite'}" type="button">&#9733;</button>
+    </div>
+    <div class="kanban-card-title">${esc(b.batch)}</div>
+    ${blocked?`<div class="kanban-blocked-badge">BLOCKED &middot; ${b.open_note_count} open note${b.open_note_count===1?'':'s'}</div>`:''}
     <div class="kanban-progress-track"><div class="kanban-progress-fill ${state}" style="width:${pct}%"></div></div>
+    ${chips?`<div class="kanban-chips">${chips}</div>`:''}
     <div class="kanban-card-footer">
       <span>${scanned}/${total} scanned</span>
       ${badge?`<span class="kanban-card-due ${badge.cls}">${badge.label}</span>`:''}
     </div>
+    ${agingDays!==null?`<div class="kanban-aging">Idle ${agingDays} working day${agingDays===1?'':'s'}</div>`:''}
   </div>`;
 }
-function renderJobSummaryKanban(){
-  const groups=groupByJob();
-  let jobs=Object.keys(groups).sort();
-  if(jobSummarySearchQuery)jobs=jobs.filter(j=>textMatches(jobSummarySearchQuery,j));
-  const ongoing=[],upcoming=[];
-  jobs.forEach(j=>{
-    const{scanned,pct}=sumProgress(groups[j]);
-    if(pct>=100)return; // done - out of scope for now
-    (scanned>0?ongoing:upcoming).push(j);
+async function toggleExpedite(batch,ev){
+  ev.stopPropagation();
+  const b=scheduleBatches.find(x=>x.batch===batch);
+  if(!b)return;
+  const currentlyOn=isExpedited(b);
+  if(!currentlyOn){
+    const onCount=scheduleBatches.filter(isExpedited).length;
+    // The cap is enforced right here, at the moment someone tries to
+    // exceed it - not by silently hiding a 3rd card, which would just
+    // make the lane quietly stop meaning anything.
+    if(onCount>=2&&!confirm('Expedite is capped at 2 batches on purpose - add a 3rd anyway?'))return;
+  }
+  const extra=Object.assign({},b.extra_fields||{},{expedite:!currentlyOn});
+  const prevExtra=b.extra_fields;
+  b.extra_fields=extra; // optimistic
+  renderJobSummaryKanban();
+  try{
+    await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'POST',body:JSON.stringify({extra_fields:extra})});
+  }catch(e){
+    b.extra_fields=prevExtra;
+    renderJobSummaryKanban();
+    alert('Could not update expedite: '+e.message);
+  }
+}
+function batchMatchesKanbanFilter(b,mode){
+  if(mode==='week'){const d=daysUntil(b.target_finish);return d!==null&&d<=7;}
+  if(mode==='late'){const r=computeRisk(b);return!!r&&r.level==='red';}
+  return true; // 'all'
+}
+let kanbanFilterMode='all';
+function setKanbanFilter(mode){
+  kanbanFilterMode=mode;
+  ['All','Week','Late'].forEach(suffix=>{
+    const el=$('kanbanFilter'+suffix);
+    if(el)el.classList.toggle('active',suffix.toLowerCase()===mode);
   });
-  const dueOf=j=>{
-    const dates=groups[j].map(b=>toISODate(b.target_finish)).filter(Boolean).sort();
-    return dates[0]||'9999-99-99';
-  };
-  ongoing.sort((a,b)=>dueOf(a).localeCompare(dueOf(b)));
-  upcoming.sort((a,b)=>dueOf(a).localeCompare(dueOf(b)));
-  const noMatches=Object.keys(groups).length?'No matches.':null;
-  $('kanbanOngoing').innerHTML=ongoing.length?ongoing.map(j=>jobKanbanCardHtml(j,groups[j])).join(''):`<div class="kanban-empty">${noMatches||'Nothing in progress right now.'}</div>`;
-  $('kanbanUpcoming').innerHTML=upcoming.length?upcoming.map(j=>jobKanbanCardHtml(j,groups[j])).join(''):`<div class="kanban-empty">${noMatches||'Nothing waiting to start.'}</div>`;
-  $('kanbanOngoingCount').textContent=ongoing.length;
-  $('kanbanUpcomingCount').textContent=upcoming.length;
+  renderJobSummaryKanban();
+}
+const LS_KANBAN_SWIMLANE='mx_kanban_swimlane';
+let kanbanSwimlaneMode=localStorage.getItem(LS_KANBAN_SWIMLANE)||'none';
+function setKanbanSwimlane(mode){
+  kanbanSwimlaneMode=mode;
+  localStorage.setItem(LS_KANBAN_SWIMLANE,mode);
+  renderJobSummaryKanban();
+}
+function kanbanWeekStart(iso){
+  const d=new Date(iso+'T00:00:00');
+  const day=d.getDay(); // 0=Sun..6=Sat
+  d.setDate(d.getDate()+(day===0?-6:1-day)); // back up to that week's Monday
+  return d;
+}
+function kanbanLaneInfo(b,mode){
+  if(mode==='job')return{key:b.job_name||'￿',label:b.job_name||'(No Job Specified)'};
+  if(mode==='material')return{key:b.material||'￿',label:b.material||'(No Material Specified)'};
+  if(mode==='week'){
+    const iso=toISODate(b.target_finish);
+    if(!iso)return{key:'￿',label:'(No Target Finish)'};
+    const start=kanbanWeekStart(iso);
+    return{key:start.toISOString().slice(0,10),label:'Week of '+start.toLocaleDateString(undefined,{month:'short',day:'numeric'})};
+  }
+  return null;
+}
+// batches arrives already sorted by due date - grouping into lanes here
+// preserves that order within each lane, so nothing needs re-sorting
+// after the split.
+function kanbanColumnHtml(batches){
+  if(kanbanSwimlaneMode==='none')return batches.map(batchKanbanCardHtml).join('');
+  const lanes={};
+  batches.forEach(b=>{
+    const info=kanbanLaneInfo(b,kanbanSwimlaneMode);
+    (lanes[info.key]=lanes[info.key]||{label:info.label,items:[]}).items.push(b);
+  });
+  return Object.keys(lanes).sort().map(k=>{
+    const lane=lanes[k];
+    return`<div class="kanban-lane-head">${esc(lane.label)}</div>`+lane.items.map(batchKanbanCardHtml).join('');
+  }).join('');
+}
+function renderKanbanColumn(bodyId,countId,batches,emptyMsg){
+  $(countId).textContent=batches.length;
+  $(bodyId).innerHTML=batches.length?kanbanColumnHtml(batches):`<div class="kanban-empty">${emptyMsg}</div>`;
+}
+function renderJobSummaryKanban(){
+  let batches=scheduleBatches.slice();
+  if(jobSummarySearchQuery)batches=batches.filter(b=>textMatches(jobSummarySearchQuery,b.batch,b.job_name,b.floor_or_work_order,b.material));
+  const dueOf=b=>toISODate(b.target_finish)||'9999-99-99';
+  batches.sort((a,b)=>dueOf(a).localeCompare(dueOf(b)));
+
+  const expedited=batches.filter(isExpedited);
+  const rest=batches.filter(b=>!isExpedited(b));
+  const pctOf=b=>{const t=b.total||0;return t?Math.round((b.scanned||0)/t*100):0;};
+
+  // Done and the Expedite lane both ignore the active This-Week/Late
+  // filter on purpose - filtering "what's due soon" doesn't mean
+  // anything for work that's already finished or already pinned as a
+  // priority override.
+  const done=rest.filter(b=>pctOf(b)>=100);
+  const open=rest.filter(b=>pctOf(b)<100&&batchMatchesKanbanFilter(b,kanbanFilterMode));
+  const ongoing=open.filter(b=>(b.scanned||0)>0);
+  const upcoming=open.filter(b=>(b.scanned||0)===0);
+
+  $('kanbanExpedite').innerHTML=expedited.length?expedited.map(batchKanbanCardHtml).join(''):'<div class="kanban-expedite-empty">Nothing pinned. Use the star on a card to expedite it (capped at 2).</div>';
+  $('kanbanExpediteCount').textContent=expedited.length+' / 2';
+
+  const noMatches=scheduleBatches.length?'No matches.':null;
+  renderKanbanColumn('kanbanOngoing','kanbanOngoingCount',ongoing,noMatches||'Nothing in progress right now.');
+  renderKanbanColumn('kanbanUpcoming','kanbanUpcomingCount',upcoming,noMatches||'Nothing waiting to start.');
+  renderKanbanColumn('kanbanDone','kanbanDoneCount',done,noMatches||'Nothing finished yet.');
 }
 function openJobDetail(job){
   currentJobKey=job;

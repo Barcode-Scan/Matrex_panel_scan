@@ -303,6 +303,39 @@
   .kanban-due-amber{background:var(--amber-50);color:var(--amber-700)}
   .kanban-due-neutral{background:var(--gray-200);color:var(--gray-500)}
   .kanban-empty{font-size:13px;color:var(--gray-500);padding:20px 8px;text-align:center}
+  /* One card per BATCH (not per job) - eyebrow carries the job/floor
+     context a job-level title used to give for free. */
+  .kanban-card-eyebrow{font-size:10.5px;font-weight:800;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+  .kanban-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .kanban-star{background:none;border:none;padding:2px;cursor:pointer;color:var(--gray-300);flex-shrink:0;line-height:1;font-size:16px}
+  .kanban-star:hover{color:var(--amber-700)}
+  .kanban-star.on{color:var(--amber-700)}
+  .kanban-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+  .kanban-chip{font-size:10.5px;font-weight:700;color:var(--gray-700);background:var(--gray-100);border-radius:var(--radius-sm);padding:2px 7px;white-space:nowrap}
+  .kanban-blocked-badge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:800;letter-spacing:.3px;color:var(--red-600);background:var(--red-50);border-radius:var(--radius-sm);padding:3px 8px;margin-bottom:8px}
+  .kanban-aging{font-size:10.5px;font-weight:700;color:var(--amber-700);margin-top:6px}
+  .kanban-card.aging{box-shadow:inset 0 -3px 0 var(--amber-700)}
+  /* Swimlanes: a sub-header inserted between cards within a column, same
+     "group divider in a flat list" pattern as the phone app's skid-hdr -
+     no nested grid, just a label row the cards after it belong to. */
+  .kanban-lane-head{font-size:10.5px;font-weight:800;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px;padding:10px 4px 6px;border-top:1px solid var(--gray-200);margin-top:4px}
+  .kanban-lane-head:first-child{border-top:none;margin-top:0;padding-top:0}
+  /* Filter chips + swimlane picker sit above the board, same row height as
+     the search box so the whole control strip reads as one unit. */
+  .kanban-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .kanban-filter-btn{background:var(--gray-100);color:var(--gray-700);border:none;padding:8px 14px;border-radius:var(--radius-pill);font-size:12.5px;font-weight:700;cursor:pointer}
+  .kanban-filter-btn.active{background:var(--blue-600);color:#fff}
+  .kanban-controls select{padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius-pill);font-size:12.5px;font-weight:700;color:var(--gray-700);font-family:inherit;background:var(--white)}
+  /* Expedite is a pinned lane, not a 4th column - it pulls a batch OUT of
+     wherever it'd normally sit rather than duplicating the card, and the
+     cap is enforced at the point someone tries to add a 3rd (see
+     toggleExpedite), not just a display truncation. */
+  .kanban-expedite{border:1.5px solid var(--blue-600);border-radius:var(--radius-lg);padding:12px;margin-bottom:16px}
+  .kanban-expedite-head{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--blue-600);text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px;padding:0 4px}
+  .kanban-expedite-cap{background:var(--blue-50);color:var(--blue-600);font-size:11px;font-weight:800;padding:2px 9px;border-radius:var(--radius-pill)}
+  .kanban-expedite-body{display:flex;gap:10px;flex-wrap:wrap}
+  .kanban-expedite-body .kanban-card{flex:1;min-width:240px;margin-bottom:0}
+  .kanban-expedite-empty{font-size:12.5px;color:var(--gray-500);padding:4px}
   .sched-grid tr.gc-totals-row:hover td{background:var(--gray-100)}
   .sched-grid tr.gc-totals-row td.gc-batch{font-weight:800}
   /* Freeze the identity column (always first - Job/Batch/Material
@@ -773,10 +806,27 @@
 
   <div id="tabJobSummary" style="display:none">
     <h1>Job Summary</h1>
-    <div class="sub">Every job's batches, as a board - Ongoing (already being worked) and Upcoming / Due (not started yet, soonest due first). Finished jobs aren't shown here for now. Click a card for its floor-by-floor breakdown.</div>
-    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      <input placeholder="Search jobs..." oninput="setJobSummarySearch(this.value)" style="flex:1;min-width:200px">
+    <div class="sub">One card per batch - Ongoing (already being worked), Upcoming / Due (not started, soonest due first), and Done. Click a card for its label-by-label breakdown.</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <input placeholder="Search batch, job, floor, material..." oninput="setJobSummarySearch(this.value)" style="flex:1;min-width:200px">
     </div>
+    <div class="kanban-controls">
+      <button class="kanban-filter-btn active" id="kanbanFilterAll" onclick="setKanbanFilter('all')">All</button>
+      <button class="kanban-filter-btn" id="kanbanFilterWeek" onclick="setKanbanFilter('week')">Due this week</button>
+      <button class="kanban-filter-btn" id="kanbanFilterLate" onclick="setKanbanFilter('late')">Late</button>
+      <select id="kanbanSwimlane" onchange="setKanbanSwimlane(this.value)">
+        <option value="none">No grouping</option>
+        <option value="job">Group by Job</option>
+        <option value="material">Group by Material</option>
+        <option value="week">Group by Target-Finish week</option>
+      </select>
+    </div>
+
+    <div class="kanban-expedite">
+      <div class="kanban-expedite-head">Expedite<span class="kanban-expedite-cap" id="kanbanExpediteCount">0 / 2</span></div>
+      <div class="kanban-expedite-body" id="kanbanExpedite"></div>
+    </div>
+
     <div class="kanban-board">
       <div class="kanban-col">
         <div class="kanban-col-head">Ongoing<span class="kanban-col-count" id="kanbanOngoingCount">0</span></div>
@@ -785,6 +835,10 @@
       <div class="kanban-col">
         <div class="kanban-col-head">Upcoming / Due<span class="kanban-col-count" id="kanbanUpcomingCount">0</span></div>
         <div class="kanban-col-body" id="kanbanUpcoming"></div>
+      </div>
+      <div class="kanban-col">
+        <div class="kanban-col-head">Done<span class="kanban-col-count" id="kanbanDoneCount">0</span></div>
+        <div class="kanban-col-body" id="kanbanDone"></div>
       </div>
     </div>
   </div>
