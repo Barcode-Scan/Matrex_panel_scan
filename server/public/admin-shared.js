@@ -1250,12 +1250,12 @@ function renderPackingPartsPreview(){
   if(!parts.length){el.innerHTML='<div class="empty">No parts on record for this batch.</div>';return;}
   if(!packingPartsEditable){
     el.innerHTML='<div class="sub" style="margin-bottom:8px">Part list is locked to what was packed when this slip was created — not editable here.</div>'
-      +'<table class="rep-tbl"><thead><tr><th>Tag</th><th>Part Type</th><th>Size</th><th>Qty</th><th>Colour</th></tr></thead><tbody>'
+      +'<div class="sched-grid-wrap"><table class="rep-tbl"><thead><tr><th>Tag</th><th>Part Type</th><th>Size</th><th>Qty</th><th>Colour</th></tr></thead><tbody>'
       +parts.map((p,i)=>{
         const header=p.group&&(i===0||parts[i-1].group!==p.group)?`<tr><td colspan="5" style="background:var(--gray-100);font-weight:700;text-align:left">${esc(p.group)}</td></tr>`:'';
         return header+`<tr><td>${esc(p.tag||p.unique_id)}</td><td>${esc(p.part_type||'')}</td><td>${esc([p.width,p.height].filter(Boolean).join(' X '))}</td><td>${esc(p.qty||'')}</td><td>${esc(p.colour||'')}</td></tr>`;
       }).join('')
-      +'</tbody></table>';
+      +'</tbody></table></div>';
     return;
   }
   const q=(($('pfPartsFilter')&&$('pfPartsFilter').value)||'').trim().toLowerCase();
@@ -1278,8 +1278,8 @@ function renderPackingPartsPreview(){
       </td>
     </tr>`;
   });
-  el.innerHTML=`<table class="rep-tbl"><thead><tr><th></th><th>Tag</th><th>Part Type</th><th>Size</th><th>Qty</th><th>Colour</th><th>Order</th></tr></thead>`
-    +`<tbody>${rows||'<tr><td colspan="7" class="empty">No parts match that filter.</td></tr>'}</tbody></table>`;
+  el.innerHTML=`<div class="sched-grid-wrap"><table class="rep-tbl"><thead><tr><th></th><th>Tag</th><th>Part Type</th><th>Size</th><th>Qty</th><th>Colour</th><th>Order</th></tr></thead>`
+    +`<tbody>${rows||'<tr><td colspan="7" class="empty">No parts match that filter.</td></tr>'}</tbody></table></div>`;
 }
 // Editing an existing slip only touches its metadata (same fields as
 // creation) - the part list stays whatever was snapshotted when it was
