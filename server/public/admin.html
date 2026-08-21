@@ -17,7 +17,7 @@
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--gray-900);padding:24px}
   .wrap{max-width:none;margin:0 auto}
   h1{font-size:25px;font-weight:800;letter-spacing:-.01em;margin-bottom:5px}
-  .sub{font-size:13px;color:var(--gray-500);margin-bottom:20px}
+  .sub{font-size:13px;color:var(--gray-500);margin-bottom:10px}
   .keybar{display:flex;gap:8px;margin-bottom:20px}
   input{flex:1;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit}
   /* The rule above targets text inputs, but `input` with no type qualifier
@@ -189,8 +189,12 @@
   .daterange input{flex:none;width:140px}
 
   /* ── Production Schedule tab ─────────────────────────────── */
-  .tabbar{display:flex;margin-bottom:20px;border-bottom:1.5px solid var(--gray-200)}
-  .tab-btn{background:none;color:var(--gray-500);font-weight:700;padding:10px 4px;margin-right:24px;border-radius:0;border-bottom:2.5px solid transparent;font-size:14px}
+  /* Tabs sit beside the logo in one row now (was its own row below the
+     logo) - the border/margin that used to belong to .tabbar moved up
+     onto that shared row, so .tabbar itself is just a flexible, wrapping
+     row of buttons that fills whatever width is left. */
+  .tabbar{display:flex;align-items:flex-end;flex:1;min-width:0;flex-wrap:wrap;row-gap:6px}
+  .tab-btn{background:none;color:var(--gray-500);font-weight:700;padding:7px 4px;margin-right:16px;border-radius:0;border-bottom:2.5px solid transparent;font-size:13.5px}
   .tab-btn.active{color:var(--blue-600);border-bottom-color:var(--blue-600)}
   .tab-btn:hover{background:none}
   .sched-table{width:100%;border-collapse:collapse;margin:16px 0 12px;table-layout:fixed}
@@ -213,12 +217,20 @@
      table (topbar+tabbar+heading+search bar+totals bar, the tallest
      stack of chrome any tab has above its table) - the wrap box came out
      taller than the remaining viewport, so the outer page scrolled too,
-     on top of the inner scroll this box already provides. 380px is a
+     on top of the inner scroll this box already provides. 380px was a
      conservative measurement of that actual stack plus body padding,
      with a small margin - the wrap box should never exceed the
-     viewport's remaining height now, so the page itself has nothing left
-     to scroll; only this box does. */
-  .sched-grid-wrap{overflow:auto;max-height:calc(100vh - 380px);min-height:200px}
+     viewport's remaining height, so the page itself has nothing left to
+     scroll; only this box does.
+     Reduced to 300px after the logo row and the tab row merged into one
+     (was two stacked rows) and the Deleted Batches button moved into
+     the search row instead of sitting above it on its own - the actual
+     chrome stack above every table shrank by roughly that much, so the
+     table gets that space back instead of it sitting empty. Still a
+     one-size-fits-most estimate, not tuned per tab - if a future tab
+     stacks more chrome above its own table than Production Schedule
+     does, raise this number rather than fighting it per-tab. */
+  .sched-grid-wrap{overflow:auto;max-height:calc(100vh - 300px);min-height:200px}
   .sched-grid{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:16px;table-layout:auto}
   .sched-grid th{position:sticky;top:0;background:var(--white);border-bottom:2px solid var(--gray-200);padding:8px 10px;text-align:center;vertical-align:middle;font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;z-index:1}
   .colf-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:4px;border:none;background:var(--gray-200);color:var(--gray-500);border-radius:3px;font-size:9px;line-height:1;cursor:pointer;vertical-align:middle}
@@ -407,39 +419,41 @@
 <body>
 <div id="toastContainer"></div>
 <div class="wrap">
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-    <div style="width:40px;height:40px;flex-shrink:0;border-radius:12px;background:linear-gradient(155deg,#FFFFFF,var(--blue-50));box-shadow:inset 0 0 0 1px rgba(43,89,225,.12);display:flex;align-items:center;justify-content:center">
-      <svg width="22" height="22" viewBox="0 0 200 200" fill="none">
-        <rect x="30" y="30" width="140" height="140" rx="6" transform="rotate(45 100 100)" stroke="#2B59E1" stroke-width="12" fill="none"/>
-        <path d="M55 145L55 70L100 115L145 70L145 145" stroke="#2B59E1" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-      </svg>
-    </div>
-    <div>
-      <div style="font-size:19px;font-weight:800;letter-spacing:1.5px;color:var(--gray-900);line-height:1">MATREX</div>
-      <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--gray-500);margin-top:3px">Main Dashboard</div>
-    </div>
-  </div>
-  <div class="tabbar">
-    <button class="tab-btn active" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
-    <button class="tab-btn" id="tabBtnWeekly" onclick="showTab('weekly')">Weekly Schedule</button>
-    <button class="tab-btn" id="tabBtnMaterial" onclick="showTab('material')">Material Demand</button>
-    <button class="tab-btn" id="tabBtnStalled" onclick="showTab('stalled')">Stalled Batches</button>
-    <button class="tab-btn" id="tabBtnRisk" onclick="showTab('risk')">At Risk</button>
-    <button class="tab-btn" id="tabBtnYield" onclick="showTab('yieldTab')">Throughput &amp; Yield</button>
-    <button class="tab-btn" id="tabBtnJobs" onclick="showTab('jobs')">Job Summary</button>
-    <button class="tab-btn" id="tabBtnPacking" onclick="showTab('packing')">Packing Slips</button>
-    <button class="tab-btn" id="tabBtnCompleted" onclick="showTab('completed')">Completed Tasks</button>
-    <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
-    <div style="position:relative;margin-left:auto">
-      <button class="secondary" id="otherDashBtn" onclick="toggleOtherDashboards(event)">Other Dashboards &#9662;</button>
-      <div class="other-dash-menu" id="otherDashMenu">
-        <a href="gm.html" target="_blank">&#8599; GM Dashboard</a>
-        <a href="damon.html" target="_blank">&#8599; Damon Dashboard</a>
-        <a href="swar.html" target="_blank">&#8599; Swar Dashboard</a>
+  <div style="display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;border-bottom:1.5px solid var(--gray-200);padding-bottom:2px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:9px;flex-shrink:0;padding-bottom:7px">
+      <div style="width:32px;height:32px;flex-shrink:0;border-radius:9px;background:linear-gradient(155deg,#FFFFFF,var(--blue-50));box-shadow:inset 0 0 0 1px rgba(43,89,225,.12);display:flex;align-items:center;justify-content:center">
+        <svg width="17" height="17" viewBox="0 0 200 200" fill="none">
+          <rect x="30" y="30" width="140" height="140" rx="6" transform="rotate(45 100 100)" stroke="#2B59E1" stroke-width="12" fill="none"/>
+          <path d="M55 145L55 70L100 115L145 70L145 145" stroke="#2B59E1" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      </div>
+      <div>
+        <div style="font-size:15px;font-weight:800;letter-spacing:1.1px;color:var(--gray-900);line-height:1">MATREX</div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--gray-500);margin-top:2px">Main Dashboard</div>
       </div>
     </div>
-    <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()">&#128276; Enable Desktop Alerts</button>
-    <button class="secondary" id="bHardRefresh" onclick="hardRefresh()" title="Reload fresh from the server, bypassing cache - use after an update (Ctrl+Alt+R)">&#128260; Hard Refresh</button>
+    <div class="tabbar">
+      <button class="tab-btn active" id="tabBtnSchedule" onclick="showTab('schedule')">Production Schedule</button>
+      <button class="tab-btn" id="tabBtnWeekly" onclick="showTab('weekly')">Weekly Schedule</button>
+      <button class="tab-btn" id="tabBtnMaterial" onclick="showTab('material')">Material Demand</button>
+      <button class="tab-btn" id="tabBtnStalled" onclick="showTab('stalled')">Stalled Batches</button>
+      <button class="tab-btn" id="tabBtnRisk" onclick="showTab('risk')">At Risk</button>
+      <button class="tab-btn" id="tabBtnYield" onclick="showTab('yieldTab')">Throughput &amp; Yield</button>
+      <button class="tab-btn" id="tabBtnJobs" onclick="showTab('jobs')">Job Summary</button>
+      <button class="tab-btn" id="tabBtnPacking" onclick="showTab('packing')">Packing Slips</button>
+      <button class="tab-btn" id="tabBtnCompleted" onclick="showTab('completed')">Completed Tasks</button>
+      <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
+      <div style="position:relative;margin-left:auto">
+        <button class="secondary" id="otherDashBtn" onclick="toggleOtherDashboards(event)">Other Dashboards &#9662;</button>
+        <div class="other-dash-menu" id="otherDashMenu">
+          <a href="gm.html" target="_blank">&#8599; GM Dashboard</a>
+          <a href="damon.html" target="_blank">&#8599; Damon Dashboard</a>
+          <a href="swar.html" target="_blank">&#8599; Swar Dashboard</a>
+        </div>
+      </div>
+      <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()">&#128276; Enable Desktop Alerts</button>
+      <button class="secondary" id="bHardRefresh" onclick="hardRefresh()" title="Reload fresh from the server, bypassing cache - use after an update (Ctrl+Alt+R)">&#128260; Hard Refresh</button>
+    </div>
   </div>
 
   <div id="tabOperations" style="display:none">
@@ -639,16 +653,16 @@
   <div id="tabSchedule">
     <h1>Production Schedule</h1>
     <div class="sub">Job name, work order, target finish, material, and more — one row per batch. Filled in automatically by the Excel label generator, or click any row to edit manually. Click a column header's arrow to filter or sort it, same as Excel's AutoFilter — filters on different columns combine (AND).</div>
-    <div style="display:flex;justify-content:flex-end;margin-bottom:6px;position:relative">
-      <button class="secondary" id="bDeletedBatches" onclick="toggleDeletedBatchesPanel(event)" style="width:auto;padding:6px 12px;font-size:12px">&#128465; Deleted Batches<span class="deleted-count-badge" id="deletedBatchesCount" style="margin-left:6px"></span></button>
-      <div class="deleted-pop" id="deletedBatchesPopover">
-        <div class="deleted-pop-head">Deleted Batches</div>
-        <div id="deletedBatchesList"></div>
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
       <input placeholder="Search all columns..." oninput="setGlobalSearch(this.value)" style="flex:1;min-width:200px">
-      <button class="secondary" onclick="exportTableToCSV('scheduleTbody','production-schedule')" style="width:auto;padding:10px 18px">Export CSV</button>
+      <div style="position:relative;flex-shrink:0">
+        <button class="secondary" id="bDeletedBatches" onclick="toggleDeletedBatchesPanel(event)" style="width:auto;padding:10px 12px;font-size:12px">&#128465; Deleted Batches<span class="deleted-count-badge" id="deletedBatchesCount" style="margin-left:6px"></span></button>
+        <div class="deleted-pop" id="deletedBatchesPopover">
+          <div class="deleted-pop-head">Deleted Batches</div>
+          <div id="deletedBatchesList"></div>
+        </div>
+      </div>
+      <button class="secondary" onclick="exportTableToCSV('scheduleTbody','production-schedule')" style="width:auto;padding:10px 18px;flex-shrink:0">Export CSV</button>
     </div>
     <div id="scheduleTotals" class="totals-bar"></div>
     <div class="sched-grid-wrap">
@@ -899,18 +913,14 @@
   <div id="tabCompleted" style="display:none">
     <h1>Completed Tasks</h1>
     <div class="sub">Every batch that's had a packing slip generated.</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 10px">
-      <select id="ctFilterYear" onchange="renderCompletedTasks()" style="flex:1;min-width:110px"><option value="">All Years</option></select>
-      <select id="ctFilterMonth" onchange="renderCompletedTasks()" style="flex:1;min-width:130px"><option value="">All Months</option></select>
-      <select id="ctFilterWeek" onchange="renderCompletedTasks()" style="flex:2;min-width:180px"><option value="">All Weeks</option></select>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-      <input id="ctSearchJob" placeholder="Search Job..." oninput="renderCompletedTasks()" style="flex:1;min-width:160px">
-      <input id="ctSearchFloor" placeholder="Search Floor / Work Order..." oninput="renderCompletedTasks()" style="flex:1;min-width:160px">
-      <input id="ctSearchBatch" placeholder="Search Batch..." oninput="renderCompletedTasks()" style="flex:1;min-width:160px">
-    </div>
-    <div style="text-align:right;margin-bottom:10px">
-      <button class="secondary" onclick="exportTableToCSV('completedTasksList','completed-tasks')" style="width:auto;padding:10px 18px">Export CSV</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <select id="ctFilterYear" onchange="renderCompletedTasks()" style="flex:1;min-width:100px"><option value="">All Years</option></select>
+      <select id="ctFilterMonth" onchange="renderCompletedTasks()" style="flex:1;min-width:110px"><option value="">All Months</option></select>
+      <select id="ctFilterWeek" onchange="renderCompletedTasks()" style="flex:1;min-width:130px"><option value="">All Weeks</option></select>
+      <input id="ctSearchJob" placeholder="Search Job..." oninput="renderCompletedTasks()" style="flex:1;min-width:130px">
+      <input id="ctSearchFloor" placeholder="Search Floor / Work Order..." oninput="renderCompletedTasks()" style="flex:1;min-width:130px">
+      <input id="ctSearchBatch" placeholder="Search Batch..." oninput="renderCompletedTasks()" style="flex:1;min-width:130px">
+      <button class="secondary" onclick="exportTableToCSV('completedTasksList','completed-tasks')" style="width:auto;padding:10px 18px;flex-shrink:0">Export CSV</button>
     </div>
     <div class="sched-grid-wrap">
     <table class="sched-grid">
