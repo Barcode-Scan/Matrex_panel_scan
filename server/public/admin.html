@@ -457,7 +457,12 @@
         </div>
       </div>
       <button class="secondary" id="bEnableAlerts" onclick="enableCompletionNotifications()">&#128276; Enable Desktop Alerts</button>
-      <button class="secondary" id="bHardRefresh" onclick="hardRefresh()" title="Reload fresh from the server, bypassing cache - use after an update (Ctrl+Alt+R)">&#128260; Hard Refresh</button>
+      <button class="secondary" id="bHardRefresh" onclick="hardRefresh()" title="Hard Refresh — reload fresh from the server, bypassing cache (use after an update, or if the app gets stuck). Ctrl+Alt+R" style="width:auto;padding:8px;display:inline-flex;align-items:center;justify-content:center">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+      </button>
     </div>
   </div>
 
