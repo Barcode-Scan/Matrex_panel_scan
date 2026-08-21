@@ -387,6 +387,11 @@
   .ts-select:hover{border-color:var(--gray-200);background:var(--white)}
   .ts-select:focus{border-color:var(--blue-600);background:var(--white);outline:none}
   .ts-select:disabled{color:var(--gray-500);cursor:default}
+  /* A manually-forced Complete reads visually distinct from the plain
+     locked "Complete" state (still an editable select, not disabled),
+     so it's obvious at a glance this one can still be changed. */
+  .ts-select.ts-forced{color:var(--green-700);font-weight:700}
+  .kanban-manual-badge{background:var(--amber-50);color:var(--amber-700);font-size:9.5px;font-weight:800;letter-spacing:.3px;padding:1px 6px;border-radius:var(--radius-sm);margin-left:4px;vertical-align:middle}
   .extra-row input{flex:1}
   .source-pill{font-size:11px;font-weight:800;padding:3px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:.4px;background:var(--gray-200);color:var(--gray-500)}
   .bl-row{display:flex;align-items:center;gap:12px;background:var(--white);border:1.5px solid var(--gray-200);border-radius:var(--radius-lg);padding:10px 12px;margin-bottom:6px}

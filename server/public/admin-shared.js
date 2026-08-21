@@ -1009,8 +1009,11 @@ function batchAgingDays(b){
 }
 function batchKanbanCardHtml(b){
   const total=b.total||0,scanned=b.scanned||0;
-  const pct=total?Math.round(scanned/total*100):0;
-  const state=pct>=100?'complete':pct>0?'progress':'none';
+  // Bar fill goes to 100% on a forced Complete, same treatment as the
+  // Production Schedule grid - scanned/total in the footer stays the
+  // real count regardless.
+  const pct=isForceComplete(b)?100:(total?Math.round(scanned/total*100):0);
+  const state=rowStatus(b);
   const risk=computeRisk(b);
   const accent=risk?(risk.level==='red'?'var(--red-600)':risk.level==='yellow'?'var(--amber-700)':'var(--green-700)'):'var(--gray-200)';
   const badge=kanbanDueBadge(daysUntil(b.target_finish));
@@ -1031,7 +1034,7 @@ function batchKanbanCardHtml(b){
     <div class="kanban-progress-track"><div class="kanban-progress-fill ${state}" style="width:${pct}%"></div></div>
     ${chips?`<div class="kanban-chips">${chips}</div>`:''}
     <div class="kanban-card-footer">
-      <span>${scanned}/${total} scanned</span>
+      <span>${scanned}/${total} scanned${isForceComplete(b)&&scanned<total?' <span class="kanban-manual-badge">MANUAL</span>':''}</span>
       ${badge?`<span class="kanban-card-due ${badge.cls}">${badge.label}</span>`:''}
     </div>
     ${agingDays!==null?`<div class="kanban-aging">Idle ${agingDays} working day${agingDays===1?'':'s'}</div>`:''}
@@ -1126,14 +1129,15 @@ function renderJobSummaryKanban(){
 
   const expedited=batches.filter(isExpedited);
   const rest=batches.filter(b=>!isExpedited(b));
-  const pctOf=b=>{const t=b.total||0;return t?Math.round((b.scanned||0)/t*100):0;};
 
   // Done and the Expedite lane both ignore the active This-Week/Late
   // filter on purpose - filtering "what's due soon" doesn't mean
   // anything for work that's already finished or already pinned as a
-  // priority override.
-  const done=rest.filter(b=>pctOf(b)>=100);
-  const open=rest.filter(b=>pctOf(b)<100&&batchMatchesKanbanFilter(b,kanbanFilterMode));
+  // priority override. rowStatus() (not a local pct check) so a batch
+  // manually marked Complete from the Production Schedule tab lands
+  // here too, same as one that's genuinely 100% scanned.
+  const done=rest.filter(b=>rowStatus(b)==='complete');
+  const open=rest.filter(b=>rowStatus(b)!=='complete'&&batchMatchesKanbanFilter(b,kanbanFilterMode));
   const ongoing=open.filter(b=>(b.scanned||0)>0);
   const upcoming=open.filter(b=>(b.scanned||0)===0);
 
@@ -1823,7 +1827,17 @@ async function renderActivityLog(){
 
 // ── AutoFilter (Excel-style: checkbox multi-select per column, search,
 // sort A-Z/Z-A from the same dropdown, columns AND together) ──────────
-function rowStatus(b){return b.total>0&&b.scanned===b.total?'complete':b.scanned>0?'progress':'none';}
+// Manual "Complete" override (Production Schedule tab, admin.html only)
+// - lets an admin close a batch out even when it's not fully scanned
+// (a barcode never worked, work happened off a cart the scanner never
+// saw, etc). Stored in extra_fields (no schema change) rather than as
+// a real task_status value, so it's a genuinely separate signal from
+// the scan-derived one - rowStatus below is the ONE place that blends
+// them, so every screen that already calls rowStatus (Stalled Batches,
+// At Risk via computeRisk, the kanban board, this grid) picks the
+// override up for free instead of needing its own special case.
+function isForceComplete(b){return!!(b.extra_fields&&b.extra_fields.forceComplete);}
+function rowStatus(b){return isForceComplete(b)||(b.total>0&&b.scanned===b.total)?'complete':b.scanned>0?'progress':'none';}
 function statusLabel(v){return v==='complete'?'Complete':v==='progress'?'In Progress':'Not Started';}
 function effectiveTaskStatus(b){return rowStatus(b)==='complete'?'Complete':(b.task_status||'Not Started');}
 function colValue(b,key){return key==='status'?rowStatus(b):key==='task_status'?effectiveTaskStatus(b):(b[key]||'');}
@@ -1954,7 +1968,7 @@ function closeRowContextMenu(){$('rowCtxMenu').style.display='none';}
 const RISK_RED_COMPLETION_MAX=20;    // red if under this % complete...
 const RISK_RED_TIME_ELAPSED_MIN=70;  // ...and at least this much of the time is gone
 function computeRisk(b){
-  if(b.total>0&&b.scanned===b.total)return null;
+  if(isForceComplete(b)||(b.total>0&&b.scanned===b.total))return null;
   const targetIso=toISODate(b.target_finish);
   if(!targetIso)return null;
   const target=new Date(targetIso+'T00:00:00');
@@ -1999,7 +2013,11 @@ function editableTd(b,key,isDate,extraClass){
 // with each other the way two independently-maintained copies eventually
 // would.
 function scheduleRowHtml(b){
-  const pct=b.total?Math.round((b.scanned/b.total)*100):0;
+  // Bar fill goes to 100% on a forced Complete so the color and the
+  // width agree - the honest scanned/total COUNT next to it never
+  // changes, so nothing about the real progress is hidden, only the
+  // bar's fill matches the status it's now showing.
+  const pct=isForceComplete(b)?100:(b.total?Math.round((b.scanned/b.total)*100):0);
   const state=rowStatus(b);
   const risk=computeRisk(b);
   const batchNameEditable=typeof BATCH_NAME_EDITABLE!=='undefined'&&BATCH_NAME_EDITABLE;
@@ -2020,21 +2038,42 @@ function scheduleRowHtml(b){
 // Task Status is its own always-live control, independent of the row's
 // Edit/Save flow (Cut/Bending/Assembly is a quick one-off pick from the
 // shop floor, not a field someone edits alongside job name etc.) - saves
-// immediately on change, same pattern as saveMaterialStock. Complete is
-// never a selectable option: once every part in the batch is scanned, the
-// dropdown locks to a disabled "Complete" display instead - deriving it
-// from scanned===total keeps it from ever going stale like a manually-set
-// value could.
+// immediately on change, same pattern as saveMaterialStock. Real
+// (scan-derived) completion still locks the dropdown to a disabled
+// "Complete" - nothing to override once every part is genuinely
+// scanned. A batch that's NOT fully scanned still gets a "Complete
+// (Manual)" option though, for the case scanning never happened for a
+// legitimate reason (bad barcode, work done off a cart the scanner
+// never saw) - picking it is a real override (see isForceComplete),
+// not a substitute value for task_status, and picking any other stage
+// afterward clears it again.
 function taskStatusCell(b,state){
-  if(state==='complete')return`<select class="ts-select" disabled><option selected>Complete</option></select>`;
-  const val=b.task_status||'';
-  const opts=['',"Cut","Bending","Assembly"].map(v=>`<option value="${v}" ${val===v?'selected':''}>${v||'Not Started'}</option>`).join('');
-  return`<select class="ts-select" onclick="event.stopPropagation()" onchange="event.stopPropagation();saveTaskStatus('${esc(b.batch)}',this.value)">${opts}</select>`;
+  const forced=isForceComplete(b);
+  if(state==='complete'&&!forced)return`<select class="ts-select" disabled><option selected>Complete</option></select>`;
+  const val=forced?'FORCE_COMPLETE':(b.task_status||'');
+  const opts=['',"Cut","Bending","Assembly","FORCE_COMPLETE"].map(v=>{
+    const label=v===''?'Not Started':v==='FORCE_COMPLETE'?'Complete (Manual)':v;
+    return`<option value="${v}" ${val===v?'selected':''}>${esc(label)}</option>`;
+  }).join('');
+  return`<select class="ts-select${forced?' ts-forced':''}" onclick="event.stopPropagation()" onchange="event.stopPropagation();saveTaskStatus('${esc(b.batch)}',this.value)">${opts}</select>`;
 }
 async function saveTaskStatus(batch,value){
   const b=scheduleBatches.find(x=>x.batch===batch);
-  if(b)b.task_status=value; // optimistic - re-render immediately, don't wait on the round-trip
+  if(value==='FORCE_COMPLETE'){
+    const countText=b?b.scanned+'/'+b.total+' scanned':'not fully scanned';
+    if(!confirm('Mark '+batch+' Complete even though it\'s only '+countText+'?\n\nThe real scan count stays visible everywhere else — this only changes its status, and can be undone by picking a different stage.'))return;
+    const extra=Object.assign({},(b&&b.extra_fields)||{},{forceComplete:true});
+    if(b)b.extra_fields=extra; // optimistic
+    try{
+      await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'POST',body:JSON.stringify({extra_fields:extra})});
+      await loadScheduleList();
+    }catch(e){alert('Could not save — check the admin key and try again.');}
+    return;
+  }
+  const wasForced=b&&isForceComplete(b);
+  if(b){b.task_status=value;if(wasForced)b.extra_fields=Object.assign({},b.extra_fields||{},{forceComplete:false});}
   try{
+    if(wasForced)await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'POST',body:JSON.stringify({extra_fields:Object.assign({},(b&&b.extra_fields)||{},{forceComplete:false})})});
     await api('/admin/api/schedule/'+encodeURIComponent(batch)+'/task-status',{method:'POST',body:JSON.stringify({task_status:value})});
     await loadScheduleList();
   }catch(e){alert('Could not save — check the admin key and try again.');}
