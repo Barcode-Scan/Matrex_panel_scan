@@ -568,7 +568,6 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
   <div class="search-wrap">
     <div style="display:flex;gap:8px;margin-bottom:10px">
       <select id="listDatePick" class="fg-input" style="flex:1;padding:10px 14px;font-size:15px;font-weight:600"></select>
-      <button class="s-btn" id="bListDownload" type="button" style="flex-shrink:0">CSV</button>
     </div>
     <input class="search-inp" id="searchInp" placeholder="Search part name or project…" autocapitalize="characters">
   </div>
@@ -1516,13 +1515,6 @@ function populateDatePicker(){
   sel.innerHTML=availableDates().map(d=>`<option value="${d}"${d===viewDate?' selected':''}>${esc(fmtDateNice(d))}</option>`).join('');
 }
 $('listDatePick').addEventListener('change',e=>{viewDate=e.target.value;$('searchInp').value='';renderFull();});
-$('bListDownload').onclick=()=>{
-  const list=scansForDate(viewDate);
-  const b=$('bListDownload'),old=b.textContent;
-  if(!list.length){b.textContent='No scans';setTimeout(()=>b.textContent=old,1500);return;}
-  downloadBlob(buildCSVRows(list),csvName(viewDate));
-  b.textContent='Saved!';setTimeout(()=>b.textContent=old,1500);
-};
 function renderAll(){updateCounters();renderRecent();}
 
 // ── SETTINGS ──────────────────────────────────────────────

@@ -245,10 +245,9 @@
      icon+label menu rows with a hover highlight, thin dividers between
      groups - not a rounded card. */
   .colf-pop{display:none;position:fixed;z-index:50;width:280px;background:var(--white);border:1px solid #B7B7B7;border-radius:3px;box-shadow:0 4px 14px rgba(0,0,0,.22);padding:4px 0;font-size:13px;font-family:Calibri,Segoe UI,-apple-system,sans-serif;text-align:left}
-  /* Deleted Batches recycle-bin popover, anchored under its own button
-     above Export CSV - same dropdown-under-button pattern as
-     .other-dash-menu, just its own styling since not every page has
-     that one. */
+  /* Deleted Batches recycle-bin popover, anchored under its own button -
+     same dropdown-under-button pattern as .other-dash-menu, just its
+     own styling since not every page has that one. */
   .deleted-pop{display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:55;width:340px;max-height:360px;overflow-y:auto;background:var(--white);border:1px solid var(--gray-200);border-radius:var(--radius-md);box-shadow:0 8px 24px rgba(16,24,40,.14);padding:10px}
   .deleted-pop-head{font-size:11px;font-weight:800;color:var(--gray-500);text-transform:uppercase;letter-spacing:.3px;padding:2px 4px 8px;border-bottom:1px solid var(--gray-200);margin-bottom:6px}
   .deleted-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--gray-100)}
@@ -668,7 +667,6 @@
           <div id="deletedBatchesList"></div>
         </div>
       </div>
-      <button class="secondary" onclick="exportTableToCSV('scheduleTbody','production-schedule')" style="width:auto;padding:10px 18px;flex-shrink:0">Export CSV</button>
     </div>
     <div id="scheduleTotals" class="totals-bar"></div>
     <div class="sched-grid-wrap">
@@ -735,9 +733,6 @@
          shared between them) - just pre-filtered to this week's batches,
          sorted by Target Finish. No column-filter row here on purpose:
          a week's batches are already a small, narrowed-down set. -->
-    <div style="text-align:right;margin-bottom:10px">
-      <button class="secondary" onclick="exportTableToCSV('weeklyDetailList','weekly-batches')" style="width:auto;padding:10px 18px">Export CSV</button>
-    </div>
     <div id="weeklyDetailTotals" class="totals-bar"></div>
     <div class="sched-grid-wrap">
     <table class="sched-grid">
@@ -754,9 +749,6 @@
 
     <div id="weekDetailMaterial" style="display:none">
     <div class="sub" style="margin-bottom:10px">Materials still needed for this week's open batches - a batch drops off the moment it's fully scanned, so this narrows on its own as parts get scanned.</div>
-    <div style="text-align:right;margin-bottom:10px">
-      <button class="secondary" onclick="exportTableToCSV('weeklyMaterialSummary','weekly-material-demand')" style="width:auto;padding:10px 18px">Export CSV</button>
-    </div>
     <div class="sched-grid-wrap">
     <table class="sched-grid static">
       <thead>
@@ -775,7 +767,6 @@
     <div class="sub">Every open (not-yet-complete) batch, grouped by Material — total Sheet Qty still needed, how many batches are contributing, and which Jobs they belong to. For purchasing decisions before running short on stock.</div>
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <input placeholder="Search materials, jobs..." oninput="setMaterialSearch(this.value)" style="flex:1;min-width:200px">
-      <button class="secondary" onclick="exportTableToCSV('materialList','material-demand')" style="width:auto;padding:10px 18px">Export CSV</button>
     </div>
     <div class="sched-grid-wrap">
     <table class="sched-grid static">
@@ -799,7 +790,6 @@
     </div>
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <input placeholder="Search stalled batches..." oninput="setStalledSearch(this.value)" style="flex:1;min-width:200px">
-      <button class="secondary" onclick="exportTableToCSV('stalledList','stalled-batches')" style="width:auto;padding:10px 18px">Export CSV</button>
     </div>
     <div class="sched-grid-wrap">
     <table class="sched-grid">
@@ -818,7 +808,6 @@
     <div class="sub">Batches that are behind pace or overdue — under 20% complete with 70%+ of the time to Target Finish already gone, or past Target Finish and still incomplete. Same red rows as Production Schedule, surfaced here on their own.</div>
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <input placeholder="Search at-risk batches..." oninput="setRiskSearch(this.value)" style="flex:1;min-width:200px">
-      <button class="secondary" onclick="exportTableToCSV('riskList','at-risk')" style="width:auto;padding:10px 18px">Export CSV</button>
     </div>
     <div class="sched-grid-wrap">
     <table class="sched-grid">
@@ -926,7 +915,6 @@
       <input id="ctSearchJob" placeholder="Search Job..." oninput="renderCompletedTasks()" style="flex:1;min-width:130px">
       <input id="ctSearchFloor" placeholder="Search Floor / Work Order..." oninput="renderCompletedTasks()" style="flex:1;min-width:130px">
       <input id="ctSearchBatch" placeholder="Search Batch..." oninput="renderCompletedTasks()" style="flex:1;min-width:130px">
-      <button class="secondary" onclick="exportTableToCSV('completedTasksList','completed-tasks')" style="width:auto;padding:10px 18px;flex-shrink:0">Export CSV</button>
     </div>
     <div class="sched-grid-wrap">
     <table class="sched-grid">
