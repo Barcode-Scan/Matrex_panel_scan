@@ -292,13 +292,23 @@ async function lookupPart(){
 }
 $('partId').addEventListener('keydown',e=>{if(e.key==='Enter')lookupPart();});
 
+// Shared by the Part Lookup page and the Batch Labels click-through
+// modal below - both show the same index+detail shape from
+// /admin/api/parts/:id, just in two different places.
+function partStatusPillHtml(idx){
+  return idx.void==='Yes'?'<span class="pill REVOKED">VOID</span>':idx.scanned==='Yes'?'<span class="pill APPROVED">SCANNED</span>':'<span class="pill PENDING">NOT SCANNED</span>';
+}
+function partFieldsHtml(idx,d){
+  return[['Department',idx.department],['Batch',d.batch],['Sheet Name',d.sheet_name],['Project',d.project],
+    ['Floor',d.floor],['Tag',d.tag],['Type',d.part_type],['Size',[d.width,d.height].filter(Boolean).join(' X ')],
+    ['Qty',d.qty],['Colour',d.colour],['Scanned At',fmt(idx.scanned_at)],['Scanned By',idx.scanned_by_device],
+    ['Voided At',idx.void==='Yes'?fmt(idx.voided_at):'']]
+    .filter(([,v])=>v).map(([k,v])=>`<div class="field-row"><span class="field-k">${esc(k)}</span><span class="field-v">${esc(v)}</span></div>`).join('');
+}
 function renderPart(data){
   const idx=data.index,d=data.detail||{};
-  const statusPill=idx.void==='Yes'?'<span class="pill REVOKED">VOID</span>':idx.scanned==='Yes'?'<span class="pill APPROVED">SCANNED</span>':'<span class="pill PENDING">NOT SCANNED</span>';
-  const fields=[['Department',idx.department],['Batch',d.batch],['Sheet Name',d.sheet_name],['Project',d.project],
-    ['Floor',d.floor],['Tag',d.tag],['Type',d.part_type],['Size',[d.width,d.height].filter(Boolean).join(' X ')],
-    ['Qty',d.qty],['Colour',d.colour],['Scanned At',fmt(idx.scanned_at)],['Scanned By',idx.scanned_by_device]]
-    .filter(([,v])=>v).map(([k,v])=>`<div class="field-row"><span class="field-k">${esc(k)}</span><span class="field-v">${esc(v)}</span></div>`).join('');
+  const statusPill=partStatusPillHtml(idx);
+  const fields=partFieldsHtml(idx,d);
 
   $('partResult').innerHTML=`
     <div class="card" style="flex-direction:column;align-items:stretch">
@@ -313,18 +323,19 @@ function renderPart(data){
       <select id="noteCat">${NOTE_CATEGORIES.map(([v,l])=>`<option value="${v}">${esc(l)}</option>`).join('')}</select>
       <input id="noteTxt" placeholder="Details (required for Other)">
       <button onclick="addPartNote()">Add Note</button>
-      ${idx.void==='Yes'?'':'<button class="danger-solid" onclick="voidCurrentPart()">Void This Part</button>'}
+      ${idx.void==='Yes'?'<button class="secondary" onclick="unvoidCurrentPart()">Un-void This Part</button>':'<button class="danger-solid" onclick="voidCurrentPart()">Void This Part</button>'}
     </div>`;
   renderNotes(data.notes);
 }
-function renderNotes(notes){
-  $('notesArea').innerHTML=!notes.length?'<div class="empty">No notes yet.</div>':notes.map(n=>`
+function notesListHtml(notes){
+  return!notes.length?'<div class="empty">No notes yet.</div>':notes.map(n=>`
     <div class="note-card">
       <div class="note-cat">${esc(catLabel[n.category]||n.category)}</div>
       ${n.note?`<div class="note-text">${esc(n.note)}</div>`:''}
       <div class="note-meta">${esc(n.device||'admin')} · ${fmt(n.created_at)}</div>
     </div>`).join('');
 }
+function renderNotes(notes){$('notesArea').innerHTML=notesListHtml(notes);}
 async function addPartNote(){
   const category=$('noteCat').value,note=$('noteTxt').value.trim();
   if(category==='OTHER'&&!note){alert('Details are required for "Other".');return;}
@@ -337,12 +348,79 @@ async function addPartNote(){
 async function voidCurrentPart(){
   const category=$('noteCat').value,note=$('noteTxt').value.trim();
   if(category==='OTHER'&&!note){alert('Details are required for "Other".');return;}
-  if(!confirm('Void '+currentPartId+'? This flags it on every future scan and cannot be undone from this screen.'))return;
+  if(!confirm('Void '+currentPartId+'? It will be flagged on every future scan until un-voided.'))return;
   try{
     const data=await api('/admin/api/parts/void',{method:'POST',body:JSON.stringify({unique_id:currentPartId,category,note,device:'ADMIN'})});
     $('noteTxt').value='';
     lookupPart();
   }catch(e){alert('Could not void part — check the admin key and try again.');}
+}
+async function unvoidCurrentPart(){
+  if(!confirm('Un-void '+currentPartId+'? It goes back to normal - scanned stays whatever it already was, it just stops being flagged as void.'))return;
+  try{
+    await api('/admin/api/parts/unvoid',{method:'POST',body:JSON.stringify({unique_id:currentPartId})});
+    lookupPart();
+  }catch(e){alert('Could not un-void part: '+e.message);}
+}
+
+// ── BATCH LABEL DETAIL (admin.html only) — clicking any label in the
+// Batch Labels tab opens the same index+detail+notes view as Part
+// Lookup, as a modal instead of its own tab. Void/Un-void here refresh
+// both the modal (re-fetch) and the underlying label list behind it, so
+// the status dot updates immediately instead of waiting for the next
+// 4s poll.
+let labelDetailId=null;
+async function openLabelDetail(uid){
+  labelDetailId=uid;
+  $('mLabelDetail').classList.add('on');
+  $('labelDetailTitle').textContent=uid;
+  $('labelDetailBody').innerHTML='<div class="empty">Loading…</div>';
+  $('labelDetailNotes').innerHTML='';
+  $('labelDetailVoidBtn').innerHTML='';
+  try{
+    const data=await api('/admin/api/parts/'+encodeURIComponent(uid));
+    if(!data.found){$('labelDetailBody').innerHTML='<div class="empty">Not registered.</div>';return;}
+    renderLabelDetail(data);
+  }catch(e){$('labelDetailBody').innerHTML='<div class="empty">Could not load — check the admin key and try again.</div>';}
+}
+function closeLabelDetail(){$('mLabelDetail').classList.remove('on');}
+function renderLabelDetail(data){
+  const idx=data.index,d=data.detail||{};
+  $('labelDetailTitle').textContent=idx.unique_id;
+  $('labelDetailBody').innerHTML=partStatusPillHtml(idx)+'<div style="margin-top:8px">'+partFieldsHtml(idx,d)+'</div>';
+  $('labelDetailNotes').innerHTML=notesListHtml(data.notes);
+  $('labelNoteCat').innerHTML=NOTE_CATEGORIES.map(([v,l])=>`<option value="${v}">${esc(l)}</option>`).join('');
+  $('labelNoteTxt').value='';
+  $('labelDetailVoidBtn').innerHTML=idx.void==='Yes'
+    ?'<button class="secondary" onclick="unvoidLabelDetailPart()" style="width:auto">Un-void This Part</button>'
+    :'<button class="danger-solid" onclick="voidLabelDetailPart()" style="width:auto">Void This Part</button>';
+}
+async function addLabelDetailNote(){
+  const category=$('labelNoteCat').value,note=$('labelNoteTxt').value.trim();
+  if(category==='OTHER'&&!note){alert('Details are required for "Other".');return;}
+  try{
+    const data=await api('/admin/api/parts/notes',{method:'POST',body:JSON.stringify({unique_id:labelDetailId,category,note,device:'ADMIN'})});
+    $('labelNoteTxt').value='';
+    $('labelDetailNotes').innerHTML=notesListHtml(data.notes);
+  }catch(e){alert('Could not add note — check the admin key and try again.');}
+}
+async function voidLabelDetailPart(){
+  const category=$('labelNoteCat').value,note=$('labelNoteTxt').value.trim();
+  if(category==='OTHER'&&!note){alert('Details are required for "Other".');return;}
+  if(!confirm('Void '+labelDetailId+'? It will be flagged on every future scan until un-voided.'))return;
+  try{
+    await api('/admin/api/parts/void',{method:'POST',body:JSON.stringify({unique_id:labelDetailId,category,note,device:'ADMIN'})});
+    await openLabelDetail(labelDetailId);
+    if(currentLabelsBatch)viewBatchLabels(currentLabelsBatch);
+  }catch(e){alert('Could not void part — check the admin key and try again.');}
+}
+async function unvoidLabelDetailPart(){
+  if(!confirm('Un-void '+labelDetailId+'? It goes back to normal - scanned stays whatever it already was, it just stops being flagged as void.'))return;
+  try{
+    await api('/admin/api/parts/unvoid',{method:'POST',body:JSON.stringify({unique_id:labelDetailId})});
+    await openLabelDetail(labelDetailId);
+    if(currentLabelsBatch)viewBatchLabels(currentLabelsBatch);
+  }catch(e){alert('Could not un-void part: '+e.message);}
 }
 
 // ── REPORTING ────────────────────────────────────────────────
@@ -2288,8 +2366,8 @@ function labelRowsHtml(labels){
     // Already-voided labels can't be voided again (the endpoint rejects
     // it), so they get no checkbox - nothing for a bulk action to do to
     // them.
-    const cb=l.void==='Yes'?'<span style="width:16px;flex-shrink:0"></span>':`<input type="checkbox" style="flex-shrink:0" ${selectedLabelIds.has(l.unique_id)?'checked':''} onchange="toggleLabelSelect('${esc(l.unique_id)}',this.checked)">`;
-    return`<div class="bl-row">${cb}<div class="bl-dot ${dc}"></div><div class="bl-info"><div class="bl-name">${esc(l.tag||l.unique_id)}</div><div class="bl-sub">${sub?sub+' · ':''}${esc(statusText)}</div></div></div>`;
+    const cb=l.void==='Yes'?'<span style="width:16px;flex-shrink:0"></span>':`<input type="checkbox" style="flex-shrink:0" ${selectedLabelIds.has(l.unique_id)?'checked':''} onclick="event.stopPropagation()" onchange="toggleLabelSelect('${esc(l.unique_id)}',this.checked)">`;
+    return`<div class="bl-row" onclick="openLabelDetail('${esc(l.unique_id)}')" style="cursor:pointer">${cb}<div class="bl-dot ${dc}"></div><div class="bl-info"><div class="bl-name">${esc(l.tag||l.unique_id)}</div><div class="bl-sub">${sub?sub+' · ':''}${esc(statusText)}</div></div></div>`;
   }).join('');
 }
 function toggleLabelSelect(uid,checked){

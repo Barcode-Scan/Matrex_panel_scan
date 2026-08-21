@@ -933,11 +933,21 @@ app.post('/admin/api/parts/notes', requireAdmin, addNote);
 
 // ── VOID — reuses the exact same category+text reason capture as a
 // note (written to part_notes with action='VOID' so the reason has a
-// permanent record), plus flips parts_index.void='Yes'. One-directional
-// by design: un-voiding a mistake is a deliberate admin/DB action, not
-// exposed here, so voiding stays a real decision rather than a toggle.
+// permanent record), plus flips parts_index.void='Yes'. Reversible via
+// /admin/api/parts/unvoid below - admin-only, since an accidental void
+// on the floor (wrong ID typed, wrong button tapped) needs an undo, but
+// only from someone who can be trusted to use it deliberately, not
+// exposed to the device-gated /parts/void path scanners use.
 const voidPartsIndex = db.prepare(`
   UPDATE parts_index SET void='Yes', voided_at=@now, voided_by_device=@device_id
+  WHERE unique_id=@unique_id
+`);
+// void is independent of scanned (see schema.sql) - clearing it here
+// never touches parts_index.scanned, so a part that was scanned before
+// being accidentally voided comes back exactly as "scanned, not voided"
+// with nothing else to restore.
+const unvoidPartsIndex = db.prepare(`
+  UPDATE parts_index SET void='No', voided_at=NULL, voided_by_device=NULL
   WHERE unique_id=@unique_id
 `);
 
@@ -965,6 +975,17 @@ function voidPart(req, res) {
 
 app.post('/parts/void', deviceGate, voidPart);
 app.post('/admin/api/parts/void', requireAdmin, voidPart);
+
+app.post('/admin/api/parts/unvoid', requireAdmin, (req, res) => {
+  const uid = String((req.body && req.body.unique_id) || '').trim();
+  if (!uid) return res.status(400).json({ ok: false, error: 'unique_id required' });
+  const idx = getMatchIndex.get(uid);
+  if (!idx) return res.status(404).json({ ok: false, error: 'not found' });
+  if (idx.void !== 'Yes') return res.status(400).json({ ok: false, error: 'not currently voided' });
+  unvoidPartsIndex.run({ unique_id: uid });
+  logAudit(actorFrom(req), 'PART_UNVOID', uid, 'restored to scanned/non-voided');
+  res.json({ ok: true, index: getMatchIndex.get(uid), notes: listNotes.all(uid) });
+});
 
 app.get('/parts/:id/notes', (req, res) => {
   // Read-only, low-sensitivity (same data an approved device already
