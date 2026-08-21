@@ -193,10 +193,16 @@
      logo) - the border/margin that used to belong to .tabbar moved up
      onto that shared row, so .tabbar itself is just a flexible, wrapping
      row of buttons that fills whatever width is left. */
-  .tabbar{display:flex;align-items:flex-end;flex:1;min-width:0;flex-wrap:wrap;row-gap:6px}
-  .tab-btn{background:none;color:var(--gray-500);font-weight:700;padding:7px 4px;margin-right:16px;border-radius:0;border-bottom:2.5px solid transparent;font-size:13.5px}
-  .tab-btn.active{color:var(--blue-600);border-bottom-color:var(--blue-600)}
-  .tab-btn:hover{background:none}
+  .tabbar{display:flex;align-items:center;flex:1;min-width:0;flex-wrap:wrap;gap:6px}
+  /* Pill buttons instead of underlined text links - white-space:nowrap
+     keeps a label from breaking mid-word inside its own pill; when a
+     row genuinely runs out of width, the whole button wraps to the next
+     line (.tabbar's own flex-wrap) rather than the label wrapping
+     inside it. */
+  .tab-btn{background:var(--gray-100);color:var(--gray-700);font-weight:700;padding:7px 14px;margin-right:0;border-radius:var(--radius-pill);border:none;font-size:13.5px;white-space:nowrap}
+  .tab-btn.active{background:var(--blue-600);color:#fff}
+  .tab-btn:hover{background:var(--gray-200)}
+  .tab-btn.active:hover{background:var(--blue-600)}
   .sched-table{width:100%;border-collapse:collapse;margin:16px 0 12px;table-layout:fixed}
   .sched-table td{border:1px solid var(--gray-200);padding:10px 12px;font-size:13px;font-weight:600}
   .sched-table td.stc-batch{font-weight:800;font-size:15px}
@@ -419,8 +425,8 @@
 <body>
 <div id="toastContainer"></div>
 <div class="wrap">
-  <div style="display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;border-bottom:1.5px solid var(--gray-200);padding-bottom:2px;margin-bottom:14px">
-    <div style="display:flex;align-items:center;gap:9px;flex-shrink:0;padding-bottom:7px">
+  <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;border-bottom:1.5px solid var(--gray-200);padding-bottom:10px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:9px;flex-shrink:0">
       <div style="width:32px;height:32px;flex-shrink:0;border-radius:9px;background:linear-gradient(155deg,#FFFFFF,var(--blue-50));box-shadow:inset 0 0 0 1px rgba(43,89,225,.12);display:flex;align-items:center;justify-content:center">
         <svg width="17" height="17" viewBox="0 0 200 200" fill="none">
           <rect x="30" y="30" width="140" height="140" rx="6" transform="rotate(45 100 100)" stroke="#2B59E1" stroke-width="12" fill="none"/>
@@ -457,7 +463,7 @@
   </div>
 
   <div id="tabOperations" style="display:none">
-  <div class="ops-subtabbar" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1.5px solid var(--gray-200)">
+  <div class="ops-subtabbar" style="display:flex;gap:6px;margin-bottom:16px;border-bottom:1.5px solid var(--gray-200);padding-bottom:8px">
     <button class="tab-btn active" id="opsSubBtnDevices" onclick="showOpsSubTab('devices')">Device Approvals</button>
     <button class="tab-btn" id="opsSubBtnActivity" onclick="showOpsSubTab('activity')">Activity Log</button>
     <button class="tab-btn" id="opsSubBtnBoards" onclick="showOpsSubTab('boards')">Boards &amp; Admin Key</button>
@@ -719,7 +725,7 @@
       </div>
       <button class="secondary" id="bBackWeeklyDetail">&larr; All Weeks</button>
     </div>
-    <div class="ops-subtabbar" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1.5px solid var(--gray-200)">
+    <div class="ops-subtabbar" style="display:flex;gap:6px;margin-bottom:16px;border-bottom:1.5px solid var(--gray-200);padding-bottom:8px">
       <button class="tab-btn active" id="weekDetailSubBtnBatches" onclick="showWeekDetailSubTab('batches')">Batches</button>
       <button class="tab-btn" id="weekDetailSubBtnMaterial" onclick="showWeekDetailSubTab('material')">Material Requirement Summary</button>
     </div>
