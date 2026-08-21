@@ -976,16 +976,28 @@ function voidPart(req, res) {
 app.post('/parts/void', deviceGate, voidPart);
 app.post('/admin/api/parts/void', requireAdmin, voidPart);
 
-app.post('/admin/api/parts/unvoid', requireAdmin, (req, res) => {
-  const uid = String((req.body && req.body.unique_id) || '').trim();
+// Shared by both routes, same pattern as voidPart above - device-gated
+// for the phone (any approved device, same permission model voiding
+// itself already has) and admin-gated for the dashboard. No reason
+// code required here, unlike voiding: this is undoing a mistake, not
+// logging a new observation about the part.
+function unvoidPart(req, res) {
+  const { unique_id, device_id, device } = req.body || {};
+  const uid = String(unique_id || '').trim();
   if (!uid) return res.status(400).json({ ok: false, error: 'unique_id required' });
   const idx = getMatchIndex.get(uid);
   if (!idx) return res.status(404).json({ ok: false, error: 'not found' });
   if (idx.void !== 'Yes') return res.status(400).json({ ok: false, error: 'not currently voided' });
   unvoidPartsIndex.run({ unique_id: uid });
-  logAudit(actorFrom(req), 'PART_UNVOID', uid, 'restored to scanned/non-voided');
+  // A phone request identifies itself by device, not X-Actor-Name - fall
+  // back to actorFrom(req) (the admin dashboard's header) only when no
+  // device name was sent, so the audit trail shows who actually did it.
+  const actor = device || actorFrom(req);
+  logAudit(actor, 'PART_UNVOID', uid, device_id ? 'restored to scanned/non-voided (device: ' + device_id + ')' : 'restored to scanned/non-voided');
   res.json({ ok: true, index: getMatchIndex.get(uid), notes: listNotes.all(uid) });
-});
+}
+app.post('/parts/unvoid', deviceGate, unvoidPart);
+app.post('/admin/api/parts/unvoid', requireAdmin, unvoidPart);
 
 app.get('/parts/:id/notes', (req, res) => {
   // Read-only, low-sensitivity (same data an approved device already
