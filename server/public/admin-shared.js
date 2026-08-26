@@ -2389,12 +2389,43 @@ function renderLabelFilterBar(){
       <option value="No">Not Scanned</option>
     </select>`;
 }
-function renderFilteredLabels(){
+function filteredBatchLabels(){
   let rows=currentBatchLabels;
   if(labelFilters.part_type)rows=rows.filter(l=>(l.part_type||'')===labelFilters.part_type);
   if(labelFilters.scanned)rows=rows.filter(l=>l.scanned===labelFilters.scanned);
+  return rows;
+}
+function renderFilteredLabels(){
+  const rows=filteredBatchLabels();
   $('labelsContent').innerHTML=rows.length?labelRowsHtml(rows):'<div class="empty">No matches.</div>';
   renderLabelsBulkBar();
+}
+// Prints whatever's currently filtered/visible, not always the full
+// batch - if someone's narrowed the list to just "Not Scanned" before
+// printing, that's a deliberate "give me only what's still missing"
+// list, not a mistake to override. A blank checkbox column is the
+// actual point: this is for physically ticking parts off against a
+// cart while cross-checking, not just a data dump.
+function printPartList(){
+  if(!currentLabelsBatch)return;
+  const rows=filteredBatchLabels();
+  if(!rows.length){alert('Nothing to print - the current filter has no matching parts.');return;}
+  $('lpsTitle').textContent='Part List — '+currentLabelsBatch;
+  $('lpsSub').textContent=($('labelsSub').textContent||'')+' · '+rows.length+' part'+(rows.length===1?'':'s')+' · Printed '+new Date().toLocaleString();
+  $('lpsBody').innerHTML=rows.map(l=>{
+    const size=[l.width,l.height].filter(Boolean).join(' X ');
+    const status=l.void==='Yes'?'VOID':l.scanned==='Yes'?'Scanned':'Not scanned';
+    return`<tr>
+      <td style="border:1px solid #000;padding:5px 8px"></td>
+      <td style="border:1px solid #000;padding:5px 8px">${esc(l.tag||l.unique_id)}</td>
+      <td style="border:1px solid #000;padding:5px 8px">${esc(l.part_type||'')}</td>
+      <td style="border:1px solid #000;padding:5px 8px">${esc(size)}</td>
+      <td style="border:1px solid #000;padding:5px 8px;text-align:center">${esc(l.qty||'')}</td>
+      <td style="border:1px solid #000;padding:5px 8px">${esc(l.colour||'')}</td>
+      <td style="border:1px solid #000;padding:5px 8px;text-align:center">${esc(status)}</td>
+    </tr>`;
+  }).join('');
+  window.print();
 }
 function labelRowsHtml(labels){
   if(!labels.length)return'<div class="empty">No labels in this batch.</div>';
