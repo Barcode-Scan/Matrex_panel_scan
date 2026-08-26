@@ -2415,7 +2415,6 @@ function printPartList(){
   $('lpsSub').textContent=($('labelsSub').textContent||'')+' · '+rows.length+' part'+(rows.length===1?'':'s')+' · Printed '+new Date().toLocaleString();
   $('lpsBody').innerHTML=rows.map((l,i)=>{
     const size=[l.width,l.height].filter(Boolean).join(' X ');
-    const status=l.void==='Yes'?'VOID':l.scanned==='Yes'?'Scanned':'Not scanned';
     return`<tr>
       <td style="border:1px solid #000;padding:5px 8px;text-align:center">${i+1}</td>
       <td style="border:1px solid #000;padding:5px 8px">${esc(l.tag||l.unique_id)}</td>
@@ -2423,7 +2422,6 @@ function printPartList(){
       <td style="border:1px solid #000;padding:5px 8px">${esc(size)}</td>
       <td style="border:1px solid #000;padding:5px 8px;text-align:center">${esc(l.qty||'')}</td>
       <td style="border:1px solid #000;padding:5px 8px">${esc(l.colour||'')}</td>
-      <td style="border:1px solid #000;padding:5px 8px;text-align:center">${esc(status)}</td>
     </tr>`;
   }).join('');
   window.print();
