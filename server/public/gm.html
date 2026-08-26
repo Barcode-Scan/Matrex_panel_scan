@@ -127,8 +127,13 @@
   @page{size:letter;margin:0.4in}
   @media print{
     body *{visibility:hidden}
-    #tabPackingPrint,#tabPackingPrint *{visibility:visible}
+    #tabPackingPrint,#tabPackingPrint *,#labelsPrintSheet,#labelsPrintSheet *{visibility:visible}
     #tabPackingPrint{position:absolute;top:0;left:0;width:100%;margin:0;padding:0}
+    /* Normally display:none (kept out of the Batch Labels layout
+       entirely) - overridden back to visible here specifically, since
+       display:none can't be undone by the visibility:visible rule
+       above on its own. */
+    #labelsPrintSheet{display:block!important;position:absolute;top:0;left:0;width:100%;margin:0;padding:0}
     .no-print{display:none!important}
     /* Without this, the gray header bars (.ps-numbox-hdr/.ps-bar/
        .ps-sign-hdr/.ps-notes-hdr) print as blank white boxes - white
@@ -434,16 +439,50 @@
     </div>
   </div>
 
-  <div id="tabLabels" style="display:none">
+  <div id="tabLabels" class="no-print" style="display:none">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
       <div>
         <h1 id="labelsTitle">Batch Labels</h1>
         <div class="sub" id="labelsSub">Click a batch in Production Schedule to see its labels here.</div>
       </div>
-      <div id="labelsFilterBar" style="display:flex;gap:8px;flex-shrink:0"></div>
+      <div style="display:flex;gap:8px;flex-shrink:0;align-items:flex-start">
+        <button class="secondary no-print" id="bPrintPartList" onclick="printPartList()" style="width:auto;padding:10px 14px;font-size:12.5px" title="Print this batch's part list for a physical review / cross-check">&#128424; Print Part List</button>
+        <div id="labelsFilterBar" style="display:flex;gap:8px"></div>
+      </div>
     </div>
     <div id="labelsBulkBar" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;background:var(--gray-100);border:1.5px solid var(--gray-200);border-radius:10px;padding:10px 12px;margin-bottom:10px"></div>
     <div id="labelsContent"></div>
+  </div>
+
+  <!-- Off-screen normally (display:none), swapped to visible only inside
+       @media print (see .no-print/#labelsPrintSheet rules) - same
+       "print a dedicated clean sheet, not the live interactive list"
+       pattern the Packing Slip print view already uses, just without
+       needing a whole separate navigable screen since this one prints
+       straight from Batch Labels. The numbered first column is the
+       actual point of this feature - it's for someone to physically
+       count/check off parts against a cart while cross-checking, not
+       just a data dump. -->
+  <div id="labelsPrintSheet" style="display:none">
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+      <!-- Title/context rows live INSIDE thead (not as separate elements
+           above the table) specifically so they repeat on every printed
+           page - only <thead> content does that automatically; a plain
+           heading above the table only ever prints once, on page 1. -->
+      <thead>
+        <tr><th id="lpsTitle" colspan="6" style="border:none;text-align:left;padding:0 0 4px;font-size:16px;font-weight:800"></th></tr>
+        <tr><th id="lpsSub" colspan="6" style="border:none;text-align:left;padding:0 0 10px;font-size:12.5px;font-weight:600;color:#444"></th></tr>
+        <tr>
+          <th style="border:1px solid #000;padding:5px 8px;width:32px">#</th>
+          <th style="border:1px solid #000;padding:5px 8px;text-align:left">Tag</th>
+          <th style="border:1px solid #000;padding:5px 8px;text-align:left">Part Type</th>
+          <th style="border:1px solid #000;padding:5px 8px;text-align:left">Size</th>
+          <th style="border:1px solid #000;padding:5px 8px">Qty</th>
+          <th style="border:1px solid #000;padding:5px 8px;text-align:left">Colour</th>
+        </tr>
+      </thead>
+      <tbody id="lpsBody"></tbody>
+    </table>
   </div>
 
   <div id="tabWeekly" style="display:none">
