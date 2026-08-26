@@ -709,10 +709,10 @@
        "print a dedicated clean sheet, not the live interactive list"
        pattern the Packing Slip print view already uses, just without
        needing a whole separate navigable screen since this one prints
-       straight from Batch Labels. A blank checkbox column is the actual
-       point of this feature - it's for someone to physically tick off
-       each part against a cart while cross-checking, not just a data
-       dump. -->
+       straight from Batch Labels. The numbered first column is the
+       actual point of this feature - it's for someone to physically
+       count/check off parts against a cart while cross-checking, not
+       just a data dump. -->
   <div id="labelsPrintSheet" style="display:none">
     <table style="width:100%;border-collapse:collapse;font-size:12.5px">
       <!-- Title/context rows live INSIDE thead (not as separate elements
@@ -723,7 +723,7 @@
         <tr><th id="lpsTitle" colspan="7" style="border:none;text-align:left;padding:0 0 4px;font-size:16px;font-weight:800"></th></tr>
         <tr><th id="lpsSub" colspan="7" style="border:none;text-align:left;padding:0 0 10px;font-size:12.5px;font-weight:600;color:#444"></th></tr>
         <tr>
-          <th style="border:1px solid #000;padding:5px 8px;width:26px">&#10003;</th>
+          <th style="border:1px solid #000;padding:5px 8px;width:32px">#</th>
           <th style="border:1px solid #000;padding:5px 8px;text-align:left">Tag</th>
           <th style="border:1px solid #000;padding:5px 8px;text-align:left">Part Type</th>
           <th style="border:1px solid #000;padding:5px 8px;text-align:left">Size</th>

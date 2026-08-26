@@ -2403,20 +2403,21 @@ function renderFilteredLabels(){
 // Prints whatever's currently filtered/visible, not always the full
 // batch - if someone's narrowed the list to just "Not Scanned" before
 // printing, that's a deliberate "give me only what's still missing"
-// list, not a mistake to override. A blank checkbox column is the
-// actual point: this is for physically ticking parts off against a
-// cart while cross-checking, not just a data dump.
+// list, not a mistake to override. The numbered first column is the
+// actual point: this is for physically counting/checking parts off
+// against a cart while cross-checking (e.g. "check off number 14"),
+// not just a data dump.
 function printPartList(){
   if(!currentLabelsBatch)return;
   const rows=filteredBatchLabels();
   if(!rows.length){alert('Nothing to print - the current filter has no matching parts.');return;}
   $('lpsTitle').textContent='Part List — '+currentLabelsBatch;
   $('lpsSub').textContent=($('labelsSub').textContent||'')+' · '+rows.length+' part'+(rows.length===1?'':'s')+' · Printed '+new Date().toLocaleString();
-  $('lpsBody').innerHTML=rows.map(l=>{
+  $('lpsBody').innerHTML=rows.map((l,i)=>{
     const size=[l.width,l.height].filter(Boolean).join(' X ');
     const status=l.void==='Yes'?'VOID':l.scanned==='Yes'?'Scanned':'Not scanned';
     return`<tr>
-      <td style="border:1px solid #000;padding:5px 8px"></td>
+      <td style="border:1px solid #000;padding:5px 8px;text-align:center">${i+1}</td>
       <td style="border:1px solid #000;padding:5px 8px">${esc(l.tag||l.unique_id)}</td>
       <td style="border:1px solid #000;padding:5px 8px">${esc(l.part_type||'')}</td>
       <td style="border:1px solid #000;padding:5px 8px">${esc(size)}</td>
