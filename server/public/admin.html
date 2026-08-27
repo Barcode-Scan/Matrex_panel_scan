@@ -263,6 +263,16 @@
   .deleted-row-actions{display:flex;gap:6px;flex-shrink:0}
   .deleted-row-actions button{width:auto;padding:5px 10px;font-size:11.5px}
   .deleted-count-badge{background:var(--gray-200);color:var(--gray-700);font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:var(--radius-pill)}
+  /* Show/Hide Columns reuses .deleted-pop's exact shell (same popover
+     pattern, third use of it now) - only the row style inside is new. */
+  .columns-pop-row{display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:13px;color:var(--gray-900);cursor:pointer}
+  .columns-pop-row input{flex-shrink:0}
+  /* Leading select column on Production Schedule - narrow, no header
+     label (just the select-all checkbox), and the manual-flag badge
+     (row-flag-badge) rides in the same cell rather than needing its
+     own column. */
+  .gc-checkbox-col{width:34px;text-align:center;padding:6px 4px!important}
+  .row-flag-badge{margin-left:4px;font-size:11px}
   .colf-menuitem{display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;color:var(--gray-900)}
   .colf-menuitem:hover{background:var(--blue-50)}
   .colf-menuitem.disabled{color:var(--gray-400);cursor:default}
@@ -671,6 +681,13 @@
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
       <input placeholder="Search all columns..." oninput="setGlobalSearch(this.value)" style="flex:1;min-width:200px">
       <div style="position:relative;flex-shrink:0">
+        <button class="secondary" id="bColumns" onclick="toggleColumnsPanel(event)" style="width:auto;padding:10px 12px;font-size:12px">&#128203; Columns</button>
+        <div class="deleted-pop" id="columnsPopover">
+          <div class="deleted-pop-head">Show / Hide Columns</div>
+          <div id="columnsPanelList"></div>
+        </div>
+      </div>
+      <div style="position:relative;flex-shrink:0">
         <button class="secondary" id="bDeletedBatches" onclick="toggleDeletedBatchesPanel(event)" style="width:auto;padding:10px 12px;font-size:12px">&#128465; Deleted Batches<span class="deleted-count-badge" id="deletedBatchesCount" style="margin-left:6px"></span></button>
         <div class="deleted-pop" id="deletedBatchesPopover">
           <div class="deleted-pop-head">Deleted Batches</div>
@@ -678,6 +695,7 @@
         </div>
       </div>
     </div>
+    <div id="scheduleBulkBar" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;background:var(--gray-100);border:1.5px solid var(--gray-200);border-radius:10px;padding:10px 12px;margin-bottom:10px"></div>
     <div id="scheduleTotals" class="totals-bar"></div>
     <div class="sched-grid-wrap">
     <table class="sched-grid">

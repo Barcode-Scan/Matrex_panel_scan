@@ -575,14 +575,153 @@ const GRID_COLUMNS=[
   ['material','Material'],['finish','Finish'],['part_name','Part Name'],['batch','Batch Name'],
   ['status','Part Qty'],['sheet_qty','Sheet Qty'],['comment','Comment'],['task_status','Task Status']
 ];
-function renderScheduleHead(){
-  $('scheduleHeadRow').innerHTML=GRID_COLUMNS.map(([key,label])=>
-    `<th>${esc(label)}<button class="colf-btn" id="colfbtn_${key}" onclick="openColFilter(event,'${key}','${esc(label)}')">&#9660;</button></th>`
+// ── COLUMN SHOW/HIDE (Production Schedule only) — hidden via injected
+// CSS (nth-child, scoped to #tabSchedule) rather than actually omitting
+// cells from renderScheduleHead()/scheduleRowHtml(). That keeps every
+// column's index-to-key mapping (colf-btn filters, colValue, etc.)
+// completely untouched - hiding a column never risks desyncing the
+// header from the body, since both still render every cell, CSS just
+// stops one from taking up space. +2 in the nth-child math: 1 to go
+// from a 0-based array index to 1-based nth-child, +1 more because the
+// leading checkbox column (added below) isn't in GRID_COLUMNS at all.
+const LS_HIDDEN_COLUMNS='mx_hidden_schedule_columns';
+let hiddenScheduleColumns=new Set(JSON.parse(localStorage.getItem(LS_HIDDEN_COLUMNS)||'[]'));
+function applyHiddenColumnsCSS(){
+  let css='';
+  GRID_COLUMNS.forEach(([key],i)=>{
+    if(hiddenScheduleColumns.has(key)){
+      const n=i+2;
+      css+=`#tabSchedule .sched-grid th:nth-child(${n}),#tabSchedule .sched-grid td:nth-child(${n}){display:none}`;
+    }
+  });
+  let styleEl=document.getElementById('hiddenScheduleColumnsStyle');
+  if(!styleEl){styleEl=document.createElement('style');styleEl.id='hiddenScheduleColumnsStyle';document.head.appendChild(styleEl);}
+  styleEl.textContent=css;
+}
+function toggleColumnVisibility(key){
+  if(hiddenScheduleColumns.has(key))hiddenScheduleColumns.delete(key);else hiddenScheduleColumns.add(key);
+  localStorage.setItem(LS_HIDDEN_COLUMNS,JSON.stringify([...hiddenScheduleColumns]));
+  applyHiddenColumnsCSS();
+  renderColumnsPanel();
+}
+function renderColumnsPanel(){
+  const el=$('columnsPanelList');
+  if(!el)return;
+  el.innerHTML=GRID_COLUMNS.map(([key,label])=>
+    `<label class="columns-pop-row"><input type="checkbox" ${hiddenScheduleColumns.has(key)?'':'checked'} onchange="toggleColumnVisibility('${key}')"> ${esc(label)}</label>`
   ).join('');
+}
+function toggleColumnsPanel(evt){
+  evt.stopPropagation();
+  const pop=$('columnsPopover');
+  if(!pop)return;
+  if(pop.style.display==='block'){pop.style.display='none';return;}
+  renderColumnsPanel();
+  pop.style.display='block';
+}
+function closeColumnsPanel(){const pop=$('columnsPopover');if(pop)pop.style.display='none';}
+
+// ── BULK SELECT / BULK EDIT (Production Schedule only) — the leading
+// checkbox column lives outside GRID_COLUMNS entirely (it's not a real
+// schedule field), so scheduleRowHtml/renderScheduleHead both add it
+// explicitly rather than folding it into that array. showCheckbox is a
+// real parameter (not just "always on") because scheduleRowHtml is
+// also reused by Weekly Detail's table (see its own call site below),
+// which has its own static header with no matching leading <th> - a
+// checkbox cell there would desync the column count silently.
+let selectedScheduleBatches=new Set();
+let lastScheduleGridBatches=[];
+const BULK_EDIT_FIELDS=[
+  ['job_name','Job'],['floor_or_work_order','Floor or Work Order'],['target_finish','Target Finish'],
+  ['material','Material'],['finish','Finish'],['part_name','Part Name'],
+  ['sheet_qty','Sheet Qty'],['comment','Comment']
+];
+function toggleScheduleRowSelect(batch,checked){
+  checked?selectedScheduleBatches.add(batch):selectedScheduleBatches.delete(batch);
+  renderScheduleBulkBar();
+  const selectAllCb=$('scheduleSelectAll');
+  if(selectAllCb)selectAllCb.checked=lastScheduleGridBatches.length>0&&lastScheduleGridBatches.every(b=>selectedScheduleBatches.has(b.batch));
+}
+function toggleSelectAllSchedule(checked){
+  if(checked)lastScheduleGridBatches.forEach(b=>selectedScheduleBatches.add(b.batch));
+  else lastScheduleGridBatches.forEach(b=>selectedScheduleBatches.delete(b.batch));
+  renderScheduleGrid();
+}
+function clearScheduleSelection(){
+  selectedScheduleBatches=new Set();
+  renderScheduleGrid();
+}
+function renderScheduleBulkBar(){
+  const bar=$('scheduleBulkBar');
+  if(!bar)return;
+  const n=selectedScheduleBatches.size;
+  if(!n){bar.style.display='none';return;}
+  bar.style.display='flex';
+  bar.innerHTML=`
+    <span class="meta">${n} batch${n===1?'':'es'} selected</span>
+    <select id="bulkEditField">${BULK_EDIT_FIELDS.map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join('')}</select>
+    <input id="bulkEditValue" placeholder="New value" style="flex:1;min-width:140px">
+    <button onclick="applyBulkEdit()">Apply to ${n}</button>
+    <button class="secondary" onclick="clearScheduleSelection()">Clear Selection</button>`;
+}
+// Same single-key PATCH-style call commitCellEdit already uses for a
+// single cell (upsertSchedule server-side only overwrites the key
+// actually sent), just looped over every selected batch - not a new
+// write path, the exact same one, called more than once.
+async function applyBulkEdit(){
+  const field=$('bulkEditField').value;
+  const value=$('bulkEditValue').value.trim();
+  if(!value){alert('Enter a value to apply.');return;}
+  const batches=[...selectedScheduleBatches];
+  const label=(BULK_EDIT_FIELDS.find(([k])=>k===field)||[])[1]||field;
+  if(!confirm(`Set ${label} to "${value}" on ${batches.length} selected batch${batches.length===1?'':'es'}?`))return;
+  let failed=0;
+  for(const batch of batches){
+    try{await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'POST',body:JSON.stringify({[field]:value})});}
+    catch(e){failed++;}
+  }
+  selectedScheduleBatches=new Set();
+  await loadScheduleList();
+  if(failed)alert(failed+' of '+batches.length+' could not be updated - the rest went through.');
+  else showToast('✓ Updated '+batches.length+' batch'+(batches.length===1?'':'es'));
+}
+
+// ── MANUAL ROW FLAG — a second, deliberately distinct signal from risk
+// (computeRisk's red/amber/green). Kept as an icon badge rather than a
+// row color/background specifically so it never competes with risk for
+// the same visual channel - color here is spent once, on risk only,
+// same principle applied everywhere else the grid uses color. Stored
+// in extra_fields (no schema change), same pattern as isForceComplete/
+// isExpedited above.
+function isRowFlagged(b){return!!(b&&b.extra_fields&&b.extra_fields.flagged);}
+async function toggleRowFlag(batch){
+  const b=scheduleBatches.find(x=>x.batch===batch);
+  if(!b)return;
+  const newVal=!isRowFlagged(b);
+  const prevExtra=b.extra_fields;
+  const extra=Object.assign({},b.extra_fields||{},{flagged:newVal});
+  b.extra_fields=extra;
+  refreshRow(batch);
+  try{
+    await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'POST',body:JSON.stringify({extra_fields:extra})});
+  }catch(e){
+    b.extra_fields=prevExtra;
+    refreshRow(batch);
+    alert('Could not update flag: '+e.message);
+  }
+}
+
+function renderScheduleHead(){
+  $('scheduleHeadRow').innerHTML=
+    `<th class="gc-checkbox-col"><input type="checkbox" id="scheduleSelectAll" onclick="event.stopPropagation()" onchange="toggleSelectAllSchedule(this.checked)"></th>`+
+    GRID_COLUMNS.map(([key,label])=>
+      `<th>${esc(label)}<button class="colf-btn" id="colfbtn_${key}" onclick="openColFilter(event,'${key}','${esc(label)}')">&#9660;</button></th>`
+    ).join('');
+  applyHiddenColumnsCSS();
 }
 async function loadScheduleList(){
   if(!$('scheduleHeadRow').children.length)renderScheduleHead();
-  if(!KEY){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Enter the admin key to load.</td></tr>';return;}
+  if(!KEY){$('scheduleTbody').innerHTML='<tr><td colspan="12" class="empty">Enter the admin key to load.</td></tr>';return;}
   // Skip while a cell is mid-edit - a background refresh replaces the
   // grid's innerHTML wholesale, which would silently wipe out whatever's
   // typed into that cell before it's saved. Resumes on its own within
@@ -608,7 +747,7 @@ async function loadScheduleList(){
     if(currentTab==='packing')renderPackingTab();
     if(currentTab==='completed')renderCompletedTasks();
     checkCompletionAlerts();
-  }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="11" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
+  }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="12" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
 }
 
 // ── WEEKLY SCHEDULE — a read-only lens on the same scheduleBatches array
@@ -746,7 +885,7 @@ function renderWeekDetail(key){
   if($('weeklyDetailTotals'))$('weeklyDetailTotals').innerHTML=scheduleTotalsBarHtml(items);
   if(!items.length){$('weeklyDetailList').innerHTML='<tr><td colspan="11" class="empty">No batches.</td></tr>';return;}
   const sorted=[...items].sort((a,b)=>(a.target_finish||'9999-99-99').localeCompare(b.target_finish||'9999-99-99'));
-  $('weeklyDetailList').innerHTML=sorted.map(scheduleRowHtml).join('');
+  $('weeklyDetailList').innerHTML=sorted.map(b=>scheduleRowHtml(b,false)).join('');
 }
 $('bBackWeeklyDetail').onclick=()=>{currentWeekKey=null;showTab('weekly');};
 
@@ -1923,6 +2062,7 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#rowCtxMenu'))closeRowContextMenu();
   if(!e.target.closest('#otherDashMenu')&&!e.target.closest('#otherDashBtn'))closeOtherDashboards();
   if(!e.target.closest('#deletedBatchesPopover')&&!e.target.closest('#bDeletedBatches'))closeDeletedBatchesPanel();
+  if(!e.target.closest('#columnsPopover')&&!e.target.closest('#bColumns'))closeColumnsPanel();
 });
 // Not present on gm.html/damon.html/swar.html (only the main dashboard
 // links out to the others), so guarded like every other admin.html-only
@@ -1947,7 +2087,9 @@ function openRowContextMenu(evt,batch){
   evt.preventDefault();
   evt.stopPropagation();
   const menu=$('rowCtxMenu');
-  menu.innerHTML=`<div class="ctx-menu-item danger" onclick="closeRowContextMenu();deleteBatchFromGrid('${esc(batch)}')">${ICON_DELETE} Delete</div>`;
+  const b=scheduleBatches.find(x=>x.batch===batch);
+  const flagged=isRowFlagged(b);
+  menu.innerHTML=`<div class="ctx-menu-item" onclick="closeRowContextMenu();toggleRowFlag('${esc(batch)}')">${flagged?'&#128481; Remove Flag':'&#128681; Flag Row'}</div><div class="ctx-menu-item danger" onclick="closeRowContextMenu();deleteBatchFromGrid('${esc(batch)}')">${ICON_DELETE} Delete</div>`;
   menu.style.top=evt.clientY+'px';
   menu.style.left=Math.min(evt.clientX,window.innerWidth-170)+'px';
   menu.style.display='block';
@@ -2012,7 +2154,8 @@ function editableTd(b,key,isDate,extraClass){
 // click menu, same risk coloring), so the two never drift out of sync
 // with each other the way two independently-maintained copies eventually
 // would.
-function scheduleRowHtml(b){
+function scheduleRowHtml(b,showCheckbox){
+  if(showCheckbox===undefined)showCheckbox=true;
   // Bar fill goes to 100% on a forced Complete so the color and the
   // width agree - the honest scanned/total COUNT next to it never
   // changes, so nothing about the real progress is hidden, only the
@@ -2021,7 +2164,10 @@ function scheduleRowHtml(b){
   const state=rowStatus(b);
   const risk=computeRisk(b);
   const batchNameEditable=typeof BATCH_NAME_EDITABLE!=='undefined'&&BATCH_NAME_EDITABLE;
-  return`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}" onclick="handleRowClick('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')">
+  const flagged=isRowFlagged(b);
+  const checkboxCell=showCheckbox?`<td class="gc-checkbox-col" onclick="event.stopPropagation()"><input type="checkbox" ${selectedScheduleBatches.has(b.batch)?'checked':''} onchange="toggleScheduleRowSelect('${esc(b.batch)}',this.checked)">${flagged?'<span class="row-flag-badge" title="Flagged">&#128681;</span>':''}</td>`:'';
+  return`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}${flagged?' row-flagged':''}" onclick="handleRowClick('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')">
+    ${checkboxCell}
     ${editableTd(b,'job_name')}
     ${editableTd(b,'floor_or_work_order')}
     ${editableTd(b,'target_finish',true)}
@@ -2129,8 +2275,12 @@ function renderScheduleGrid(){
     if(btn)btn.classList.toggle('active',!!columnFilters[key]);
   });
   if($('scheduleTotals'))$('scheduleTotals').innerHTML=scheduleTotalsBarHtml(rows);
-  if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="11" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;return;}
-  $('scheduleTbody').innerHTML=rows.map(scheduleRowHtml).join('');
+  lastScheduleGridBatches=rows; // what "select all" actually selects - only what's currently filtered/visible
+  if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="12" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;renderScheduleBulkBar();return;}
+  $('scheduleTbody').innerHTML=rows.map(b=>scheduleRowHtml(b,true)).join('');
+  const selectAllCb=$('scheduleSelectAll');
+  if(selectAllCb)selectAllCb.checked=rows.every(b=>selectedScheduleBatches.has(b.batch));
+  renderScheduleBulkBar();
 }
 
 // Best-effort free text -> yyyy-mm-dd, for feeding an existing stored
@@ -2171,7 +2321,12 @@ function refreshRow(batch){
   const b=scheduleBatches.find(x=>x.batch===batch);
   const row=document.querySelector(`tr[data-batch="${CSS.escape(batch)}"]`);
   if(!b||!row)return;
-  row.outerHTML=scheduleRowHtml(b);
+  // Whichever row actually got found (Production Schedule or Weekly
+  // Detail - same batch can exist in both tables' DOM at once) decides
+  // whether it gets rebuilt with the leading checkbox cell, so it never
+  // ends up with a different cell count than its own table's header.
+  const inWeeklyDetail=!!row.closest('#weeklyDetailList');
+  row.outerHTML=scheduleRowHtml(b,!inWeeklyDetail);
   const newRow=document.querySelector(`tr[data-batch="${CSS.escape(batch)}"]`);
   const inp=newRow&&newRow.querySelector('.gc-input');
   if(inp){inp.focus();if(inp.select)inp.select();}
