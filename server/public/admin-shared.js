@@ -918,16 +918,20 @@ function materialDemandStats(m,items){
   let total=0,unparsed=0;
   items.forEach(b=>{const q=parseQty(b.sheet_qty);q===null?unparsed++:total+=q;});
   const jobs=[...new Set(items.map(b=>b.job_name).filter(Boolean))].sort();
+  // A material group can span batches with different finishes (e.g. ALUM
+  // Mill vs ALUM Anodized) - same "distinct values, joined" treatment as
+  // Jobs above, rather than picking just one.
+  const finishes=[...new Set(items.map(b=>b.finish).filter(Boolean))].sort();
   const onHand=materialStockCache.hasOwnProperty(m)?materialStockCache[m]:null;
   const shortfall=onHand!==null?total-onHand:null;
   const conflict=shortfall!==null&&shortfall>0;
-  return{total,unparsed,jobs,onHand,shortfall,conflict};
+  return{total,unparsed,jobs,finishes,onHand,shortfall,conflict};
 }
 // Shared table-row builder - the standalone Material Demand tab and the
-// Weekly Detail summary show the exact same columns (Material, Sheet Qty
-// Remaining, Open Batches, Jobs, On Hand, Status), just scoped to
-// different sets of batches, so there's one place that builds the actual
-// <tr> markup instead of two copies that could drift apart.
+// Weekly Detail summary show the exact same columns (Material, Finish,
+// Sheet Qty Remaining, Open Batches, Jobs, On Hand, Status), just scoped
+// to different sets of batches, so there's one place that builds the
+// actual <tr> markup instead of two copies that could drift apart.
 function materialDemandRowsHtml(items,searchQuery){
   const groups=groupByMaterial(items);
   let materials=Object.keys(groups).sort();
@@ -935,9 +939,10 @@ function materialDemandRowsHtml(items,searchQuery){
   if(!materials.length)return null;
   return materials.map(m=>{
     const mItems=groups[m];
-    const{total,unparsed,jobs,onHand,shortfall,conflict}=materialDemandStats(m,mItems);
+    const{total,unparsed,jobs,finishes,onHand,shortfall,conflict}=materialDemandStats(m,mItems);
     return`<tr>
       <td class="gc-batch">${esc(m)}</td>
+      <td>${finishes.length?esc(finishes.join(', ')):''}</td>
       <td class="gc-num">${total}${unparsed?` <span style="color:var(--gray-500);font-weight:400">(+${unparsed} unparsed)</span>`:''}</td>
       <td class="gc-num">${mItems.length}</td>
       <td>${jobs.length?esc(jobs.join(', ')):''}</td>
@@ -952,7 +957,7 @@ function materialDemandRowsHtml(items,searchQuery){
 function renderWeekMaterialSummary(items){
   const el=$('weeklyMaterialSummary');
   if(!el)return; // not every page has this section yet
-  el.innerHTML=materialDemandRowsHtml(items)||'<tr><td colspan="6" class="empty">No open batches this week — nothing currently demanding material.</td></tr>';
+  el.innerHTML=materialDemandRowsHtml(items)||'<tr><td colspan="7" class="empty">No open batches this week — nothing currently demanding material.</td></tr>';
 }
 // ── MATERIAL STOCK (Cross-Job Material Conflict Detection, Phase 4) —
 // manual on-hand qty per material, loaded once (not on the 4s poll - it
@@ -983,7 +988,7 @@ let materialSearchQuery='';
 function setMaterialSearch(v){materialSearchQuery=v.trim().toLowerCase();renderMaterialDemand();}
 function renderMaterialDemand(){
   if(!$('materialList'))return; // this tab doesn't exist on every page (gm.html) - loadMaterialStock() calls this unconditionally at boot
-  $('materialList').innerHTML=materialDemandRowsHtml(undefined,materialSearchQuery)||`<tr><td colspan="6" class="empty">${materialSearchQuery?'No matches.':'No open batches — nothing currently demanding material.'}</td></tr>`;
+  $('materialList').innerHTML=materialDemandRowsHtml(undefined,materialSearchQuery)||`<tr><td colspan="7" class="empty">${materialSearchQuery?'No matches.':'No open batches — nothing currently demanding material.'}</td></tr>`;
 }
 
 // ── THROUGHPUT & YIELD ANALYTICS — completed-batch-only metrics (nothing
