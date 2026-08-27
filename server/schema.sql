@@ -136,6 +136,23 @@ CREATE TABLE IF NOT EXISTS production_schedule (
   updated_by          TEXT
 );
 
+-- ── CUSTOM COLUMNS — admin-defined columns for Production Schedule
+-- beyond the fixed set above, stored server-side (not per-browser) so
+-- every dashboard/every admin sees the same set. Just the column
+-- DEFINITION lives here (key + display label) - the actual per-batch
+-- VALUE lives in production_schedule.extra_fields under that same key,
+-- the existing catch-all JSON column, so adding a custom column never
+-- needs a real schema migration. key is always server-generated
+-- (derived from label, prefixed 'custom_') so the client can tell a
+-- custom-column key from a real production_schedule column name just
+-- by checking the prefix.
+CREATE TABLE IF NOT EXISTS custom_columns (
+  key         TEXT PRIMARY KEY,
+  label       TEXT NOT NULL,
+  created_at  TEXT NOT NULL,
+  created_by  TEXT
+);
+
 -- ── MATERIAL STOCK — the minimal manual on-hand-qty input Phase 4 (Cross-
 -- Job Material Conflict Detection) needs, not a real inventory system: one
 -- row per material name (matching production_schedule.material free-text

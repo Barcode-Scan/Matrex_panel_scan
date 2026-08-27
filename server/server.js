@@ -512,6 +512,40 @@ app.post('/admin/api/schedule/:batch/task-status', requireAdmin, (req, res) => {
   res.json({ ok: true, batch, schedule: formatSchedule(getProductionSchedule.get(batch)) });
 });
 
+// ── CUSTOM COLUMNS — admin-defined extra columns for Production
+// Schedule (see schema.sql for why this is just a key/label definition,
+// not a place values are stored — those live in each batch's own
+// extra_fields under the same key). key is always derived here, never
+// client-supplied, specifically so it can be prefixed 'custom_' and
+// the client can tell "this is a custom column" from "this is a real
+// production_schedule column" by that prefix alone.
+const listCustomColumns = db.prepare('SELECT key, label, created_at, created_by FROM custom_columns ORDER BY created_at ASC');
+const insertCustomColumn = db.prepare('INSERT INTO custom_columns (key, label, created_at, created_by) VALUES (@key, @label, @now, @created_by)');
+const deleteCustomColumn = db.prepare('DELETE FROM custom_columns WHERE key = ?');
+
+app.get('/admin/api/custom-columns', requireAdmin, (req, res) => {
+  res.json({ ok: true, columns: listCustomColumns.all() });
+});
+app.post('/admin/api/custom-columns', requireAdmin, (req, res) => {
+  const label = String((req.body && req.body.label) || '').trim();
+  if (!label) return res.status(400).json({ ok: false, error: 'label required' });
+  const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'column';
+  const existing = new Set(listCustomColumns.all().map(c => c.key));
+  let key = 'custom_' + base, n = 2;
+  while (existing.has(key)) { key = 'custom_' + base + '_' + n; n++; }
+  const actor = actorFrom(req);
+  insertCustomColumn.run({ key, label, now: new Date().toISOString(), created_by: actor || null });
+  logAudit(actor, 'CUSTOM_COLUMN_ADD', key, label);
+  res.json({ ok: true, key, label });
+});
+app.delete('/admin/api/custom-columns/:key', requireAdmin, (req, res) => {
+  const key = String(req.params.key || '').trim();
+  if (!key) return res.status(400).json({ ok: false, error: 'key required' });
+  deleteCustomColumn.run(key);
+  logAudit(actorFrom(req), 'CUSTOM_COLUMN_REMOVE', key, 'column definition removed - values already saved on batches are untouched');
+  res.json({ ok: true });
+});
+
 // ── DELETED BATCHES (recycle bin) — see schema.sql for why this is a
 // snapshot-then-hard-delete rather than a soft-delete flag on four
 // different tables. insertDeletedBatch here; list/restore/purge routes

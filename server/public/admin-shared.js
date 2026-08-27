@@ -14,7 +14,7 @@ if($('actorName')){
   $('actorName').addEventListener('change',e=>localStorage.setItem(LS_ACTOR_NAME,e.target.value.trim()));
 }
 
-function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();loadMaterialStock();loadPackingSlips();loadDeletedBatchesCount();checkAppVersion();}
+function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();loadMaterialStock();loadPackingSlips();loadDeletedBatchesCount();checkAppVersion();loadCustomColumns();}
 
 // ── TABS ─────────────────────────────────────────────────────
 // Production Schedule is the landing view now, open to whoever has the
@@ -575,22 +575,72 @@ const GRID_COLUMNS=[
   ['material','Material'],['finish','Finish'],['part_name','Part Name'],['batch','Batch Name'],
   ['status','Part Qty'],['sheet_qty','Sheet Qty'],['comment','Comment'],['task_status','Task Status']
 ];
+// ── CUSTOM COLUMNS (Production Schedule only) — admin-defined columns
+// beyond the fixed 11, stored server-side (not just localStorage) so
+// every dashboard/every admin sees the same set, not a personal view.
+// A custom column's VALUE lives in extra_fields (no schema change,
+// same catch-all already used for forceComplete/expedite/flagged) -
+// its key is always prefixed 'custom_' server-side specifically so
+// editableTd/commitCellEdit below can tell "this key lives in
+// extra_fields" from "this is a real production_schedule column" by
+// checking the prefix alone, no separate flag threaded through
+// editingCell needed.
+let customColumns=[]; // [{key,label}], fetched once, kept in sync locally after add/remove
+async function loadCustomColumns(){
+  if(!KEY)return;
+  try{
+    const data=await api('/admin/api/custom-columns');
+    customColumns=data.columns||[];
+    renderScheduleHead();
+    if(currentTab==='schedule')renderScheduleGrid();
+  }catch(e){}
+}
+async function addCustomColumn(){
+  const input=$('newColumnName');
+  const label=((input&&input.value)||'').trim();
+  if(!label){alert('Enter a name for the new column.');return;}
+  try{
+    const data=await api('/admin/api/custom-columns',{method:'POST',body:JSON.stringify({label})});
+    customColumns.push({key:data.key,label:data.label});
+    if(input)input.value='';
+    renderScheduleHead();
+    renderColumnsPanel();
+    if(currentTab==='schedule')renderScheduleGrid();
+  }catch(e){alert('Could not add column: '+e.message);}
+}
+async function removeCustomColumn(key){
+  const col=customColumns.find(c=>c.key===key);
+  if(!confirm(`Remove the "${col?col.label:key}" column from the grid?\n\nAny values already saved under it stay on each batch's record - re-adding a column with this exact name later brings them back.`))return;
+  try{
+    await api('/admin/api/custom-columns/'+encodeURIComponent(key),{method:'DELETE'});
+    customColumns=customColumns.filter(c=>c.key!==key);
+    hiddenScheduleColumns.delete(key);
+    localStorage.setItem(LS_HIDDEN_COLUMNS,JSON.stringify([...hiddenScheduleColumns]));
+    renderScheduleHead();
+    renderColumnsPanel();
+    if(currentTab==='schedule')renderScheduleGrid();
+  }catch(e){alert('Could not remove column: '+e.message);}
+}
+function allScheduleColumns(){return GRID_COLUMNS.concat(customColumns.map(c=>[c.key,c.label]));}
+function scheduleColspan(){return GRID_COLUMNS.length+customColumns.length;}
+
 // ── COLUMN SHOW/HIDE (Production Schedule only) — hidden via injected
 // CSS (nth-child, scoped to #tabSchedule) rather than actually omitting
 // cells from renderScheduleHead()/scheduleRowHtml(). That keeps every
 // column's index-to-key mapping (colf-btn filters, colValue, etc.)
 // completely untouched - hiding a column never risks desyncing the
 // header from the body, since both still render every cell, CSS just
-// stops one from taking up space. +2 in the nth-child math: 1 to go
-// from a 0-based array index to 1-based nth-child, +1 more because the
-// leading checkbox column (added below) isn't in GRID_COLUMNS at all.
+// stops one from taking up space. Custom columns are always appended
+// after every fixed one, so their nth-child position is just their
+// place in allScheduleColumns() - no separate offset math needed for
+// them versus the fixed set.
 const LS_HIDDEN_COLUMNS='mx_hidden_schedule_columns';
 let hiddenScheduleColumns=new Set(JSON.parse(localStorage.getItem(LS_HIDDEN_COLUMNS)||'[]'));
 function applyHiddenColumnsCSS(){
   let css='';
-  GRID_COLUMNS.forEach(([key],i)=>{
+  allScheduleColumns().forEach(([key],i)=>{
     if(hiddenScheduleColumns.has(key)){
-      const n=i+2;
+      const n=i+1;
       css+=`#tabSchedule .sched-grid th:nth-child(${n}),#tabSchedule .sched-grid td:nth-child(${n}){display:none}`;
     }
   });
@@ -607,9 +657,17 @@ function toggleColumnVisibility(key){
 function renderColumnsPanel(){
   const el=$('columnsPanelList');
   if(!el)return;
-  el.innerHTML=GRID_COLUMNS.map(([key,label])=>
+  const fixedRows=GRID_COLUMNS.map(([key,label])=>
     `<label class="columns-pop-row"><input type="checkbox" ${hiddenScheduleColumns.has(key)?'':'checked'} onchange="toggleColumnVisibility('${key}')"> ${esc(label)}</label>`
   ).join('');
+  const customRows=customColumns.map(c=>
+    `<div class="columns-pop-row"><label style="flex:1;display:flex;align-items:center;gap:8px;cursor:pointer;margin:0"><input type="checkbox" ${hiddenScheduleColumns.has(c.key)?'':'checked'} onchange="toggleColumnVisibility('${c.key}')"> ${esc(c.label)}</label><button class="secondary" onclick="removeCustomColumn('${c.key}')" style="width:auto;padding:2px 8px;font-size:11px" title="Remove this column">&times;</button></div>`
+  ).join('');
+  el.innerHTML=fixedRows+customRows+
+    `<div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--gray-200)">
+      <input id="newColumnName" placeholder="New column name" style="flex:1;min-width:0;font-size:12.5px;padding:6px 8px">
+      <button onclick="addCustomColumn()" style="width:auto;padding:6px 10px;font-size:12px">Add</button>
+    </div>`;
 }
 function toggleColumnsPanel(evt){
   evt.stopPropagation();
@@ -620,71 +678,6 @@ function toggleColumnsPanel(evt){
   pop.style.display='block';
 }
 function closeColumnsPanel(){const pop=$('columnsPopover');if(pop)pop.style.display='none';}
-
-// ── BULK SELECT / BULK EDIT (Production Schedule only) — the leading
-// checkbox column lives outside GRID_COLUMNS entirely (it's not a real
-// schedule field), so scheduleRowHtml/renderScheduleHead both add it
-// explicitly rather than folding it into that array. showCheckbox is a
-// real parameter (not just "always on") because scheduleRowHtml is
-// also reused by Weekly Detail's table (see its own call site below),
-// which has its own static header with no matching leading <th> - a
-// checkbox cell there would desync the column count silently.
-let selectedScheduleBatches=new Set();
-let lastScheduleGridBatches=[];
-const BULK_EDIT_FIELDS=[
-  ['job_name','Job'],['floor_or_work_order','Floor or Work Order'],['target_finish','Target Finish'],
-  ['material','Material'],['finish','Finish'],['part_name','Part Name'],
-  ['sheet_qty','Sheet Qty'],['comment','Comment']
-];
-function toggleScheduleRowSelect(batch,checked){
-  checked?selectedScheduleBatches.add(batch):selectedScheduleBatches.delete(batch);
-  renderScheduleBulkBar();
-  const selectAllCb=$('scheduleSelectAll');
-  if(selectAllCb)selectAllCb.checked=lastScheduleGridBatches.length>0&&lastScheduleGridBatches.every(b=>selectedScheduleBatches.has(b.batch));
-}
-function toggleSelectAllSchedule(checked){
-  if(checked)lastScheduleGridBatches.forEach(b=>selectedScheduleBatches.add(b.batch));
-  else lastScheduleGridBatches.forEach(b=>selectedScheduleBatches.delete(b.batch));
-  renderScheduleGrid();
-}
-function clearScheduleSelection(){
-  selectedScheduleBatches=new Set();
-  renderScheduleGrid();
-}
-function renderScheduleBulkBar(){
-  const bar=$('scheduleBulkBar');
-  if(!bar)return;
-  const n=selectedScheduleBatches.size;
-  if(!n){bar.style.display='none';return;}
-  bar.style.display='flex';
-  bar.innerHTML=`
-    <span class="meta">${n} batch${n===1?'':'es'} selected</span>
-    <select id="bulkEditField">${BULK_EDIT_FIELDS.map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join('')}</select>
-    <input id="bulkEditValue" placeholder="New value" style="flex:1;min-width:140px">
-    <button onclick="applyBulkEdit()">Apply to ${n}</button>
-    <button class="secondary" onclick="clearScheduleSelection()">Clear Selection</button>`;
-}
-// Same single-key PATCH-style call commitCellEdit already uses for a
-// single cell (upsertSchedule server-side only overwrites the key
-// actually sent), just looped over every selected batch - not a new
-// write path, the exact same one, called more than once.
-async function applyBulkEdit(){
-  const field=$('bulkEditField').value;
-  const value=$('bulkEditValue').value.trim();
-  if(!value){alert('Enter a value to apply.');return;}
-  const batches=[...selectedScheduleBatches];
-  const label=(BULK_EDIT_FIELDS.find(([k])=>k===field)||[])[1]||field;
-  if(!confirm(`Set ${label} to "${value}" on ${batches.length} selected batch${batches.length===1?'':'es'}?`))return;
-  let failed=0;
-  for(const batch of batches){
-    try{await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'POST',body:JSON.stringify({[field]:value})});}
-    catch(e){failed++;}
-  }
-  selectedScheduleBatches=new Set();
-  await loadScheduleList();
-  if(failed)alert(failed+' of '+batches.length+' could not be updated - the rest went through.');
-  else showToast('✓ Updated '+batches.length+' batch'+(batches.length===1?'':'es'));
-}
 
 // ── MANUAL ROW FLAG — a second, deliberately distinct signal from risk
 // (computeRisk's red/amber/green). Kept as an icon badge rather than a
@@ -713,15 +706,18 @@ async function toggleRowFlag(batch){
 
 function renderScheduleHead(){
   $('scheduleHeadRow').innerHTML=
-    `<th class="gc-checkbox-col"><input type="checkbox" id="scheduleSelectAll" onclick="event.stopPropagation()" onchange="toggleSelectAllSchedule(this.checked)"></th>`+
     GRID_COLUMNS.map(([key,label])=>
       `<th>${esc(label)}<button class="colf-btn" id="colfbtn_${key}" onclick="openColFilter(event,'${key}','${esc(label)}')">&#9660;</button></th>`
-    ).join('');
+    ).join('')+
+    // Custom columns have no AutoFilter dropdown (v1) - they're plain
+    // extra_fields text, not wired into columnFilters/colValue's
+    // known-field lookup.
+    customColumns.map(c=>`<th>${esc(c.label)}</th>`).join('');
   applyHiddenColumnsCSS();
 }
 async function loadScheduleList(){
   if(!$('scheduleHeadRow').children.length)renderScheduleHead();
-  if(!KEY){$('scheduleTbody').innerHTML='<tr><td colspan="12" class="empty">Enter the admin key to load.</td></tr>';return;}
+  if(!KEY){$('scheduleTbody').innerHTML=`<tr><td colspan="${scheduleColspan()}" class="empty">Enter the admin key to load.</td></tr>`;return;}
   // Skip while a cell is mid-edit - a background refresh replaces the
   // grid's innerHTML wholesale, which would silently wipe out whatever's
   // typed into that cell before it's saved. Resumes on its own within
@@ -747,7 +743,7 @@ async function loadScheduleList(){
     if(currentTab==='packing')renderPackingTab();
     if(currentTab==='completed')renderCompletedTasks();
     checkCompletionAlerts();
-  }catch(e){$('scheduleTbody').innerHTML='<tr><td colspan="12" class="empty">Could not load — wrong key, or server unreachable.</td></tr>';}
+  }catch(e){$('scheduleTbody').innerHTML=`<tr><td colspan="${scheduleColspan()}" class="empty">Could not load — wrong key, or server unreachable.</td></tr>`;}
 }
 
 // ── WEEKLY SCHEDULE — a read-only lens on the same scheduleBatches array
@@ -2130,6 +2126,13 @@ function computeRisk(b){
   return{level,completionPct,elapsedPct,daysRemaining};
 }
 
+// A custom column's value lives at b.extra_fields[key] instead of
+// b[key] directly - keyed off the 'custom_' prefix every custom-column
+// key is guaranteed to carry (assigned server-side), so callers never
+// need to say which kind of field they're pointing at.
+function fieldValue(b,key){
+  return key.indexOf('custom_')===0?((b.extra_fields&&b.extra_fields[key])||''):(b[key]||'');
+}
 // One editable cell, as a complete <td> - shared by every sched-grid row
 // on the page (Production Schedule, Weekly Detail). Double-click anywhere
 // in the cell to edit just that field; every other cell, including the
@@ -2143,19 +2146,23 @@ function editableTd(b,key,isDate,extraClass){
   const isEditingThis=editingCell&&editingCell.batch===b.batch&&editingCell.key===key;
   const cls=extraClass?` class="${extraClass}"`:'';
   if(isEditingThis){
-    const val=isDate?toISODate(b[key]):esc(b[key]||'');
+    const val=isDate?toISODate(fieldValue(b,key)):esc(fieldValue(b,key));
     return`<td${cls}><input class="gc-input" type="${isDate?'date':'text'}" value="${val}" onclick="event.stopPropagation()" onkeydown="handleCellEditKeydown(event,'${esc(b.batch)}','${key}')" onblur="onCellInputBlur('${esc(b.batch)}','${key}')"></td>`;
   }
-  const text=esc(isDate?(toISODate(b[key])||b[key]||''):(b[key]||''));
+  const raw=fieldValue(b,key);
+  const text=esc(isDate?(toISODate(raw)||raw):raw);
   return`<td${cls} ondblclick="event.stopPropagation();startCellEdit('${esc(b.batch)}','${key}',${!!isDate})">${text}</td>`;
 }
 // One row's markup - shared by the main Production Schedule grid and
 // Weekly Detail's grid (same look, same cell-level inline edit/right-
 // click menu, same risk coloring), so the two never drift out of sync
 // with each other the way two independently-maintained copies eventually
-// would.
-function scheduleRowHtml(b,showCheckbox){
-  if(showCheckbox===undefined)showCheckbox=true;
+// would. includeCustomColumns is a real parameter (not just "always
+// on") because Weekly Detail's table has its own static header with no
+// matching trailing <th> per custom column - appending those cells
+// there too would silently desync the column count.
+function scheduleRowHtml(b,includeCustomColumns){
+  if(includeCustomColumns===undefined)includeCustomColumns=true;
   // Bar fill goes to 100% on a forced Complete so the color and the
   // width agree - the honest scanned/total COUNT next to it never
   // changes, so nothing about the real progress is hidden, only the
@@ -2165,9 +2172,8 @@ function scheduleRowHtml(b,showCheckbox){
   const risk=computeRisk(b);
   const batchNameEditable=typeof BATCH_NAME_EDITABLE!=='undefined'&&BATCH_NAME_EDITABLE;
   const flagged=isRowFlagged(b);
-  const checkboxCell=showCheckbox?`<td class="gc-checkbox-col" onclick="event.stopPropagation()"><input type="checkbox" ${selectedScheduleBatches.has(b.batch)?'checked':''} onchange="toggleScheduleRowSelect('${esc(b.batch)}',this.checked)">${flagged?'<span class="row-flag-badge" title="Flagged">&#128681;</span>':''}</td>`:'';
+  const customCells=includeCustomColumns?customColumns.map(c=>editableTd(b,c.key,false,'gc-custom')).join(''):'';
   return`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}${flagged?' row-flagged':''}" onclick="handleRowClick('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')">
-    ${checkboxCell}
     ${editableTd(b,'job_name')}
     ${editableTd(b,'floor_or_work_order')}
     ${editableTd(b,'target_finish',true)}
@@ -2179,6 +2185,7 @@ function scheduleRowHtml(b,showCheckbox){
     ${editableTd(b,'sheet_qty',false,'gc-num')}
     ${editableTd(b,'comment',false,'gc-comment')}
     <td>${taskStatusCell(b,state)}</td>
+    ${customCells}
   </tr>`;
 }
 // Task Status is its own always-live control, independent of the row's
@@ -2275,12 +2282,8 @@ function renderScheduleGrid(){
     if(btn)btn.classList.toggle('active',!!columnFilters[key]);
   });
   if($('scheduleTotals'))$('scheduleTotals').innerHTML=scheduleTotalsBarHtml(rows);
-  lastScheduleGridBatches=rows; // what "select all" actually selects - only what's currently filtered/visible
-  if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="12" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;renderScheduleBulkBar();return;}
+  if(!rows.length){$('scheduleTbody').innerHTML=`<tr><td colspan="${scheduleColspan()}" class="empty">${scheduleBatches.length?'No matches.':'No batches registered yet.'}</td></tr>`;return;}
   $('scheduleTbody').innerHTML=rows.map(b=>scheduleRowHtml(b,true)).join('');
-  const selectAllCb=$('scheduleSelectAll');
-  if(selectAllCb)selectAllCb.checked=rows.every(b=>selectedScheduleBatches.has(b.batch));
-  renderScheduleBulkBar();
 }
 
 // Best-effort free text -> yyyy-mm-dd, for feeding an existing stored
@@ -2323,8 +2326,8 @@ function refreshRow(batch){
   if(!b||!row)return;
   // Whichever row actually got found (Production Schedule or Weekly
   // Detail - same batch can exist in both tables' DOM at once) decides
-  // whether it gets rebuilt with the leading checkbox cell, so it never
-  // ends up with a different cell count than its own table's header.
+  // whether it gets rebuilt with custom-column cells, so it never ends
+  // up with a different cell count than its own table's header.
   const inWeeklyDetail=!!row.closest('#weeklyDetailList');
   row.outerHTML=scheduleRowHtml(b,!inWeeklyDetail);
   const newRow=document.querySelector(`tr[data-batch="${CSS.escape(batch)}"]`);
@@ -2377,10 +2380,19 @@ async function commitCellEdit(batch,key){
     return;
   }
 
-  const original=key==='target_finish'?(toISODate(b&&b[key])||''):String((b&&b[key])||'');
+  const isCustom=key.indexOf('custom_')===0;
+  const original=isCustom?fieldValue(b||{},key):(key==='target_finish'?(toISODate(b&&b[key])||''):String((b&&b[key])||''));
   if(value===original){refreshRow(batch);return;} // nothing actually changed - close without a network call
+  // A custom column's value is one key inside extra_fields, not a
+  // top-level field - has to go through the same read-merge-write as
+  // isForceComplete/toggleRowFlag do (the general upsert replaces
+  // extra_fields wholesale, it doesn't merge server-side), or saving
+  // this one custom value would wipe out every other extra_fields key
+  // already on the batch (forceComplete, expedite, flagged, other
+  // custom columns).
+  const body=isCustom?{extra_fields:Object.assign({},(b&&b.extra_fields)||{},{[key]:value})}:{[key]:value};
   try{
-    await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'POST',body:JSON.stringify({[key]:value})});
+    await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'POST',body:JSON.stringify(body)});
     await loadScheduleList();
   }catch(e){alert('Could not save — check the admin key and try again.');refreshRow(batch);}
 }
@@ -2657,4 +2669,5 @@ async function bulkVoidSelectedLabels(){
 // unlike a function declaration - calling this too early silently threw
 // and left the grid empty until something re-triggered it, e.g. clicking
 // the tab).
-loadScheduleList();
+loadScheduleList();
+loadCustomColumns();
