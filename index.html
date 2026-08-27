@@ -1161,15 +1161,22 @@ async function startScanner(){
   // delayBetweenScanAttempts was 0 (retry as fast as every frame decodes)
   // until iPhone 12 battery drain reports came in — a zero delay pins a
   // CPU core decoding continuously the entire time the scan screen is
-  // open, camera on or not pointed at anything. 90ms still feels instant
-  // (SCAN_COOLDOWN_MS below is 2000ms between *accepted* scans anyway, so
-  // nothing downstream is waiting on sub-frame decode latency) but cuts
+  // open, camera on or not pointed at anything. Went to 90ms first (cutting
   // decode attempts to ~11/sec instead of up to the camera's native frame
-  // rate (30-60/sec on most phones) — same decode algorithm/hints, called
-  // far less often. delayBetweenScanSuccess stays short since our own
+  // rate, 30-60/sec on most phones), then back up to 45ms (~22/sec) now
+  // that the idle auto-lock actually stops the camera after 30s of no
+  // scanning instead of just releasing the wake lock - that change alone
+  // removes most of the drain a phone sat idle used to accumulate, so
+  // this is a deliberate re-test of whether decode rate still needs to be
+  // throttled this hard during active scanning, or whether it was mostly
+  // masking the idle-drain problem. 45ms still feels instant
+  // (SCAN_COOLDOWN_MS below is 2000ms between *accepted* scans anyway, so
+  // nothing downstream is waiting on sub-frame decode latency) — same
+  // decode algorithm/hints either way, just called more often.
+  // delayBetweenScanSuccess stays short since our own
   // SCAN_COOLDOWN_MS/SAME_CODE_COOLDOWN_MS below already guard against
   // re-committing too fast or the same code twice.
-  codeReader=new ZX.BrowserMultiFormatReader(hints,{delayBetweenScanAttempts:90,delayBetweenScanSuccess:150});
+  codeReader=new ZX.BrowserMultiFormatReader(hints,{delayBetweenScanAttempts:45,delayBetweenScanSuccess:150});
 
   // Camera permission must be granted once before device labels are
   // populated — otherwise back-camera auto-detection silently fails and
@@ -1249,8 +1256,14 @@ async function runWithDevice(deviceId){
     // width/height. A barcode isn't moving - it doesn't need 30-60fps of
     // capture, sensor/ISP power scales with frame rate, and this is on
     // the whole time the scan screen is open, so it's one of the bigger
-    // battery levers available here.
-    const idealFps=15;
+    // battery levers available here. Was 15, dropped further to 8 as part
+    // of the same re-tuning pass as delayBetweenScanAttempts above (now
+    // that idle time is handled by actually stopping the camera, not
+    // just releasing the wake lock) - pushing harder on this lever
+    // specifically since it's sensor/ISP capture, the more expensive of
+    // the two axes, while easing up on decode-attempt frequency (cheap
+    // CPU work against whatever frame is already there) at the same time.
+    const idealFps=8;
     const videoConstraints=deviceId
       ?{deviceId:{exact:deviceId},width:{ideal:idealW},height:{ideal:idealH},frameRate:{ideal:idealFps}}
       :{facingMode:'environment',width:{ideal:idealW},height:{ideal:idealH},frameRate:{ideal:idealFps}};
