@@ -667,6 +667,9 @@ function renderColumnsPanel(){
     `<div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--gray-200)">
       <input id="newColumnName" placeholder="New column name" style="flex:1;min-width:0;font-size:12.5px;padding:6px 8px">
       <button onclick="addCustomColumn()" style="width:auto;padding:6px 10px;font-size:12px">Add</button>
+    </div>
+    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--gray-200)">
+      <button class="secondary" onclick="resetGridCustomization()" style="width:100%;padding:6px 10px;font-size:12px">Reset column widths, row heights &amp; alignment</button>
     </div>`;
 }
 function toggleColumnsPanel(evt){
@@ -678,6 +681,123 @@ function toggleColumnsPanel(evt){
   pop.style.display='block';
 }
 function closeColumnsPanel(){const pop=$('columnsPopover');if(pop)pop.style.display='none';}
+
+// ── COLUMN WIDTH RESIZE — drag the handle on a header's right edge,
+// same interaction as Excel. Per-browser (localStorage), not shared
+// server-side like custom columns - this is a personal display
+// preference (screen size/zoom vary per admin), same treatment as
+// hiddenScheduleColumns. Applied the same way hidden columns are: CSS
+// injected by nth-child position off allScheduleColumns()'s order, so
+// it never has to touch renderScheduleHead()/scheduleRowHtml()'s actual
+// cell generation - just constrains the width of whichever position a
+// resized column happens to occupy.
+const LS_COLUMN_WIDTHS='mx_schedule_column_widths';
+let columnWidths=JSON.parse(localStorage.getItem(LS_COLUMN_WIDTHS)||'{}');
+const COL_MIN_WIDTH=40,COL_MAX_WIDTH=600;
+function applyColumnWidthsCSS(){
+  let css='';
+  allScheduleColumns().forEach(([key],i)=>{
+    const w=columnWidths[key];
+    if(w){
+      const n=i+1;
+      css+=`#tabSchedule .sched-grid th:nth-child(${n}),#tabSchedule .sched-grid td:nth-child(${n}){width:${w}px;max-width:${w}px}`;
+    }
+  });
+  let styleEl=document.getElementById('columnWidthsStyle');
+  if(!styleEl){styleEl=document.createElement('style');styleEl.id='columnWidthsStyle';document.head.appendChild(styleEl);}
+  styleEl.textContent=css;
+}
+let colResize=null; // {key, startX, startWidth}
+function startColumnResize(evt,key){
+  evt.preventDefault();
+  evt.stopPropagation();
+  const th=evt.target.closest('th');
+  const startWidth=columnWidths[key]||(th?th.offsetWidth:100);
+  colResize={key,startX:evt.clientX,startWidth};
+  evt.target.classList.add('mx-resizing');
+}
+
+// ── ROW HEIGHT RESIZE — drag the handle at the bottom of a row's first
+// cell (there's no row-number gutter to grab, per the checkbox column's
+// removal, so the handle lives inside that cell instead). Same
+// per-browser localStorage treatment as column width. Keyed by batch,
+// not row position, so it survives sorting/filtering/re-renders, and -
+// since Weekly Detail renders the same batches through this same
+// scheduleRowHtml() - a resized row looks the same size in both places
+// rather than needing two independent settings.
+const LS_ROW_HEIGHTS='mx_schedule_row_heights';
+let rowHeights=JSON.parse(localStorage.getItem(LS_ROW_HEIGHTS)||'{}');
+const ROW_MIN_HEIGHT=24,ROW_MAX_HEIGHT=300;
+let rowResize=null; // {batch, startY, startHeight, row}
+function startRowResize(evt,batch){
+  evt.preventDefault();
+  evt.stopPropagation();
+  const row=evt.target.closest('tr');
+  const startHeight=rowHeights[batch]||(row?row.offsetHeight:32);
+  rowResize={batch,startY:evt.clientY,startHeight,row};
+  evt.target.classList.add('mx-resizing');
+}
+document.addEventListener('mousemove',evt=>{
+  if(colResize){
+    const delta=evt.clientX-colResize.startX;
+    const w=Math.max(COL_MIN_WIDTH,Math.min(COL_MAX_WIDTH,colResize.startWidth+delta));
+    columnWidths[colResize.key]=w;
+    applyColumnWidthsCSS();
+  }
+  if(rowResize){
+    const delta=evt.clientY-rowResize.startY;
+    const h=Math.max(ROW_MIN_HEIGHT,Math.min(ROW_MAX_HEIGHT,rowResize.startHeight+delta));
+    rowHeights[rowResize.batch]=h;
+    if(rowResize.row)rowResize.row.style.height=h+'px';
+  }
+});
+document.addEventListener('mouseup',()=>{
+  if(colResize){
+    localStorage.setItem(LS_COLUMN_WIDTHS,JSON.stringify(columnWidths));
+    document.querySelectorAll('.col-resize-handle.mx-resizing').forEach(el=>el.classList.remove('mx-resizing'));
+    colResize=null;
+  }
+  if(rowResize){
+    localStorage.setItem(LS_ROW_HEIGHTS,JSON.stringify(rowHeights));
+    document.querySelectorAll('.row-resize-handle.mx-resizing').forEach(el=>el.classList.remove('mx-resizing'));
+    rowResize=null;
+  }
+});
+
+// ── CELL ALIGNMENT — per-cell, not per-column (a Qty column might still
+// want one particular cell called out differently), set from the same
+// right-click menu the row already has for Flag/Delete - openRowContext
+// Menu below now also looks at which specific <td> was clicked. Stored
+// as "batch:key" -> 'left'|'center'|'right', per-browser like the two
+// settings above, applied as a plain inline text-align style so it
+// always wins over the grid's own centered default with no specificity
+// fights.
+const LS_CELL_ALIGN='mx_schedule_cell_align';
+let cellAlign=JSON.parse(localStorage.getItem(LS_CELL_ALIGN)||'{}');
+function cellAlignStyle(b,key){
+  const a=cellAlign[b.batch+':'+key];
+  return a?`text-align:${a}`:'';
+}
+function setCellAlign(batch,key,align){
+  const k=batch+':'+key;
+  if(align)cellAlign[k]=align;else delete cellAlign[k];
+  localStorage.setItem(LS_CELL_ALIGN,JSON.stringify(cellAlign));
+  refreshRow(batch);
+}
+// The one blanket "put it back the way it was" escape hatch for all
+// three settings above, reachable from the Columns popover alongside
+// show/hide - column show/hide and custom columns themselves are a
+// separate concern and aren't touched by this.
+function resetGridCustomization(){
+  if(!confirm('Reset all column widths, row heights, and cell alignment back to default?\n\nColumn show/hide and custom columns are not affected.'))return;
+  columnWidths={};rowHeights={};cellAlign={};
+  localStorage.removeItem(LS_COLUMN_WIDTHS);
+  localStorage.removeItem(LS_ROW_HEIGHTS);
+  localStorage.removeItem(LS_CELL_ALIGN);
+  applyColumnWidthsCSS();
+  if(currentTab==='schedule')renderScheduleGrid();
+  if(currentTab==='weekly'&&currentWeekKey)renderWeekDetail(currentWeekKey);
+}
 
 // ── MANUAL ROW FLAG — a second, deliberately distinct signal from risk
 // (computeRisk's red/amber/green). Kept as an icon badge rather than a
@@ -707,13 +827,14 @@ async function toggleRowFlag(batch){
 function renderScheduleHead(){
   $('scheduleHeadRow').innerHTML=
     GRID_COLUMNS.map(([key,label])=>
-      `<th>${esc(label)}<button class="colf-btn" id="colfbtn_${key}" onclick="openColFilter(event,'${key}','${esc(label)}')">&#9660;</button></th>`
+      `<th>${esc(label)}<button class="colf-btn" id="colfbtn_${key}" onclick="openColFilter(event,'${key}','${esc(label)}')">&#9660;</button><div class="col-resize-handle" onmousedown="startColumnResize(event,'${key}')" title="Drag to resize"></div></th>`
     ).join('')+
     // Custom columns have no AutoFilter dropdown (v1) - they're plain
     // extra_fields text, not wired into columnFilters/colValue's
-    // known-field lookup.
-    customColumns.map(c=>`<th>${esc(c.label)}</th>`).join('');
+    // known-field lookup. Still resizable, same as every fixed column.
+    customColumns.map(c=>`<th>${esc(c.label)}<div class="col-resize-handle" onmousedown="startColumnResize(event,'${c.key}')" title="Drag to resize"></div></th>`).join('');
   applyHiddenColumnsCSS();
+  applyColumnWidthsCSS();
 }
 async function loadScheduleList(){
   if(!$('scheduleHeadRow').children.length)renderScheduleHead();
@@ -2083,14 +2204,25 @@ document.addEventListener('contextmenu',e=>{
 });
 // Right-click a Production Schedule row to delete it - editing now
 // happens per-cell (double-click a field), so there's no more row-wide
-// "Edit" mode for this menu to toggle into/out of.
+// "Edit" mode for this menu to toggle into/out of. When the right-click
+// landed inside a specific cell (data-col, set by editableTd/the fixed
+// cells in scheduleRowHtml), the menu also offers per-cell text
+// alignment - Excel-style, but scoped to just that one cell rather than
+// a selected range, since row/range selection was removed.
 function openRowContextMenu(evt,batch){
   evt.preventDefault();
   evt.stopPropagation();
   const menu=$('rowCtxMenu');
   const b=scheduleBatches.find(x=>x.batch===batch);
   const flagged=isRowFlagged(b);
-  menu.innerHTML=`<div class="ctx-menu-item" onclick="closeRowContextMenu();toggleRowFlag('${esc(batch)}')">${flagged?'&#128481; Remove Flag':'&#128681; Flag Row'}</div><div class="ctx-menu-item danger" onclick="closeRowContextMenu();deleteBatchFromGrid('${esc(batch)}')">${ICON_DELETE} Delete</div>`;
+  const cellTd=evt.target&&evt.target.closest?evt.target.closest('td[data-col]'):null;
+  const colKey=cellTd?cellTd.getAttribute('data-col'):null;
+  const alignItems=colKey?`
+    <div class="ctx-menu-item" onclick="closeRowContextMenu();setCellAlign('${esc(batch)}','${colKey}','left')">&#8676; Align Left</div>
+    <div class="ctx-menu-item" onclick="closeRowContextMenu();setCellAlign('${esc(batch)}','${colKey}','center')">&#8646; Align Center</div>
+    <div class="ctx-menu-item" onclick="closeRowContextMenu();setCellAlign('${esc(batch)}','${colKey}','right')">&#8677; Align Right</div>
+    <div class="ctx-menu-divider"></div>`:'';
+  menu.innerHTML=alignItems+`<div class="ctx-menu-item" onclick="closeRowContextMenu();toggleRowFlag('${esc(batch)}')">${flagged?'&#128481; Remove Flag':'&#128681; Flag Row'}</div><div class="ctx-menu-item danger" onclick="closeRowContextMenu();deleteBatchFromGrid('${esc(batch)}')">${ICON_DELETE} Delete</div>`;
   menu.style.top=evt.clientY+'px';
   menu.style.left=Math.min(evt.clientX,window.innerWidth-170)+'px';
   menu.style.display='block';
@@ -2147,16 +2279,22 @@ function fieldValue(b,key){
 // both end up stored, and showed up raw before. Falls back to the
 // original string if it can't be parsed, so nothing ever goes blank over
 // a format toISODate doesn't recognize.
-function editableTd(b,key,isDate,extraClass){
+function editableTd(b,key,isDate,extraClass,includeRowHandle){
   const isEditingThis=editingCell&&editingCell.batch===b.batch&&editingCell.key===key;
   const cls=extraClass?` class="${extraClass}"`:'';
+  const alignCss=cellAlignStyle(b,key);
+  const styleAttr=alignCss?` style="${alignCss}"`:'';
+  // Only the row's first cell carries the row-resize handle - see the
+  // ROW HEIGHT RESIZE section above for why it lives here instead of a
+  // dedicated gutter column.
+  const handleHtml=includeRowHandle?`<div class="row-resize-handle" onmousedown="startRowResize(event,'${esc(b.batch)}')" title="Drag to resize row"></div>`:'';
   if(isEditingThis){
     const val=isDate?toISODate(fieldValue(b,key)):esc(fieldValue(b,key));
-    return`<td${cls}><input class="gc-input" type="${isDate?'date':'text'}" value="${val}" onclick="event.stopPropagation()" onkeydown="handleCellEditKeydown(event,'${esc(b.batch)}','${key}')" onblur="onCellInputBlur('${esc(b.batch)}','${key}')"></td>`;
+    return`<td${cls}${styleAttr} data-col="${key}"><input class="gc-input" type="${isDate?'date':'text'}" value="${val}" onclick="event.stopPropagation()" onkeydown="handleCellEditKeydown(event,'${esc(b.batch)}','${key}')" onblur="onCellInputBlur('${esc(b.batch)}','${key}')">${handleHtml}</td>`;
   }
   const raw=fieldValue(b,key);
   const text=esc(isDate?(toISODate(raw)||raw):raw);
-  return`<td${cls} ondblclick="event.stopPropagation();startCellEdit('${esc(b.batch)}','${key}',${!!isDate})">${text}</td>`;
+  return`<td${cls}${styleAttr} data-col="${key}" ondblclick="event.stopPropagation();startCellEdit('${esc(b.batch)}','${key}',${!!isDate})">${text}${handleHtml}</td>`;
 }
 // One row's markup - shared by the main Production Schedule grid and
 // Weekly Detail's grid (same look, same cell-level inline edit/right-
@@ -2178,18 +2316,22 @@ function scheduleRowHtml(b,includeCustomColumns){
   const batchNameEditable=typeof BATCH_NAME_EDITABLE!=='undefined'&&BATCH_NAME_EDITABLE;
   const flagged=isRowFlagged(b);
   const customCells=includeCustomColumns?customColumns.map(c=>editableTd(b,c.key,false,'gc-custom')).join(''):'';
-  return`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}${flagged?' row-flagged':''}" onclick="handleRowClick('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')">
-    ${editableTd(b,'job_name')}
+  const rowHeightStyle=rowHeights[b.batch]?` style="height:${rowHeights[b.batch]}px"`:'';
+  const batchAlign=cellAlignStyle(b,'batch'),batchAlignAttr=batchAlign?` style="${batchAlign}"`:'';
+  const statusAlign=cellAlignStyle(b,'status'),statusAlignAttr=statusAlign?` style="${statusAlign}"`:'';
+  const taskAlign=cellAlignStyle(b,'task_status'),taskAlignAttr=taskAlign?` style="${taskAlign}"`:'';
+  return`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}${flagged?' row-flagged':''}" onclick="handleRowClick('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')"${rowHeightStyle}>
+    ${editableTd(b,'job_name',false,null,true)}
     ${editableTd(b,'floor_or_work_order')}
     ${editableTd(b,'target_finish',true)}
     ${editableTd(b,'material')}
     ${editableTd(b,'finish')}
     ${editableTd(b,'part_name')}
-    ${batchNameEditable?editableTd(b,'batch',false,'gc-batch'):`<td class="gc-batch">${esc(b.batch)}</td>`}
-    <td><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${b.scanned}/${b.total}</div></div></td>
+    ${batchNameEditable?editableTd(b,'batch',false,'gc-batch'):`<td class="gc-batch" data-col="batch"${batchAlignAttr}>${esc(b.batch)}</td>`}
+    <td data-col="status"${statusAlignAttr}><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${b.scanned}/${b.total}</div></div></td>
     ${editableTd(b,'sheet_qty',false,'gc-num')}
     ${editableTd(b,'comment',false,'gc-comment')}
-    <td>${taskStatusCell(b,state)}</td>
+    <td data-col="task_status"${taskAlignAttr}>${taskStatusCell(b,state)}</td>
     ${customCells}
   </tr>`;
 }
