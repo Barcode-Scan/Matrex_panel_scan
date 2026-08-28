@@ -2296,16 +2296,57 @@ function editableTd(b,key,isDate,extraClass,includeRowHandle){
   const text=esc(isDate?(toISODate(raw)||raw):raw);
   return`<td${cls}${styleAttr} data-col="${key}" ondblclick="event.stopPropagation();startCellEdit('${esc(b.batch)}','${key}',${!!isDate})">${text}${handleHtml}</td>`;
 }
-// One row's markup - shared by the main Production Schedule grid and
+// ── MULTI-MATERIAL SPLIT ROWS — the Excel form's "MULTIPLE MATERIAL"
+// section stores one pipe-joined string per field (material/finish/
+// sheet_qty), one entry per material row on the form (JoinRows in the
+// VBA macro is what produces these " | "-joined strings) - shown here
+// as one <tr> per entry instead of a single row hiding the whole
+// breakdown behind one cell reading "ALUM | STEEL". Everything that
+// ISN'T material/finish/sheet-qty is batch-level, not per-material
+// (Job, Floor, Comment, Task Status, the progress bar...), so it only
+// renders on the group's first row; the rest render blank, same
+// grouped-outline look a spreadsheet gives repeated values. Read-only
+// for now - double-click-to-edit on a split Material/Finish/Sheet Qty
+// cell only makes sense once there's a real per-entry write-back
+// instead of one shared pipe-joined string, which isn't built yet.
+function splitPipeField(v){
+  const parts=String(v||'').split('|').map(s=>s.trim());
+  return parts.length?parts:[''];
+}
+function readOnlyTd(b,key,text,extraClass){
+  const cls=extraClass?` class="${extraClass}"`:'';
+  const alignCss=cellAlignStyle(b,key);
+  const styleAttr=alignCss?` style="${alignCss}"`:'';
+  return`<td${cls}${styleAttr} data-col="${key}">${esc(text)}</td>`;
+}
+// The blank stand-in for a batch-level column on every split row after
+// the first. rowHandleBatch is only ever passed for the row's first
+// cell (job_name's position) so every sub-row of a split group can
+// still be grabbed to resize - rowHeights is keyed by batch, not by
+// sub-row, so dragging any of them moves the whole group together.
+function blankTd(key,extraClass,rowHandleBatch){
+  const cls=extraClass?` class="${extraClass}"`:'';
+  const handleHtml=rowHandleBatch?`<div class="row-resize-handle" onmousedown="startRowResize(event,'${esc(rowHandleBatch)}')" title="Drag to resize row"></div>`:'';
+  return`<td${cls} data-col="${key}">${handleHtml}</td>`;
+}
+// One batch's markup - shared by the main Production Schedule grid and
 // Weekly Detail's grid (same look, same cell-level inline edit/right-
 // click menu, same risk coloring), so the two never drift out of sync
 // with each other the way two independently-maintained copies eventually
 // would. includeCustomColumns is a real parameter (not just "always
 // on") because Weekly Detail's table has its own static header with no
 // matching trailing <th> per custom column - appending those cells
-// there too would silently desync the column count.
+// there too would silently desync the column count. Returns ONE <tr>
+// for an ordinary batch, or several concatenated <tr>s for a multi-
+// material batch (see MULTI-MATERIAL SPLIT ROWS above) - callers that
+// just do rows.map(scheduleRowHtml).join('') don't need to know which.
 function scheduleRowHtml(b,includeCustomColumns){
   if(includeCustomColumns===undefined)includeCustomColumns=true;
+  const materials=splitPipeField(fieldValue(b,'material'));
+  const finishes=splitPipeField(fieldValue(b,'finish'));
+  const qtys=splitPipeField(fieldValue(b,'sheet_qty'));
+  const rowCount=Math.max(materials.length,finishes.length,qtys.length);
+  const split=rowCount>1;
   // Bar fill goes to 100% on a forced Complete so the color and the
   // width agree - the honest scanned/total COUNT next to it never
   // changes, so nothing about the real progress is hidden, only the
@@ -2315,25 +2356,44 @@ function scheduleRowHtml(b,includeCustomColumns){
   const risk=computeRisk(b);
   const batchNameEditable=typeof BATCH_NAME_EDITABLE!=='undefined'&&BATCH_NAME_EDITABLE;
   const flagged=isRowFlagged(b);
-  const customCells=includeCustomColumns?customColumns.map(c=>editableTd(b,c.key,false,'gc-custom')).join(''):'';
   const rowHeightStyle=rowHeights[b.batch]?` style="height:${rowHeights[b.batch]}px"`:'';
   const batchAlign=cellAlignStyle(b,'batch'),batchAlignAttr=batchAlign?` style="${batchAlign}"`:'';
   const statusAlign=cellAlignStyle(b,'status'),statusAlignAttr=statusAlign?` style="${statusAlign}"`:'';
   const taskAlign=cellAlignStyle(b,'task_status'),taskAlignAttr=taskAlign?` style="${taskAlign}"`:'';
-  return`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}${flagged?' row-flagged':''}" onclick="handleRowClick('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')"${rowHeightStyle}>
-    ${editableTd(b,'job_name',false,null,true)}
-    ${editableTd(b,'floor_or_work_order')}
-    ${editableTd(b,'target_finish',true)}
-    ${editableTd(b,'material')}
-    ${editableTd(b,'finish')}
-    ${editableTd(b,'part_name')}
-    ${batchNameEditable?editableTd(b,'batch',false,'gc-batch'):`<td class="gc-batch" data-col="batch"${batchAlignAttr}>${esc(b.batch)}</td>`}
-    <td data-col="status"${statusAlignAttr}><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${b.scanned}/${b.total}</div></div></td>
-    ${editableTd(b,'sheet_qty',false,'gc-num')}
-    ${editableTd(b,'comment',false,'gc-comment')}
-    <td data-col="task_status"${taskAlignAttr}>${taskStatusCell(b,state)}</td>
+
+  let out='';
+  for(let i=0;i<rowCount;i++){
+    const isFirst=i===0;
+    const customCells=includeCustomColumns?customColumns.map(c=>isFirst?editableTd(b,c.key,false,'gc-custom'):blankTd(c.key,'gc-custom')).join(''):'';
+    const jobCell=isFirst?editableTd(b,'job_name',false,null,true):blankTd('job_name',null,b.batch);
+    const floorCell=isFirst?editableTd(b,'floor_or_work_order'):blankTd('floor_or_work_order');
+    const finishDateCell=isFirst?editableTd(b,'target_finish',true):blankTd('target_finish');
+    const materialCell=split?readOnlyTd(b,'material',materials[i]||''):editableTd(b,'material');
+    const finishCell=split?readOnlyTd(b,'finish',finishes[i]||''):editableTd(b,'finish');
+    const partNameCell=isFirst?editableTd(b,'part_name'):blankTd('part_name');
+    const batchCell=isFirst
+      ?(batchNameEditable?editableTd(b,'batch',false,'gc-batch'):`<td class="gc-batch" data-col="batch"${batchAlignAttr}>${esc(b.batch)}</td>`)
+      :blankTd('batch','gc-batch');
+    const statusCell=isFirst?`<td data-col="status"${statusAlignAttr}><div class="gc-progress"><div class="gc-progress-track"><div class="gc-progress-fill ${state}" style="width:${pct}%"></div></div><div class="gc-count">${b.scanned}/${b.total}</div></div></td>`:blankTd('status');
+    const qtyCell=split?readOnlyTd(b,'sheet_qty',qtys[i]||'','gc-num'):editableTd(b,'sheet_qty',false,'gc-num');
+    const commentCell=isFirst?editableTd(b,'comment',false,'gc-comment'):blankTd('comment','gc-comment');
+    const taskCell=isFirst?`<td data-col="task_status"${taskAlignAttr}>${taskStatusCell(b,state)}</td>`:blankTd('task_status');
+    out+=`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}${flagged&&isFirst?' row-flagged':''}" onclick="handleRowClick('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')"${rowHeightStyle}>
+    ${jobCell}
+    ${floorCell}
+    ${finishDateCell}
+    ${materialCell}
+    ${finishCell}
+    ${partNameCell}
+    ${batchCell}
+    ${statusCell}
+    ${qtyCell}
+    ${commentCell}
+    ${taskCell}
     ${customCells}
   </tr>`;
+  }
+  return out;
 }
 // Task Status is its own always-live control, independent of the row's
 // Edit/Save flow (Cut/Bending/Assembly is a quick one-off pick from the
@@ -2469,16 +2529,22 @@ let cellEditCancelling=false;
 // of the grid, scroll position, and any other row's state untouched.
 function refreshRow(batch){
   const b=scheduleBatches.find(x=>x.batch===batch);
-  const row=document.querySelector(`tr[data-batch="${CSS.escape(batch)}"]`);
-  if(!b||!row)return;
-  // Whichever row actually got found (Production Schedule or Weekly
-  // Detail - same batch can exist in both tables' DOM at once) decides
-  // whether it gets rebuilt with custom-column cells, so it never ends
-  // up with a different cell count than its own table's header.
-  const inWeeklyDetail=!!row.closest('#weeklyDetailList');
-  row.outerHTML=scheduleRowHtml(b,!inWeeklyDetail);
-  const newRow=document.querySelector(`tr[data-batch="${CSS.escape(batch)}"]`);
-  const inp=newRow&&newRow.querySelector('.gc-input');
+  // A multi-material batch renders as MORE THAN ONE <tr> (see MULTI-
+  // MATERIAL SPLIT ROWS above scheduleRowHtml) - has to find/replace
+  // the whole group, not just the first row it finds, or a material-row
+  // count change would leave stale extra rows behind.
+  const rows=document.querySelectorAll(`tr[data-batch="${CSS.escape(batch)}"]`);
+  if(!b||!rows.length)return;
+  // Whichever table these rows actually came from (Production Schedule
+  // or Weekly Detail - same batch can exist in both tables' DOM at
+  // once) decides whether the group gets rebuilt with custom-column
+  // cells, so it never ends up with a different cell count than its own
+  // table's header.
+  const inWeeklyDetail=!!rows[0].closest('#weeklyDetailList');
+  rows[0].outerHTML=scheduleRowHtml(b,!inWeeklyDetail);
+  for(let i=1;i<rows.length;i++){if(rows[i]&&rows[i].parentNode)rows[i].remove();}
+  const newRows=document.querySelectorAll(`tr[data-batch="${CSS.escape(batch)}"]`);
+  const inp=newRows[0]&&newRows[0].querySelector('.gc-input');
   if(inp){inp.focus();if(inp.select)inp.select();}
 }
 function startCellEdit(batch,key,isDate){
