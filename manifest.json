@@ -1,7 +1,7 @@
 {
-  "name": "Matrex Panel Scan",
-  "short_name": "Matrex Scan",
-  "description": "Internal PDF417 panel-scanning tool for Matrex Window Systems",
+  "name": "Barcode Scan",
+  "short_name": "Barcode Scan",
+  "description": "PDF417/QR barcode scanning tool",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

@@ -127,7 +127,7 @@ app.get('/health', (req, res) => res.json({ ok: true, time: new Date().toISOStri
 app.get('/', (req, res) => {
   const url = `${req.protocol}://${req.hostname}`;
   res.type('html').send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Matrex Scan Receiver</title>
+<title>Barcode Scan Receiver</title>
 <style>
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F5F5F7;color:#111827;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
   .card{background:#fff;border:1.5px solid #E5E7EB;border-radius:16px;padding:28px 24px;max-width:360px;width:100%}
@@ -138,7 +138,7 @@ app.get('/', (req, res) => {
   button.copied{background:#16A34A}
 </style></head><body>
 <div class="card">
-  <h1>Matrex Scan Receiver</h1>
+  <h1>Barcode Scan Receiver</h1>
   <p>Paste this into the app's Settings &gt; Receiver URL field.</p>
   <div class="url" id="u">${url}</div>
   <button id="b" onclick="navigator.clipboard.writeText(document.getElementById('u').textContent).then(()=>{const b=document.getElementById('b');b.textContent='Copied';b.classList.add('copied');}).catch(()=>{})">Copy</button>

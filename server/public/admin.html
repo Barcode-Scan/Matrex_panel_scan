@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Matrex — Main Dashboard</title>
+<title>Barcode — Admin Dashboard</title>
 <link rel="manifest" href="manifest-admin.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<meta name="theme-color" content="#2B59E1">
+<meta name="theme-color" content="#0071E3">
 <style>
-  :root{--bg:#F5F6FA;--white:#fff;--gray-200:#E4E7EC;--gray-500:#667085;--gray-900:#101828;
-    --blue-600:#2B59E1;--blue-50:#E8F0FE;--green-700:#027A48;--green-50:#ECFDF3;--green-100:#D1FADF;
-    --red-600:#D92D20;--red-50:#FEF3F2;--red-100:#FEE4E2;--amber-700:#B54708;--amber-50:#FFFAEB;
-    --radius-sm:4px;--radius-md:8px;--radius-lg:12px;--radius-pill:100px;--gray-100:#EEF0F3;
-    --gray-300:#D0D5DD;--gray-700:#344054;}
+  :root{--bg:#F5F5F7;--white:#fff;--gray-200:#E8E8ED;--gray-500:#86868B;--gray-900:#1D1D1F;
+    --blue-600:#0071E3;--blue-50:#EDF4FF;--green-700:#0D8A4E;--green-50:#E9FBF0;--green-100:#D1FADF;
+    --red-600:#FF3B30;--red-50:#FFF1F0;--red-100:#FEE4E2;--amber-700:#C1690A;--amber-50:#FFF8EA;
+    --radius-sm:4px;--radius-md:8px;--radius-lg:12px;--radius-pill:100px;--gray-100:#F5F5F7;
+    --gray-300:#D2D2D7;--gray-700:#424245;}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--gray-900);padding:24px}
   .wrap{max-width:none;margin:0 auto}
@@ -454,15 +454,20 @@
 <div class="wrap">
   <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;border-bottom:1.5px solid var(--gray-200);padding-bottom:10px;margin-bottom:14px">
     <div style="display:flex;align-items:center;gap:9px;flex-shrink:0">
-      <div style="width:32px;height:32px;flex-shrink:0;border-radius:9px;background:linear-gradient(155deg,#FFFFFF,var(--blue-50));box-shadow:inset 0 0 0 1px rgba(43,89,225,.12);display:flex;align-items:center;justify-content:center">
+      <div style="width:32px;height:32px;flex-shrink:0;border-radius:9px;background:linear-gradient(155deg,#FFFFFF,var(--blue-50));box-shadow:inset 0 0 0 1px rgba(0,113,227,.12);display:flex;align-items:center;justify-content:center">
         <svg width="17" height="17" viewBox="0 0 200 200" fill="none">
-          <rect x="30" y="30" width="140" height="140" rx="6" transform="rotate(45 100 100)" stroke="#2B59E1" stroke-width="12" fill="none"/>
-          <path d="M55 145L55 70L100 115L145 70L145 145" stroke="#2B59E1" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <path d="M35 65V35H65M135 35H165V65M165 135V165H135M65 165H35V135" stroke="#0071E3" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <rect x="75" y="75" width="7" height="50" fill="#0071E3"/>
+          <rect x="86" y="75" width="4" height="50" fill="#0071E3"/>
+          <rect x="94" y="75" width="9" height="50" fill="#0071E3"/>
+          <rect x="107" y="75" width="5" height="50" fill="#0071E3"/>
+          <rect x="116" y="75" width="4" height="50" fill="#0071E3"/>
+          <rect x="124" y="75" width="6" height="50" fill="#0071E3"/>
         </svg>
       </div>
       <div>
-        <div style="font-size:15px;font-weight:800;letter-spacing:1.1px;color:var(--gray-900);line-height:1">MATREX</div>
-        <div style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--gray-500);margin-top:2px">Main Dashboard</div>
+        <div style="font-size:15px;font-weight:800;letter-spacing:1.1px;color:var(--gray-900);line-height:1">BARCODE</div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--gray-500);margin-top:2px">Admin Dashboard</div>
       </div>
     </div>
     <div class="tabbar">
@@ -644,7 +649,7 @@
           <div class="name">3. Open the app in Safari</div>
           <div class="meta">Then tap the Share icon and choose "Add to Home Screen" — installs it as an app icon, no App Store needed. Or scan the QR code to open it straight away.</div>
         </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
-          <a class="secondary" href="https://barcode-scan.github.io/Matrex_panel_scan/" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Open App</a>
+          <a class="secondary" href="https://jay141994-create.github.io/Matrex_panel_scan/" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Open App</a>
           <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 35 35" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h35v35H0z"/><path stroke="#111827" d="M1 1.5h7m2 0h4m3 0h1m1 0h4m1 0h1m2 0h7M1 2.5h1m5 0h1m2 0h3m3 0h2m1 0h1m7 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h1m3 0h1m1 0h2m3 0h5m2 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h3m1 0h1m5 0h2m2 0h2m2 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h1m1 0h2m1 0h4m3 0h2m1 0h1m2 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h3m2 0h2m2 0h1m1 0h1m1 0h2m3 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m2 0h2m1 0h1m1 0h1m2 0h3m1 0h1M1 9.5h1m1 0h5m2 0h1m1 0h3m3 0h1m1 0h1m2 0h3m1 0h5M1 10.5h1m1 0h1m5 0h1m1 0h4m2 0h4m1 0h1m1 0h1m2 0h2m1 0h4M1 11.5h1m1 0h1m2 0h3m5 0h3m1 0h1m10 0h1m1 0h2M3 12.5h1m1 0h1m3 0h3m1 0h2m2 0h9m3 0h4M3 13.5h1m1 0h4m1 0h1m4 0h1m1 0h1m2 0h2m1 0h1m2 0h1m2 0h2M1 14.5h1m2 0h3m1 0h1m1 0h5m1 0h1m1 0h2m2 0h1m4 0h1m2 0h4M2 15.5h2m2 0h2m1 0h1m1 0h2m2 0h3m1 0h1m1 0h3m1 0h3m1 0h1m1 0h2M2 16.5h1m1 0h1m1 0h1m2 0h1m2 0h2m2 0h1m5 0h2m2 0h2m1 0h3M2 17.5h1m1 0h2m1 0h1m1 0h2m3 0h3m1 0h1m5 0h3m1 0h3m2 0h1M2 18.5h1m1 0h1m6 0h2m2 0h1m4 0h3m1 0h1m2 0h2m1 0h2m1 0h1M2 19.5h2m2 0h2m1 0h3m2 0h3m2 0h1m1 0h2m2 0h1m2 0h2m1 0h2M1 20.5h1m1 0h1m4 0h6m1 0h1m6 0h5m1 0h5M3 21.5h5m6 0h1m1 0h1m2 0h1m3 0h1m1 0h2m3 0h1m1 0h2M1 22.5h4m1 0h1m2 0h3m2 0h4m3 0h1m2 0h1m2 0h1m3 0h1m1 0h1M1 23.5h1m1 0h1m2 0h2m2 0h3m7 0h1m1 0h2m4 0h1m3 0h1M1 24.5h1m2 0h1m3 0h1m1 0h2m1 0h2m2 0h1m1 0h5m3 0h6M1 25.5h1m1 0h2m1 0h3m1 0h1m1 0h2m1 0h1m2 0h1m1 0h1m2 0h1m1 0h5M9 26.5h1m1 0h2m2 0h1m1 0h5m1 0h3m3 0h1m1 0h1M1 27.5h7m2 0h2m1 0h2m1 0h3m2 0h1m1 0h3m1 0h1m1 0h1m1 0h2M1 28.5h1m5 0h1m1 0h2m1 0h1m1 0h1m1 0h5m1 0h1m1 0h2m3 0h5M1 29.5h1m1 0h3m1 0h1m1 0h9m7 0h6m1 0h2M1 30.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h2m2 0h1m1 0h3m2 0h5M1 31.5h1m1 0h3m1 0h1m1 0h1m2 0h1m3 0h2m1 0h1m1 0h1m3 0h1m1 0h2m1 0h2M1 32.5h1m5 0h1m2 0h1m1 0h2m2 0h1m2 0h5m2 0h2m1 0h3M1 33.5h7m1 0h2m5 0h3m1 0h1m2 0h3m1 0h2m1 0h1m1 0h1"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
         </div></div>
         <div class="card"><div>
@@ -672,7 +677,7 @@
           <div class="name">3. Open the app in Chrome</div>
           <div class="meta">Then tap the &#8942; menu and choose "Add to Home screen" / "Install app" — installs it as an app icon, no Play Store needed. Or scan the QR code to open it straight away.</div>
         </div><div class="acts" style="flex-direction:column;align-items:flex-end;gap:6px">
-          <a class="secondary" href="https://barcode-scan.github.io/Matrex_panel_scan/" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Open App</a>
+          <a class="secondary" href="https://jay141994-create.github.io/Matrex_panel_scan/" target="_blank" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;color:var(--gray-900);background:var(--gray-200)">Open App</a>
           <div style="text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 35 35" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h35v35H0z"/><path stroke="#111827" d="M1 1.5h7m2 0h4m3 0h1m1 0h4m1 0h1m2 0h7M1 2.5h1m5 0h1m2 0h3m3 0h2m1 0h1m7 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h1m3 0h1m1 0h2m3 0h5m2 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h3m1 0h1m5 0h2m2 0h2m2 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h1m1 0h2m1 0h4m3 0h2m1 0h1m2 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h3m2 0h2m2 0h1m1 0h1m1 0h2m3 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m2 0h2m1 0h1m1 0h1m2 0h3m1 0h1M1 9.5h1m1 0h5m2 0h1m1 0h3m3 0h1m1 0h1m2 0h3m1 0h5M1 10.5h1m1 0h1m5 0h1m1 0h4m2 0h4m1 0h1m1 0h1m2 0h2m1 0h4M1 11.5h1m1 0h1m2 0h3m5 0h3m1 0h1m10 0h1m1 0h2M3 12.5h1m1 0h1m3 0h3m1 0h2m2 0h9m3 0h4M3 13.5h1m1 0h4m1 0h1m4 0h1m1 0h1m2 0h2m1 0h1m2 0h1m2 0h2M1 14.5h1m2 0h3m1 0h1m1 0h5m1 0h1m1 0h2m2 0h1m4 0h1m2 0h4M2 15.5h2m2 0h2m1 0h1m1 0h2m2 0h3m1 0h1m1 0h3m1 0h3m1 0h1m1 0h2M2 16.5h1m1 0h1m1 0h1m2 0h1m2 0h2m2 0h1m5 0h2m2 0h2m1 0h3M2 17.5h1m1 0h2m1 0h1m1 0h2m3 0h3m1 0h1m5 0h3m1 0h3m2 0h1M2 18.5h1m1 0h1m6 0h2m2 0h1m4 0h3m1 0h1m2 0h2m1 0h2m1 0h1M2 19.5h2m2 0h2m1 0h3m2 0h3m2 0h1m1 0h2m2 0h1m2 0h2m1 0h2M1 20.5h1m1 0h1m4 0h6m1 0h1m6 0h5m1 0h5M3 21.5h5m6 0h1m1 0h1m2 0h1m3 0h1m1 0h2m3 0h1m1 0h2M1 22.5h4m1 0h1m2 0h3m2 0h4m3 0h1m2 0h1m2 0h1m3 0h1m1 0h1M1 23.5h1m1 0h1m2 0h2m2 0h3m7 0h1m1 0h2m4 0h1m3 0h1M1 24.5h1m2 0h1m3 0h1m1 0h2m1 0h2m2 0h1m1 0h5m3 0h6M1 25.5h1m1 0h2m1 0h3m1 0h1m1 0h2m1 0h1m2 0h1m1 0h1m2 0h1m1 0h5M9 26.5h1m1 0h2m2 0h1m1 0h5m1 0h3m3 0h1m1 0h1M1 27.5h7m2 0h2m1 0h2m1 0h3m2 0h1m1 0h3m1 0h1m1 0h1m1 0h2M1 28.5h1m5 0h1m1 0h2m1 0h1m1 0h1m1 0h5m1 0h1m1 0h2m3 0h5M1 29.5h1m1 0h3m1 0h1m1 0h9m7 0h6m1 0h2M1 30.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h2m2 0h1m1 0h3m2 0h5M1 31.5h1m1 0h3m1 0h1m1 0h1m2 0h1m3 0h2m1 0h1m1 0h1m3 0h1m1 0h2m1 0h2M1 32.5h1m5 0h1m2 0h1m1 0h2m2 0h1m2 0h5m2 0h2m1 0h3M1 33.5h7m1 0h2m5 0h3m1 0h1m2 0h3m1 0h2m1 0h1m1 0h1"/></svg><div style="font-size:10px;color:var(--gray-500);margin-top:2px">Scan to open</div></div>
         </div></div>
         <div class="card"><div>

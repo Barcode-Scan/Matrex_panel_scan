@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Matrex Scan">
+<meta name="apple-mobile-web-app-title" content="Barcode Scan">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src *; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'">
 <meta name="theme-color" content="#0071E3">
 <link rel="manifest" href="manifest.json">
@@ -14,7 +14,7 @@
      silently falls back to an auto-generated tile using the page title's
      first letter, which is exactly the plain "M" this replaces. -->
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<title>Matrex Panel Scan</title>
+<title>Barcode Scan</title>
 <style>
 :root{
   --white:#FFFFFF;--bg:#F5F5F7;--gray-100:#F5F5F7;--gray-200:#E8E8ED;
@@ -371,13 +371,18 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
     <div class="lock-logo-row">
       <div class="lock-logo-box">
         <svg width="30" height="30" viewBox="0 0 200 200" fill="none">
-          <rect x="30" y="30" width="140" height="140" rx="6" transform="rotate(45 100 100)" stroke="#0071E3" stroke-width="10" fill="none"/>
-          <path d="M55 145L55 70L100 115L145 70L145 145" stroke="#0071E3" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <path d="M35 65V35H65M135 35H165V65M165 135V165H135M65 165H35V135" stroke="#0071E3" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <rect x="75" y="75" width="7" height="50" fill="#0071E3"/>
+          <rect x="86" y="75" width="4" height="50" fill="#0071E3"/>
+          <rect x="94" y="75" width="9" height="50" fill="#0071E3"/>
+          <rect x="107" y="75" width="5" height="50" fill="#0071E3"/>
+          <rect x="116" y="75" width="4" height="50" fill="#0071E3"/>
+          <rect x="124" y="75" width="6" height="50" fill="#0071E3"/>
         </svg>
       </div>
       <div>
-        <div class="lock-brand">MATREX</div>
-        <div class="lock-brand-sub">Panel Scan System</div>
+        <div class="lock-brand">BARCODE</div>
+        <div class="lock-brand-sub">Scan System</div>
       </div>
     </div>
     <div class="lock-title">Sign in</div>
@@ -394,7 +399,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
     <div class="f-hint">Tap the eye icon if you cannot see what you typed</div>
     <button class="btn-sign" id="pwBtn">Sign In</button>
     <div class="err-box" id="pwErr"></div>
-    <div class="lock-foot">Matrex Window Systems &copy; Internal Use Only</div>
+    <div class="lock-foot">&copy; Internal Use Only</div>
   </div>
 </div>
 
@@ -404,12 +409,17 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
     <div class="tb-left">
       <div class="tb-logo">
         <svg width="22" height="22" viewBox="0 0 200 200" fill="none">
-          <rect x="30" y="30" width="140" height="140" rx="6" transform="rotate(45 100 100)" stroke="#0071E3" stroke-width="12" fill="none"/>
-          <path d="M55 145L55 70L100 115L145 70L145 145" stroke="#0071E3" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <path d="M35 65V35H65M135 35H165V65M165 135V165H135M65 165H35V135" stroke="#0071E3" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <rect x="75" y="75" width="7" height="50" fill="#0071E3"/>
+          <rect x="86" y="75" width="4" height="50" fill="#0071E3"/>
+          <rect x="94" y="75" width="9" height="50" fill="#0071E3"/>
+          <rect x="107" y="75" width="5" height="50" fill="#0071E3"/>
+          <rect x="116" y="75" width="4" height="50" fill="#0071E3"/>
+          <rect x="124" y="75" width="6" height="50" fill="#0071E3"/>
         </svg>
       </div>
       <div>
-        <div class="tb-name">MATREX</div>
+        <div class="tb-name">BARCODE</div>
         <div class="tb-date" id="topDate"></div>
       </div>
     </div>
@@ -648,7 +658,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
         <div class="fg"><label class="fg-label" for="setUrl">Receiver URL</label><input class="fg-input" id="setUrl" inputmode="url" autocapitalize="off" placeholder="https://your-receiver-url"></div>
         <div class="f-hint" id="urlMixedWarn" style="display:none;color:var(--amber-700);margin-bottom:14px">⚠ This app loads over HTTPS, so browsers block plain <code>http://</code> requests to your receiver (even on your local WiFi). Ask IT for an <code>https://</code> receiver URL, or scans will only save to the phone.</div>
         <div class="fg"><label class="fg-label" for="setDev">Device name</label><input class="fg-input" id="setDev" autocapitalize="characters" placeholder="e.g. PHONE-DARPIT"></div>
-        <div class="fg"><label class="fg-label" for="setFilePrefix">CSV file name</label><input class="fg-input" id="setFilePrefix" autocapitalize="characters" placeholder="e.g. Matrex_Scans"></div>
+        <div class="fg"><label class="fg-label" for="setFilePrefix">CSV file name</label><input class="fg-input" id="setFilePrefix" autocapitalize="characters" placeholder="e.g. Barcode_Scans"></div>
         <div class="f-hint" style="margin-bottom:14px">Saved as &lt;name&gt;_YYYY-MM-DD.csv — the date is always added automatically.</div>
         <button class="btn btn-solid" id="bSaveSet" type="button" style="font-size:17px;padding:14px">Save Settings</button>
         <button class="btn btn-outline mt10" id="bTestConn" type="button">Test Connection</button>
@@ -774,7 +784,7 @@ function todayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMo
 const fmtT=iso=>iso?new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'—';
 const fmtDT=iso=>iso?new Date(iso).toLocaleDateString([],{month:'short',day:'numeric'})+' '+fmtT(iso):'Never';
 
-let cfg=lsGet(LS.cfg)||{url:'',dev:'MATREX-PHONE',filePrefix:'Matrex_Scans'};
+let cfg=lsGet(LS.cfg)||{url:'',dev:'BARCODE-PHONE',filePrefix:'Barcode_Scans'};
 let deviceId=lsGet(LS.deviceId);
 if(!deviceId){deviceId=uuid();lsSet(LS.deviceId,deviceId);}
 let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
@@ -837,7 +847,7 @@ function buildCSVRows(list){
   return[h.join(','),...list.map(s=>[s.date,s.time,s.uniqueId||'',s.matchStatus||'',s.batchSheet,s.project,s.floor,s.partType,s.partName,s.size,s.qty,s.colour,s.skid||'',s.method,s.flag||'',cfg.dev].map(q).join(','))].join('\r\n');
 }
 const buildCSV=()=>buildCSVRows(scans);
-const csvName=(d)=>(cfg.filePrefix||'Matrex_Scans')+'_'+(d||today)+'.csv';
+const csvName=(d)=>(cfg.filePrefix||'Barcode_Scans')+'_'+(d||today)+'.csv';
 function downloadBlob(csv,filename){const b=new Blob([csv],{type:'text/csv;charset=utf-8;'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=filename;a.click();URL.revokeObjectURL(u);}
 function downloadCSV(){downloadBlob(buildCSV(),csvName());}
 
@@ -1345,7 +1355,7 @@ async function handleRaw(raw,method){
   raw=String(raw).trim();if(!raw)return;
   if(method!=='SCAN')return; // manual entry is handled entirely by its own modal/button, not here
   if(raw.length!==ID_LEN){
-    beep('err');showFlash('bad','Not a Matrex code — barcode ignored.');logDecodeReject(raw);return;
+    beep('err');showFlash('bad','Not a valid code — barcode ignored.');logDecodeReject(raw);return;
   }
   await handleScan(raw);
 }
@@ -1543,7 +1553,7 @@ function refreshSettings(){
 const SETTINGS_PASSWORD='3090MWS';
 function openSettingsScreen(){
   stopScanner(); // camera has no business running while the user isn't on the scan screen
-  $('setUrl').value=cfg.url;$('setDev').value=cfg.dev;$('setFilePrefix').value=cfg.filePrefix||'Matrex_Scans';$('connRes').textContent='';refreshSettings();checkMixedWarn();show('scrSettings');
+  $('setUrl').value=cfg.url;$('setDev').value=cfg.dev;$('setFilePrefix').value=cfg.filePrefix||'Barcode_Scans';$('connRes').textContent='';refreshSettings();checkMixedWarn();show('scrSettings');
   $('setSoundOn').checked=!isAudioMuted();
   $('setDarkMode').checked=!!lsGet(LS.darkMode);
 }
@@ -1572,7 +1582,7 @@ $('bSaveSet').onclick=async()=>{
   const u=$('setUrl').value.trim().replace(/\/+$/,'');
   if(u&&!validUrl(u)){showFlash('bad','Receiver URL must start with http:// or https://');return;}
   const prefix=$('setFilePrefix').value.trim().replace(/[\\/:*?"<>|]/g,'').replace(/\s+/g,'_');
-  cfg.url=u;cfg.dev=$('setDev').value.trim()||'MATREX-PHONE';cfg.filePrefix=prefix||'Matrex_Scans';lsSet(LS.cfg,cfg);show('scrScan');refreshSettings();
+  cfg.url=u;cfg.dev=$('setDev').value.trim()||'BARCODE-PHONE';cfg.filePrefix=prefix||'Barcode_Scans';lsSet(LS.cfg,cfg);show('scrScan');refreshSettings();
   if(cfg.url&&scans.length)scheduleAutoUpload(); // flush anything already queued instead of waiting for the next scan
   if(u){const st=await registerDevice();showFlash(st==='APPROVED'?'ok':'bad','Settings saved — device '+st.toLowerCase());}
   else showFlash('ok','Settings saved');
@@ -2178,7 +2188,7 @@ function handleDirectedRaw(raw){
 }
 async function directedScan(uid,confirm,inputMethod){
   if(uid.length!==ID_LEN){
-    beep('err');showDirBanner('err','Not a Matrex code','Barcode ignored.');
+    beep('err');showDirBanner('err','Not a valid code','Barcode ignored.');
     if(inputMethod==='SCAN')logDecodeReject(uid); // not a manual-entry typo - a real camera decode came back wrong
     return;
   }

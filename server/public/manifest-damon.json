@@ -1,12 +1,12 @@
 {
-  "name": "MATREX — Damon Dashboard",
-  "short_name": "MATREX Damon",
+  "name": "Barcode — Damon Dashboard",
+  "short_name": "Barcode Damon",
   "description": "Production Schedule, Weekly Schedule, Job Summary, Packing Slips, and Completed Tasks.",
   "start_url": "/damon.html",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#F5F6FA",
-  "theme_color": "#2B59E1",
+  "background_color": "#F5F5F7",
+  "theme_color": "#0071E3",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]

@@ -3,7 +3,7 @@
 // Never intercepts cross-origin requests — those are the receiver-server
 // upload/health calls to whatever LAN URL is set in Settings, and must always
 // go straight to the network untouched.
-const CACHE = 'matrex-v1';
+const CACHE = 'barcode-v1';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {

@@ -1827,12 +1827,17 @@ function renderPackingSlip(slip){
           <div class="ps-top">
             <div class="ps-brand">
               <svg width="34" height="34" viewBox="0 0 200 200" fill="none" style="flex-shrink:0">
-                <rect x="30" y="30" width="140" height="140" rx="6" transform="rotate(45 100 100)" stroke="#0071E3" stroke-width="10" fill="none"/>
-                <path d="M55 145L55 70L100 115L145 70L145 145" stroke="#0071E3" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                <path d="M35 65V35H65M135 35H165V65M165 135V165H135M65 165H35V135" stroke="#0071E3" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                <rect x="75" y="75" width="7" height="50" fill="#0071E3"/>
+                <rect x="86" y="75" width="4" height="50" fill="#0071E3"/>
+                <rect x="94" y="75" width="9" height="50" fill="#0071E3"/>
+                <rect x="107" y="75" width="5" height="50" fill="#0071E3"/>
+                <rect x="116" y="75" width="4" height="50" fill="#0071E3"/>
+                <rect x="124" y="75" width="6" height="50" fill="#0071E3"/>
               </svg>
               <div>
-                <div class="ps-brand-name">MATREX<br>WINDOW SYSTEM</div>
-                <div class="ps-brand-addr">3090 Langstaff Road,<br>Vaughan, Ontario L4K 4Y5<br>416-906-6195</div>
+                <div class="ps-brand-name">BARCODE</div>
+                <div class="ps-brand-addr"></div>
               </div>
             </div>
             <div class="ps-title">
