@@ -1398,6 +1398,433 @@ app.get('/viewer/api/parts/:id/notes', requireViewer, (req, res) => {
   res.json({ ok: true, notes: listNotes.all(req.params.id) });
 });
 
+// ════════════════════════════════════════════════════════════════════
+// INVENTORY & SCANNER SYSTEM — folded into this server 2026-08-30. See
+// "Matrex Panel Scan - Inventory System Pivot Note.md" for why. All
+// admin-facing endpoints reuse requireAdmin/actorFrom/logAudit exactly
+// like the Production Schedule endpoints above; scanner-facing endpoints
+// reuse deviceGate exactly like /parts/match does. No separate account
+// system, matching this codebase's existing single-shared-key model.
+// ════════════════════════════════════════════════════════════════════
+
+function nowIso() { return new Date().toISOString(); }
+
+// ── ITEM MASTER ──────────────────────────────────────────────────
+const getNextItemNumber = db.prepare('SELECT next_value FROM item_number_counter WHERE id = 1');
+const bumpItemNumberCounter = db.prepare('UPDATE item_number_counter SET next_value = next_value + 1 WHERE id = 1');
+const insertItem = db.prepare(`
+  INSERT INTO items (item_number, description, created_at, created_by)
+  VALUES (@item_number, @description, @now, @actor)
+`);
+const getItem = db.prepare('SELECT * FROM items WHERE item_number = ?');
+const listItems = db.prepare('SELECT * FROM items ORDER BY item_number');
+const updateItemStmt = db.prepare(`
+  UPDATE items SET
+    description=@description, category_id=@category_id, costing_method=@costing_method,
+    posting_group=@posting_group, reorder_point=@reorder_point, lead_time_days=@lead_time_days,
+    default_vendor=@default_vendor, order_multiple=@order_multiple, status=@status,
+    base_uom_code=@base_uom_code, updated_at=@now, updated_by=@actor
+  WHERE item_number=@item_number
+`);
+
+app.post('/admin/api/inventory/items', requireAdmin, (req, res) => {
+  const actor = actorFrom(req);
+  const now = nowIso();
+  db.exec('BEGIN');
+  try {
+    const n = getNextItemNumber.get().next_value;
+    const item_number = 'ITM-' + String(n).padStart(6, '0');
+    insertItem.run({ item_number, description: String((req.body && req.body.description) || ''), now, actor });
+    bumpItemNumberCounter.run();
+    db.exec('COMMIT');
+    logAudit(actor, 'ITEM_CREATE', item_number, JSON.stringify({ description: req.body && req.body.description }));
+    res.json({ ok: true, item: getItem.get(item_number) });
+  } catch (e) {
+    db.exec('ROLLBACK');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/admin/api/inventory/items', requireAdmin, (req, res) => {
+  res.json({ ok: true, items: listItems.all() });
+});
+
+// item_number is never accepted here - immutable once assigned, same
+// principle as parts_index.unique_id never being editable after registration.
+app.patch('/admin/api/inventory/items/:itemNumber', requireAdmin, (req, res) => {
+  const existing = getItem.get(req.params.itemNumber);
+  if (!existing) return res.status(404).json({ ok: false, error: 'item not found' });
+  const actor = actorFrom(req);
+  const b = req.body || {};
+  updateItemStmt.run({
+    item_number: req.params.itemNumber,
+    description: b.description ?? existing.description,
+    category_id: b.category_id ?? existing.category_id,
+    costing_method: b.costing_method ?? existing.costing_method,
+    posting_group: b.posting_group ?? existing.posting_group,
+    reorder_point: b.reorder_point ?? existing.reorder_point,
+    lead_time_days: b.lead_time_days ?? existing.lead_time_days,
+    default_vendor: b.default_vendor ?? existing.default_vendor,
+    order_multiple: b.order_multiple ?? existing.order_multiple,
+    status: b.status ?? existing.status,
+    base_uom_code: b.base_uom_code ?? existing.base_uom_code,
+    now: nowIso(), actor
+  });
+  logAudit(actor, 'ITEM_UPDATE', req.params.itemNumber, JSON.stringify(b));
+  res.json({ ok: true, item: getItem.get(req.params.itemNumber) });
+});
+
+// ── CATEGORIES ────────────────────────────────────────────────────
+const insertCategory = db.prepare('INSERT INTO categories (parent_id, name, created_at) VALUES (?, ?, ?)');
+const listCategories = db.prepare('SELECT * FROM categories ORDER BY name');
+app.post('/admin/api/inventory/categories', requireAdmin, (req, res) => {
+  const { name, parent_id } = req.body || {};
+  if (!name) return res.status(400).json({ ok: false, error: 'name required' });
+  insertCategory.run(parent_id || null, name, nowIso());
+  logAudit(actorFrom(req), 'CATEGORY_CREATE', name, null);
+  res.json({ ok: true, categories: listCategories.all() });
+});
+app.get('/admin/api/inventory/categories', requireAdmin, (req, res) => res.json({ ok: true, categories: listCategories.all() }));
+
+// ── LOCATIONS / ZONES / BINS ──────────────────────────────────────
+const insertLocation = db.prepare('INSERT INTO locations (name, created_at) VALUES (?, ?)');
+const listLocations = db.prepare('SELECT * FROM locations ORDER BY name');
+app.post('/admin/api/inventory/locations', requireAdmin, (req, res) => {
+  if (!req.body || !req.body.name) return res.status(400).json({ ok: false, error: 'name required' });
+  insertLocation.run(req.body.name, nowIso());
+  logAudit(actorFrom(req), 'LOCATION_CREATE', req.body.name, null);
+  res.json({ ok: true, locations: listLocations.all() });
+});
+app.get('/admin/api/inventory/locations', requireAdmin, (req, res) => res.json({ ok: true, locations: listLocations.all() }));
+
+const insertZone = db.prepare('INSERT INTO zones (location_id, name, zone_type, created_at) VALUES (?, ?, ?, ?)');
+const listZones = db.prepare('SELECT * FROM zones ORDER BY name');
+const ZONE_TYPES = ['Receive', 'Bulk', 'WIP', 'Ship', 'Yard'];
+app.post('/admin/api/inventory/zones', requireAdmin, (req, res) => {
+  const { location_id, name, zone_type } = req.body || {};
+  if (!location_id || !name || !ZONE_TYPES.includes(zone_type)) return res.status(400).json({ ok: false, error: 'location_id, name, valid zone_type required' });
+  insertZone.run(location_id, name, zone_type, nowIso());
+  logAudit(actorFrom(req), 'ZONE_CREATE', name, null);
+  res.json({ ok: true, zones: listZones.all() });
+});
+app.get('/admin/api/inventory/zones', requireAdmin, (req, res) => res.json({ ok: true, zones: listZones.all() }));
+
+const insertBin = db.prepare(`
+  INSERT INTO bins (zone_id, code, bin_type, granularity, pick_rank, capacity_qty, capacity_weight, created_at)
+  VALUES (@zone_id, @code, @bin_type, @granularity, @pick_rank, @capacity_qty, @capacity_weight, @now)
+`);
+const listBins = db.prepare('SELECT * FROM bins ORDER BY code');
+const BIN_TYPES = ['PickFace', 'Bulk', 'Staging'];
+const GRANULARITIES = ['RackBay', 'ShelfPosition'];
+app.post('/admin/api/inventory/bins', requireAdmin, (req, res) => {
+  const b = req.body || {};
+  if (!b.zone_id || !b.code || !BIN_TYPES.includes(b.bin_type) || !GRANULARITIES.includes(b.granularity)) {
+    return res.status(400).json({ ok: false, error: 'zone_id, code, valid bin_type, valid granularity required' });
+  }
+  insertBin.run({
+    zone_id: b.zone_id, code: b.code, bin_type: b.bin_type, granularity: b.granularity,
+    pick_rank: b.pick_rank || null, capacity_qty: b.capacity_qty || null, capacity_weight: b.capacity_weight || null, now: nowIso()
+  });
+  logAudit(actorFrom(req), 'BIN_CREATE', b.code, null);
+  res.json({ ok: true, bins: listBins.all() });
+});
+app.get('/admin/api/inventory/bins', requireAdmin, (req, res) => res.json({ ok: true, bins: listBins.all() }));
+
+// ── UOM & BARCODE CROSS-REFERENCE ─────────────────────────────────
+const insertUom = db.prepare('INSERT OR IGNORE INTO uoms (code, description) VALUES (?, ?)');
+const listUoms = db.prepare('SELECT * FROM uoms ORDER BY code');
+app.post('/admin/api/inventory/uoms', requireAdmin, (req, res) => {
+  const { code, description } = req.body || {};
+  if (!code) return res.status(400).json({ ok: false, error: 'code required' });
+  insertUom.run(String(code).toUpperCase(), description || '');
+  res.json({ ok: true, uoms: listUoms.all() });
+});
+app.get('/admin/api/inventory/uoms', requireAdmin, (req, res) => res.json({ ok: true, uoms: listUoms.all() }));
+
+const insertItemReference = db.prepare(`
+  INSERT INTO item_references (reference_code, item_number, variant_code, reference_type, uom_code, created_at)
+  VALUES (@reference_code, @item_number, @variant_code, @reference_type, @uom_code, @now)
+`);
+const REFERENCE_TYPES = ['Vendor', 'Customer', 'GS1', 'Internal'];
+app.post('/admin/api/inventory/item-references', requireAdmin, (req, res) => {
+  const b = req.body || {};
+  if (!b.reference_code || !b.item_number || !REFERENCE_TYPES.includes(b.reference_type)) {
+    return res.status(400).json({ ok: false, error: 'reference_code, item_number, valid reference_type required' });
+  }
+  if (!getItem.get(b.item_number)) return res.status(400).json({ ok: false, error: 'item_number not found' });
+  try {
+    insertItemReference.run({
+      reference_code: b.reference_code, item_number: b.item_number, variant_code: b.variant_code || null,
+      reference_type: b.reference_type, uom_code: b.uom_code || null, now: nowIso()
+    });
+  } catch (e) {
+    return res.status(409).json({ ok: false, error: 'reference_code already in use' });
+  }
+  logAudit(actorFrom(req), 'ITEM_REFERENCE_CREATE', b.reference_code, JSON.stringify(b));
+  res.json({ ok: true });
+});
+
+// The scan-resolution service - gated the same way any other scan-facing
+// endpoint is (deviceGate), so only approved phones can resolve codes,
+// same access-control boundary as /parts/match.
+const getItemReference = db.prepare('SELECT * FROM item_references WHERE reference_code = ?');
+app.post('/inventory/resolve-scan', deviceGate, (req, res) => {
+  const code = String((req.body && req.body.code) || '').trim();
+  if (!code) return res.status(400).json({ ok: false, error: 'code required' });
+
+  const ref = getItemReference.get(code);
+  if (!ref) return res.json({ ok: true, status: 'NOT_FOUND' });
+  if (ref.is_void === 'Yes') return res.json({ ok: true, status: 'VOID', reference_code: code });
+
+  const item = getItem.get(ref.item_number);
+  if (!item || item.status !== 'Active') {
+    return res.json({ ok: true, status: 'BLOCKED', item_number: ref.item_number, item_status: item ? item.status : 'UNKNOWN' });
+  }
+
+  res.json({
+    ok: true, status: 'RESOLVED', item_number: item.item_number, description: item.description,
+    variant_code: ref.variant_code, uom_code: ref.uom_code || item.base_uom_code, reference_code: code
+  });
+});
+
+// ── PURCHASE ORDERS ────────────────────────────────────────────────
+const getNextPoNumber = db.prepare('SELECT next_value FROM po_number_counter WHERE id = 1');
+const bumpPoNumberCounter = db.prepare('UPDATE po_number_counter SET next_value = next_value + 1 WHERE id = 1');
+const insertPo = db.prepare('INSERT INTO purchase_orders (po_number, vendor, created_at, created_by) VALUES (?, ?, ?, ?)');
+const getPo = db.prepare('SELECT * FROM purchase_orders WHERE po_number = ?');
+const listPos = db.prepare('SELECT * FROM purchase_orders ORDER BY po_number DESC');
+const insertPoLine = db.prepare(`
+  INSERT INTO purchase_order_lines (po_number, item_number, variant_code, uom_code, qty_ordered, unit_cost)
+  VALUES (@po_number, @item_number, @variant_code, @uom_code, @qty_ordered, @unit_cost)
+`);
+const listPoLines = db.prepare('SELECT * FROM purchase_order_lines WHERE po_number = ?');
+const getPoLine = db.prepare('SELECT * FROM purchase_order_lines WHERE id = ?');
+
+app.post('/admin/api/inventory/purchase-orders', requireAdmin, (req, res) => {
+  const actor = actorFrom(req);
+  db.exec('BEGIN');
+  try {
+    const n = getNextPoNumber.get().next_value;
+    const po_number = 'PO-' + String(n).padStart(6, '0');
+    insertPo.run(po_number, String((req.body && req.body.vendor) || ''), nowIso(), actor);
+    bumpPoNumberCounter.run();
+    db.exec('COMMIT');
+    logAudit(actor, 'PO_CREATE', po_number, JSON.stringify({ vendor: req.body && req.body.vendor }));
+    res.json({ ok: true, po: getPo.get(po_number) });
+  } catch (e) {
+    db.exec('ROLLBACK');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+app.get('/admin/api/inventory/purchase-orders', requireAdmin, (req, res) => res.json({ ok: true, purchase_orders: listPos.all() }));
+app.get('/admin/api/inventory/purchase-orders/:poNumber/lines', requireAdmin, (req, res) => {
+  res.json({ ok: true, lines: listPoLines.all(req.params.poNumber) });
+});
+app.post('/admin/api/inventory/purchase-orders/:poNumber/lines', requireAdmin, (req, res) => {
+  const po = getPo.get(req.params.poNumber);
+  if (!po) return res.status(404).json({ ok: false, error: 'PO not found' });
+  const b = req.body || {};
+  if (!b.item_number || !b.qty_ordered) return res.status(400).json({ ok: false, error: 'item_number and qty_ordered required' });
+  if (!getItem.get(b.item_number)) return res.status(400).json({ ok: false, error: 'item_number not found' });
+  insertPoLine.run({
+    po_number: req.params.poNumber, item_number: b.item_number, variant_code: b.variant_code || null,
+    uom_code: b.uom_code || null, qty_ordered: b.qty_ordered, unit_cost: b.unit_cost || 0
+  });
+  res.json({ ok: true, lines: listPoLines.all(req.params.poNumber) });
+});
+
+// ── RECEIVING + PUT-AWAY (the shared posting path) ─────────────────
+// suggestPutawayBin: prefers an existing pick-face bin already holding
+// this item, falls back to lowest-rank bulk bin with capacity - same
+// logic as the original Supabase design's suggest_putaway_bin().
+const findPickFaceBinForItem = db.prepare(`
+  SELECT b.* FROM bins b JOIN zones z ON z.id = b.zone_id
+  WHERE z.location_id = ? AND b.bin_type = 'PickFace'
+    AND EXISTS (SELECT 1 FROM bin_contents bc WHERE bc.bin_id = b.id AND bc.item_number = ?)
+  ORDER BY b.pick_rank ASC LIMIT 1
+`);
+const findBulkBinWithCapacity = db.prepare(`
+  SELECT b.* FROM bins b JOIN zones z ON z.id = b.zone_id
+  WHERE z.location_id = ? AND b.bin_type = 'Bulk' AND (b.capacity_qty IS NULL OR b.capacity_qty >= ?)
+  ORDER BY b.pick_rank ASC LIMIT 1
+`);
+function suggestPutawayBin(locationId, itemNumber, qty) {
+  const pickFace = findPickFaceBinForItem.get(locationId, itemNumber);
+  if (pickFace) return pickFace.id;
+  const bulk = findBulkBinWithCapacity.get(locationId, qty);
+  return bulk ? bulk.id : null;
+}
+
+const insertReceipt = db.prepare('INSERT INTO receipts (po_number, location_id, received_at, received_by) VALUES (?, ?, ?, ?)');
+const insertReceiptLine = db.prepare(`
+  INSERT INTO receipt_lines (receipt_id, po_line_id, item_number, variant_code, uom_code, qty_expected, qty_received, is_over_under, damage_notes, lot_id)
+  VALUES (@receipt_id, @po_line_id, @item_number, @variant_code, @uom_code, @qty_expected, @qty_received, @is_over_under, @damage_notes, @lot_id)
+`);
+const insertLedgerEntry = db.prepare(`
+  INSERT INTO item_ledger_entries (entry_type, item_number, variant_code, lot_id, qty, uom_code, bin_id, location_id, reference_table, reference_id, posted_at, posted_by)
+  VALUES (@entry_type, @item_number, @variant_code, @lot_id, @qty, @uom_code, @bin_id, @location_id, @reference_table, @reference_id, @now, @posted_by)
+`);
+const insertValueEntry = db.prepare(`
+  INSERT INTO value_entries (item_ledger_entry_id, unit_cost, total_cost, costing_method_used, posted_at)
+  VALUES (?, ?, ?, ?, ?)
+`);
+const bumpPoLineReceived = db.prepare('UPDATE purchase_order_lines SET qty_received = qty_received + ? WHERE id = ?');
+const findOrCreateLot = db.prepare(`
+  INSERT INTO lots (item_number, lot_number, mill_cert_url, created_at) VALUES (@item_number, @lot_number, @mill_cert_url, @now)
+  ON CONFLICT(item_number, lot_number) DO UPDATE SET mill_cert_url = COALESCE(excluded.mill_cert_url, lots.mill_cert_url)
+`);
+const getLot = db.prepare('SELECT id FROM lots WHERE item_number = ? AND lot_number = ?');
+const insertPutawayTask = db.prepare(`
+  INSERT INTO putaway_tasks (receipt_line_id, item_number, variant_code, qty, suggested_bin_id, status)
+  VALUES (?, ?, ?, ?, ?, 'Pending')
+`);
+const countUnreceivedPoLines = db.prepare('SELECT COUNT(*) c FROM purchase_order_lines WHERE po_number = ? AND qty_received < qty_ordered');
+const updatePoStatus = db.prepare('UPDATE purchase_orders SET status = ? WHERE po_number = ?');
+
+// INV-034: the shared receipt-posting handler. Everything about a receipt
+// happens here in one transaction - matches section 3.5's "one shared
+// posting function" rule, same as post_receipt() in the original design.
+// INV-005 (blocked/obsolete) is enforced here, not just hidden in the UI.
+app.post('/admin/api/inventory/receipts', requireAdmin, (req, res) => {
+  const { po_number, location_id, lines } = req.body || {};
+  if (!po_number || !location_id || !Array.isArray(lines) || !lines.length) {
+    return res.status(400).json({ ok: false, error: 'po_number, location_id, lines[] required' });
+  }
+  const actor = actorFrom(req);
+  const now = nowIso();
+
+  db.exec('BEGIN');
+  try {
+    const receiptResult = insertReceipt.run(po_number, location_id, now, actor);
+    const receiptId = receiptResult.lastInsertRowid;
+
+    for (const line of lines) {
+      const poLine = getPoLine.get(line.po_line_id);
+      if (!poLine) throw new Error(`purchase_order_lines ${line.po_line_id} not found`);
+
+      const item = getItem.get(poLine.item_number);
+      if (!item || item.status !== 'Active') {
+        throw new Error(`Cannot receive item ${poLine.item_number} - status is ${item ? item.status : 'UNKNOWN'}`);
+      }
+
+      let lotId = null;
+      if (line.lot_number) {
+        findOrCreateLot.run({ item_number: poLine.item_number, lot_number: line.lot_number, mill_cert_url: line.mill_cert_url || null, now });
+        lotId = getLot.get(poLine.item_number, line.lot_number).id;
+      }
+
+      const qtyExpected = poLine.qty_ordered - poLine.qty_received;
+      const qtyReceived = Number(line.qty_received);
+      const receiptLineResult = insertReceiptLine.run({
+        receipt_id: receiptId, po_line_id: poLine.id, item_number: poLine.item_number, variant_code: poLine.variant_code,
+        uom_code: poLine.uom_code, qty_expected: qtyExpected, qty_received: qtyReceived,
+        is_over_under: qtyReceived !== qtyExpected ? 'Yes' : 'No', damage_notes: line.damage_notes || null, lot_id: lotId
+      });
+      const receiptLineId = receiptLineResult.lastInsertRowid;
+
+      const ledgerResult = insertLedgerEntry.run({
+        entry_type: 'Receipt', item_number: poLine.item_number, variant_code: poLine.variant_code, lot_id: lotId,
+        qty: qtyReceived, uom_code: poLine.uom_code, bin_id: null, location_id, reference_table: 'receipt_lines',
+        reference_id: String(receiptLineId), now, posted_by: actor
+      });
+      insertValueEntry.run(ledgerResult.lastInsertRowid, poLine.unit_cost, poLine.unit_cost * qtyReceived, item.costing_method, now);
+
+      bumpPoLineReceived.run(qtyReceived, poLine.id);
+
+      const suggestedBin = suggestPutawayBin(location_id, poLine.item_number, qtyReceived);
+      insertPutawayTask.run(receiptLineId, poLine.item_number, poLine.variant_code, qtyReceived, suggestedBin);
+    }
+
+    const stillOpen = countUnreceivedPoLines.get(po_number).c;
+    updatePoStatus.run(stillOpen > 0 ? 'PartiallyReceived' : 'Closed', po_number);
+
+    db.exec('COMMIT');
+    logAudit(actor, 'RECEIPT_POST', String(receiptId), JSON.stringify({ po_number, location_id }));
+    res.json({ ok: true, receipt_id: receiptId });
+  } catch (e) {
+    db.exec('ROLLBACK');
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+const listPendingPutawayTasks = db.prepare("SELECT * FROM putaway_tasks WHERE status = 'Pending'");
+const getPutawayTask = db.prepare('SELECT * FROM putaway_tasks WHERE id = ?');
+const getBin = db.prepare('SELECT * FROM bins WHERE id = ?');
+const sumBinContentsQty = db.prepare("SELECT COALESCE(SUM(qty), 0) q FROM bin_contents WHERE bin_id = ?");
+const upsertBinContents = db.prepare(`
+  INSERT INTO bin_contents (bin_id, item_number, variant_code, qty, updated_at)
+  VALUES (@bin_id, @item_number, @variant_code, @qty, @now)
+  ON CONFLICT(bin_id, item_number, variant_code) DO UPDATE SET qty = qty + @qty, updated_at = @now
+`);
+const completePutawayTask = db.prepare(`
+  UPDATE putaway_tasks SET status='Completed', completed_bin_id=@bin_id, completed_at=@now, completed_by=@actor, override_reason_code=@reason
+  WHERE id=@id
+`);
+
+app.get('/admin/api/inventory/putaway-tasks', requireAdmin, (req, res) => res.json({ ok: true, tasks: listPendingPutawayTasks.all() }));
+
+// INV-036/038: confirm put-away - real capacity enforcement, override
+// requires a reason code (checked here, not just in the UI).
+app.post('/admin/api/inventory/putaway-tasks/:id/confirm', requireAdmin, (req, res) => {
+  const task = getPutawayTask.get(req.params.id);
+  if (!task || task.status === 'Completed') return res.status(400).json({ ok: false, error: 'task not found or already completed' });
+  const { bin_id, override_reason_code } = req.body || {};
+  if (!bin_id) return res.status(400).json({ ok: false, error: 'bin_id required' });
+
+  const bin = getBin.get(bin_id);
+  if (!bin) return res.status(400).json({ ok: false, error: 'bin not found' });
+  if (bin.capacity_qty != null) {
+    const current = sumBinContentsQty.get(bin_id).q;
+    if (current + task.qty > bin.capacity_qty) {
+      return res.status(400).json({ ok: false, error: `Bin ${bin.code} capacity exceeded (${current} + ${task.qty} > ${bin.capacity_qty})` });
+    }
+  }
+  if (Number(bin_id) !== task.suggested_bin_id && !override_reason_code) {
+    return res.status(400).json({ ok: false, error: 'Overriding the suggested bin requires a reason code' });
+  }
+
+  const actor = actorFrom(req);
+  const now = nowIso();
+  db.exec('BEGIN');
+  try {
+    insertLedgerEntry.run({
+      entry_type: 'PutAway', item_number: task.item_number, variant_code: task.variant_code, lot_id: null,
+      qty: task.qty, uom_code: null, bin_id, location_id: null, reference_table: 'putaway_tasks',
+      reference_id: String(task.id), now, posted_by: actor
+    });
+    upsertBinContents.run({ bin_id, item_number: task.item_number, variant_code: task.variant_code || '', qty: task.qty, now });
+    completePutawayTask.run({ id: task.id, bin_id, now, actor, reason: override_reason_code || null });
+    db.exec('COMMIT');
+    logAudit(actor, 'PUTAWAY_CONFIRM', String(task.id), JSON.stringify({ bin_id }));
+    res.json({ ok: true });
+  } catch (e) {
+    db.exec('ROLLBACK');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── LEDGER EXPLORER (INV-075) ─────────────────────────────────────
+app.get('/admin/api/inventory/ledger', requireAdmin, (req, res) => {
+  const itemNumber = req.query.item_number;
+  const rows = itemNumber
+    ? db.prepare('SELECT * FROM item_ledger_entries WHERE item_number = ? ORDER BY posted_at DESC LIMIT 200').all(itemNumber)
+    : db.prepare('SELECT * FROM item_ledger_entries ORDER BY posted_at DESC LIMIT 200').all();
+  res.json({ ok: true, entries: rows });
+});
+
+// ── REASON CODES ───────────────────────────────────────────────────
+const insertReasonCode = db.prepare('INSERT OR IGNORE INTO reason_codes (code, category, description) VALUES (?, ?, ?)');
+const listReasonCodes = db.prepare('SELECT * FROM reason_codes ORDER BY code');
+app.post('/admin/api/inventory/reason-codes', requireAdmin, (req, res) => {
+  const { code, category, description } = req.body || {};
+  if (!code || !['Override', 'Scrap', 'Void', 'Adjustment', 'Damage'].includes(category)) {
+    return res.status(400).json({ ok: false, error: 'code and valid category required' });
+  }
+  insertReasonCode.run(code, category, description || '');
+  res.json({ ok: true, reason_codes: listReasonCodes.all() });
+});
+app.get('/admin/api/inventory/reason-codes', requireAdmin, (req, res) => res.json({ ok: true, reason_codes: listReasonCodes.all() }));
+
 const PORT = process.env.PORT || 8765;
 // Plain HTTP — kept for LAN tools/scripts that don't need TLS, and for
 // anything still pointed at :8765 directly. No host argument to listen()

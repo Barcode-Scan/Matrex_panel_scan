@@ -41,7 +41,7 @@ const TAB_CONTAINERS={
   material:'tabMaterial',stalled:'tabStalled',risk:'tabRisk',yieldTab:'tabYield',
   jobs:'tabJobSummary',jobDetail:'tabJobDetail',
   packing:'tabPacking',packingForm:'tabPackingForm',packingPrint:'tabPackingPrint',
-  completed:'tabCompleted'
+  completed:'tabCompleted',inventory:'tabInventory'
 };
 // Which tab-bar button lights up "active" for a given tab name - several
 // names share one button (weekly + weeklyDetail both light up the one
@@ -53,7 +53,7 @@ const TAB_BUTTON_FOR={
   material:'tabBtnMaterial',stalled:'tabBtnStalled',risk:'tabBtnRisk',yieldTab:'tabBtnYield',
   jobs:'tabBtnJobs',jobDetail:'tabBtnJobs',
   packing:'tabBtnPacking',packingForm:'tabBtnPacking',packingPrint:'tabBtnPacking',
-  completed:'tabBtnCompleted'
+  completed:'tabBtnCompleted',inventory:'tabBtnInventory'
 };
 function showTab(name){
   currentTab=name;
@@ -81,6 +81,7 @@ function showTab(name){
   if(name==='jobs')renderJobSummary();
   if(name==='packing')renderPackingTab();
   if(name==='ops')showOpsSubTab(currentOpsSubTab);
+  if(name==='inventory')loadInventoryTab();
 }
 // ── OPERATIONS SUB-TABS ─────────────────────────────────────
 // Activity Log, Boards & Admin Key, and Phone Setup live inside
@@ -2877,6 +2878,175 @@ async function bulkVoidSelectedLabels(){
   }
   if(failed)alert(failed+' of '+ids.length+' could not be voided (already voided, or a connection issue) - the rest went through.');
   if(currentLabelsBatch)viewBatchLabels(currentLabelsBatch);
+}
+
+// ── INVENTORY ────────────────────────────────────────────────────
+// Folded into this system 2026-08-30 (see "Matrex Panel Scan -
+// Inventory System Pivot Note.md"). All calls go through api() (the
+// existing X-Admin-Key wrapper defined above) - same auth/actor
+// attribution as every other admin write in this file. State is kept
+// minimal and re-fetched on tab entry rather than cached, matching the
+// simpler tabs (Material Demand etc.) rather than Production Schedule's
+// more elaborate local-state approach - this doesn't need that
+// complexity yet.
+let invLocationsCache=[], invZonesCache=[], invBinsCache=[], invPosCache=[];
+
+async function loadInventoryTab(){
+  await Promise.all([invLoadItems(), invLoadLocationsZonesBins(), invLoadPos(), invLoadPutaway(), invLoadLedger()]);
+}
+
+async function invLoadItems(){
+  try{
+    const {items}=await api('/admin/api/inventory/items');
+    $('invItemsList').innerHTML=items.map(i=>`<tr><td>${esc(i.item_number)}</td><td>${esc(i.description)}</td><td>${esc(i.status)}</td><td>${esc(i.base_uom_code||'')}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">No items yet.</td></tr>';
+  }catch(e){$('invItemsList').innerHTML=`<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;}
+}
+async function invCreateItem(){
+  const description=$('invNewItemDesc').value.trim();
+  if(!description)return;
+  try{
+    await api('/admin/api/inventory/items',{method:'POST',body:JSON.stringify({description})});
+    $('invNewItemDesc').value='';
+    await invLoadItems();
+  }catch(e){alert(e.message);}
+}
+
+async function invLoadLocationsZonesBins(){
+  try{
+    const [{locations},{zones},{bins}]=await Promise.all([
+      api('/admin/api/inventory/locations'), api('/admin/api/inventory/zones'), api('/admin/api/inventory/bins')
+    ]);
+    invLocationsCache=locations; invZonesCache=zones; invBinsCache=bins;
+    $('invZoneLocation').innerHTML=locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')||'<option value="">(add a location first)</option>';
+    $('invBinZone').innerHTML=zones.map(z=>`<option value="${z.id}">${esc(z.name)}</option>`).join('')||'<option value="">(add a zone first)</option>';
+    $('invBinsList').innerHTML=bins.map(b=>{
+      const zone=zones.find(z=>z.id===b.zone_id);
+      return `<tr><td>${esc(b.code)}</td><td>${esc(zone?zone.name:'')}</td><td>${esc(b.bin_type)}</td><td>${esc(b.granularity)}</td><td>${b.capacity_qty??''}</td></tr>`;
+    }).join('')||'<tr><td colspan="5" class="empty">No bins yet.</td></tr>';
+  }catch(e){$('invBinsList').innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;}
+}
+async function invCreateLocation(){
+  const name=$('invNewLocationName').value.trim();
+  if(!name)return;
+  try{ await api('/admin/api/inventory/locations',{method:'POST',body:JSON.stringify({name})}); $('invNewLocationName').value=''; await invLoadLocationsZonesBins(); }
+  catch(e){alert(e.message);}
+}
+async function invCreateZone(){
+  const location_id=Number($('invZoneLocation').value), name=$('invNewZoneName').value.trim(), zone_type=$('invNewZoneType').value;
+  if(!location_id||!name)return;
+  try{ await api('/admin/api/inventory/zones',{method:'POST',body:JSON.stringify({location_id,name,zone_type})}); $('invNewZoneName').value=''; await invLoadLocationsZonesBins(); }
+  catch(e){alert(e.message);}
+}
+async function invCreateBin(){
+  const zone_id=Number($('invBinZone').value), code=$('invNewBinCode').value.trim();
+  const bin_type=$('invNewBinType').value, granularity=$('invNewBinGranularity').value;
+  const capacity_qty=$('invNewBinCapacity').value?Number($('invNewBinCapacity').value):null;
+  if(!zone_id||!code)return;
+  try{
+    await api('/admin/api/inventory/bins',{method:'POST',body:JSON.stringify({zone_id,code,bin_type,granularity,capacity_qty})});
+    $('invNewBinCode').value=''; $('invNewBinCapacity').value='';
+    await invLoadLocationsZonesBins();
+  }catch(e){alert(e.message);}
+}
+
+async function invLoadPos(){
+  try{
+    const {purchase_orders}=await api('/admin/api/inventory/purchase-orders');
+    invPosCache=purchase_orders;
+    $('invPosList').innerHTML=purchase_orders.map(po=>`<tr><td>${esc(po.po_number)}</td><td>${esc(po.vendor)}</td><td>${esc(po.status)}</td><td><a href="#" onclick="invOpenPo('${esc(po.po_number)}');return false">Open</a></td></tr>`).join('')||'<tr><td colspan="4" class="empty">No purchase orders yet.</td></tr>';
+  }catch(e){$('invPosList').innerHTML=`<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;}
+}
+async function invCreatePo(){
+  const vendor=$('invNewPoVendor').value.trim();
+  if(!vendor)return;
+  try{ await api('/admin/api/inventory/purchase-orders',{method:'POST',body:JSON.stringify({vendor})}); $('invNewPoVendor').value=''; await invLoadPos(); }
+  catch(e){alert(e.message);}
+}
+
+let invOpenPoNumber=null;
+async function invOpenPo(poNumber){
+  invOpenPoNumber=poNumber;
+  const po=invPosCache.find(p=>p.po_number===poNumber);
+  const {lines}=await api(`/admin/api/inventory/purchase-orders/${encodeURIComponent(poNumber)}/lines`);
+  const {items}=await api('/admin/api/inventory/items');
+  const el=$('invPoDetail');
+  el.style.display='';
+  const linesHtml=lines.map(l=>{
+    const item=items.find(i=>i.item_number===l.item_number);
+    return `<tr><td>${esc(l.item_number)} — ${esc(item?item.description:'')}</td><td>${l.qty_ordered}</td><td>${l.qty_received}</td>`
+      +(po.status!=='Closed'?`<td><input type="number" id="invRecvQty_${l.id}" placeholder="Qty" style="width:70px"> <input id="invRecvLot_${l.id}" placeholder="Lot #" style="width:80px"></td>`:'<td></td>')+`</tr>`;
+  }).join('');
+  const itemOptions=items.map(i=>`<option value="${esc(i.item_number)}">${esc(i.item_number)} — ${esc(i.description)}</option>`).join('');
+  const locationOptions=invLocationsCache.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('');
+  el.innerHTML=`<b>${esc(poNumber)}</b> — ${esc(po.vendor)} — ${esc(po.status)}<br><br>
+    <table class="sched-grid static"><thead><tr><th>Item</th><th>Ordered</th><th>Received</th><th>Receive Now</th></tr></thead><tbody>${linesHtml||'<tr><td colspan="4" class="empty">No lines yet.</td></tr>'}</tbody></table>
+    ${po.status!=='Closed'?`<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <select id="invAddLineItem" style="flex:1;min-width:150px">${itemOptions}</select>
+      <input id="invAddLineQty" type="number" placeholder="Qty ordered" style="width:100px">
+      <input id="invAddLineCost" type="number" placeholder="Unit cost" style="width:90px">
+      <button class="btn" onclick="invAddPoLine()">Add Line</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+      <select id="invReceiveLocation" style="flex:1;min-width:150px">${locationOptions}</select>
+      <button class="btn" onclick="invPostReceipt()">Post Receipt</button>
+    </div>`:''}
+    <button class="secondary" style="margin-top:10px" onclick="$('invPoDetail').style.display='none'">Close</button>`;
+}
+async function invAddPoLine(){
+  const item_number=$('invAddLineItem').value, qty_ordered=Number($('invAddLineQty').value), unit_cost=Number($('invAddLineCost').value)||0;
+  if(!item_number||!qty_ordered)return;
+  try{
+    await api(`/admin/api/inventory/purchase-orders/${encodeURIComponent(invOpenPoNumber)}/lines`,{method:'POST',body:JSON.stringify({item_number,qty_ordered,unit_cost})});
+    await invOpenPo(invOpenPoNumber);
+  }catch(e){alert(e.message);}
+}
+async function invPostReceipt(){
+  const location_id=Number($('invReceiveLocation').value);
+  const {lines}=await api(`/admin/api/inventory/purchase-orders/${encodeURIComponent(invOpenPoNumber)}/lines`);
+  const receiveLines=[];
+  for(const l of lines){
+    const qtyEl=$('invRecvQty_'+l.id);
+    if(qtyEl&&qtyEl.value){
+      receiveLines.push({po_line_id:l.id,qty_received:Number(qtyEl.value),lot_number:($('invRecvLot_'+l.id)||{}).value||null});
+    }
+  }
+  if(!receiveLines.length)return alert('Enter a quantity for at least one line.');
+  try{
+    await api('/admin/api/inventory/receipts',{method:'POST',body:JSON.stringify({po_number:invOpenPoNumber,location_id,lines:receiveLines})});
+    await invLoadPos(); await invOpenPo(invOpenPoNumber); await invLoadPutaway(); await invLoadLedger();
+  }catch(e){alert(e.message);}
+}
+
+async function invLoadPutaway(){
+  try{
+    const {tasks}=await api('/admin/api/inventory/putaway-tasks');
+    const binOptions=invBinsCache.map(b=>`<option value="${b.id}">${esc(b.code)}</option>`).join('');
+    $('invPutawayList').innerHTML=tasks.map(t=>{
+      const suggested=invBinsCache.find(b=>b.id===t.suggested_bin_id);
+      return `<tr><td>${esc(t.item_number)}</td><td>${t.qty}</td><td>${suggested?esc(suggested.code):'none — pick manually'}</td>
+        <td><select id="invPutawayBin_${t.id}">${binOptions}</select>
+        <input id="invPutawayReason_${t.id}" placeholder="Override reason (if different bin)" style="width:150px">
+        <button class="btn" onclick="invConfirmPutaway(${t.id})">Confirm</button></td></tr>`;
+    }).join('')||'<tr><td colspan="4" class="empty">No pending put-away tasks.</td></tr>';
+  }catch(e){$('invPutawayList').innerHTML=`<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;}
+}
+async function invConfirmPutaway(taskId){
+  const bin_id=Number($('invPutawayBin_'+taskId).value);
+  const override_reason_code=$('invPutawayReason_'+taskId).value.trim()||null;
+  try{
+    await api(`/admin/api/inventory/putaway-tasks/${taskId}/confirm`,{method:'POST',body:JSON.stringify({bin_id,override_reason_code})});
+    await invLoadPutaway(); await invLoadLedger();
+  }catch(e){alert(e.message);}
+}
+
+async function invLoadLedger(){
+  try{
+    const {entries}=await api('/admin/api/inventory/ledger');
+    $('invLedgerList').innerHTML=entries.map(e=>{
+      const bin=invBinsCache.find(b=>b.id===e.bin_id);
+      return `<tr><td>${new Date(e.posted_at).toLocaleString()}</td><td>${esc(e.entry_type)}</td><td>${esc(e.item_number)}</td><td>${e.qty>0?'+':''}${e.qty}</td><td>${bin?esc(bin.code):''}</td></tr>`;
+    }).join('')||'<tr><td colspan="5" class="empty">No ledger entries yet.</td></tr>';
+  }catch(e){$('invLedgerList').innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;}
 }
 
 // Production Schedule is the landing tab now, so its grid needs to load

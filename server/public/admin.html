@@ -480,6 +480,7 @@
       <button class="tab-btn" id="tabBtnJobs" onclick="showTab('jobs')">Job Summary</button>
       <button class="tab-btn" id="tabBtnPacking" onclick="showTab('packing')">Packing Slips</button>
       <button class="tab-btn" id="tabBtnCompleted" onclick="showTab('completed')">Completed Tasks</button>
+      <button class="tab-btn" id="tabBtnInventory" onclick="showTab('inventory')">Inventory</button>
       <button class="tab-btn" id="tabBtnOps" onclick="goToOperations()">Operations</button>
       <div style="position:relative;margin-left:auto">
         <button class="secondary" id="otherDashBtn" onclick="toggleOtherDashboards(event)">Other Dashboards &#9662;</button>
@@ -982,6 +983,53 @@
     <div id="readyToPackList"></div>
     <h2>Created Packing Slips</h2>
     <div id="packingSlipsList"></div>
+  </div>
+
+  <div id="tabInventory" style="display:none">
+    <h1>Inventory</h1>
+    <div class="sub">Item master, locations/bins, purchase receiving, put-away, and the ledger — folded into this system 2026-08-30 (see "Matrex Panel Scan - Inventory System Pivot Note.md").</div>
+
+    <h2 style="font-size:15px;margin:18px 0 8px">Items</h2>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input id="invNewItemDesc" placeholder="Description (e.g. 6063 Mill Finish 2x2 Angle)" style="flex:1">
+      <button class="btn" onclick="invCreateItem()">Add Item</button>
+    </div>
+    <div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr><th>Item #</th><th>Description</th><th>Status</th><th>Base UoM</th></tr></thead><tbody id="invItemsList"></tbody></table></div>
+
+    <h2 style="font-size:15px;margin:18px 0 8px">Locations, Zones &amp; Bins</h2>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <input id="invNewLocationName" placeholder="New location name" style="flex:1;min-width:150px">
+      <button class="btn" onclick="invCreateLocation()">Add Location</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <select id="invZoneLocation" style="flex:1;min-width:130px"></select>
+      <input id="invNewZoneName" placeholder="Zone name" style="flex:1;min-width:120px">
+      <select id="invNewZoneType" style="flex:1;min-width:100px"><option>Receive</option><option>Bulk</option><option>WIP</option><option>Ship</option><option>Yard</option></select>
+      <button class="btn" onclick="invCreateZone()">Add Zone</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <select id="invBinZone" style="flex:1;min-width:130px"></select>
+      <input id="invNewBinCode" placeholder="Bin code" style="flex:1;min-width:100px">
+      <select id="invNewBinType" style="flex:1;min-width:100px"><option>PickFace</option><option>Bulk</option><option>Staging</option></select>
+      <select id="invNewBinGranularity" style="flex:1;min-width:110px"><option>RackBay</option><option>ShelfPosition</option></select>
+      <input id="invNewBinCapacity" type="number" placeholder="Capacity qty" style="flex:1;min-width:100px">
+      <button class="btn" onclick="invCreateBin()">Add Bin</button>
+    </div>
+    <div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr><th>Bin</th><th>Zone</th><th>Type</th><th>Granularity</th><th>Capacity</th></tr></thead><tbody id="invBinsList"></tbody></table></div>
+
+    <h2 style="font-size:15px;margin:18px 0 8px">Purchase Orders &amp; Receiving</h2>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input id="invNewPoVendor" placeholder="Vendor name" style="flex:1">
+      <button class="btn" onclick="invCreatePo()">New PO</button>
+    </div>
+    <div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr><th>PO #</th><th>Vendor</th><th>Status</th><th></th></tr></thead><tbody id="invPosList"></tbody></table></div>
+    <div id="invPoDetail" style="display:none;margin-top:12px;padding:12px;background:var(--gray-50,#F9FAFB);border-radius:8px"></div>
+
+    <h2 style="font-size:15px;margin:18px 0 8px">Pending Put-away</h2>
+    <div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr><th>Item</th><th>Qty</th><th>Suggested Bin</th><th>Confirm</th></tr></thead><tbody id="invPutawayList"></tbody></table></div>
+
+    <h2 style="font-size:15px;margin:18px 0 8px">Ledger</h2>
+    <div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr><th>When</th><th>Type</th><th>Item</th><th>Qty</th><th>Bin</th></tr></thead><tbody id="invLedgerList"></tbody></table></div>
   </div>
 
   <div id="tabCompleted" style="display:none">

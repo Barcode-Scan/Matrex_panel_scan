@@ -228,3 +228,306 @@ CREATE TABLE IF NOT EXISTS deleted_batches (
   snapshot       TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_deleted_batches_at ON deleted_batches(deleted_at);
+
+-- ════════════════════════════════════════════════════════════════════
+-- INVENTORY & SCANNER SYSTEM — folded into this system 2026-08-30 per
+-- the owner's decision to run everything as one app rather than a
+-- separate React/Supabase system (see "Matrex Panel Scan - Inventory
+-- System Pivot Note.md" in the docs folder for the full record).
+--
+-- Reuses this schema's existing conventions throughout: TEXT 'Yes'/'No'
+-- for booleans (not 0/1), INTEGER PRIMARY KEY AUTOINCREMENT for pure
+-- surrogate keys, a natural TEXT key where one already exists (matching
+-- parts_index.unique_id). Reuses `devices` (already has PENDING/
+-- APPROVED/REVOKED + deviceGate) for scanner device management instead
+-- of a second device table, and `audit_log` (already exists above)
+-- instead of a second audit table. Attribution uses device_id or a
+-- free-text actor name, not a real per-user identity — this system has
+-- no login/accounts, matching audit_log's own existing comment above.
+-- ════════════════════════════════════════════════════════════════════
+
+-- ── ITEM MASTER ────────────────────────────────────────────────────
+-- item_number is the primary key directly (no separate surrogate id) -
+-- same pattern as parts_index.unique_id: one server-generated,
+-- immutable, natural identifier, not a uuid-plus-natural-key pair.
+CREATE TABLE IF NOT EXISTS items (
+  item_number       TEXT PRIMARY KEY,        -- server-generated 'ITM-000001', see item_number_counter below
+  description       TEXT NOT NULL DEFAULT '',
+  category_id       INTEGER REFERENCES categories(id),
+  costing_method    TEXT NOT NULL DEFAULT 'FIFO' CHECK (costing_method IN ('FIFO', 'Standard', 'Average')),
+  posting_group     TEXT,
+  reorder_point     REAL,
+  lead_time_days    INTEGER,
+  default_vendor    TEXT,
+  order_multiple    REAL,
+  status            TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Blocked', 'Obsolete')),
+  base_uom_code     TEXT REFERENCES uoms(code),
+  created_at        TEXT NOT NULL,
+  created_by        TEXT,
+  updated_at        TEXT,
+  updated_by        TEXT
+);
+
+-- Single-row counter for item_number allocation - the server-side
+-- equivalent of a Postgres sequence. Incremented inside a transaction by
+-- the /inventory/items POST handler, never client-supplied.
+CREATE TABLE IF NOT EXISTS item_number_counter (
+  id          INTEGER PRIMARY KEY CHECK (id = 1),
+  next_value  INTEGER NOT NULL DEFAULT 1
+);
+INSERT OR IGNORE INTO item_number_counter (id, next_value) VALUES (1, 1);
+
+CREATE TABLE IF NOT EXISTS categories (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  parent_id   INTEGER REFERENCES categories(id),
+  name        TEXT NOT NULL,
+  created_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS attributes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  value_type  TEXT NOT NULL CHECK (value_type IN ('text', 'number', 'enum', 'date'))
+);
+
+CREATE TABLE IF NOT EXISTS attribute_options (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  attribute_id  INTEGER NOT NULL REFERENCES attributes(id),
+  value         TEXT NOT NULL,
+  UNIQUE (attribute_id, value)
+);
+
+CREATE TABLE IF NOT EXISTS item_attributes (
+  item_number           TEXT NOT NULL REFERENCES items(item_number),
+  attribute_id          INTEGER NOT NULL REFERENCES attributes(id),
+  value_text            TEXT,
+  value_number          REAL,
+  value_enum_option_id  INTEGER REFERENCES attribute_options(id),
+  value_date            TEXT,
+  PRIMARY KEY (item_number, attribute_id)
+);
+
+CREATE TABLE IF NOT EXISTS item_variants (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_number   TEXT NOT NULL REFERENCES items(item_number),
+  variant_code  TEXT NOT NULL,
+  description   TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL,
+  UNIQUE (item_number, variant_code)
+);
+
+-- ── LOCATIONS, ZONES, BINS ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS locations (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  created_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS zones (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  location_id  INTEGER NOT NULL REFERENCES locations(id),
+  name         TEXT NOT NULL,
+  zone_type    TEXT NOT NULL CHECK (zone_type IN ('Receive', 'Bulk', 'WIP', 'Ship', 'Yard')),
+  created_at   TEXT NOT NULL
+);
+
+-- granularity implements DEC-002's accepted call from the original
+-- Supabase design (rack-bay for bulk, shelf-position for pick-face) -
+-- carried forward as-is, it's a domain decision, not stack-specific.
+CREATE TABLE IF NOT EXISTS bins (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  zone_id          INTEGER NOT NULL REFERENCES zones(id),
+  code             TEXT NOT NULL,
+  bin_type         TEXT NOT NULL CHECK (bin_type IN ('PickFace', 'Bulk', 'Staging')),
+  granularity      TEXT NOT NULL CHECK (granularity IN ('RackBay', 'ShelfPosition')),
+  pick_rank        INTEGER,
+  capacity_qty     REAL,
+  capacity_weight  REAL,
+  created_at       TEXT NOT NULL,
+  UNIQUE (zone_id, code)
+);
+
+CREATE TABLE IF NOT EXISTS bin_contents (
+  bin_id        INTEGER NOT NULL REFERENCES bins(id),
+  item_number   TEXT NOT NULL REFERENCES items(item_number),
+  variant_code  TEXT NOT NULL DEFAULT '',  -- '' means "no variant", so it can sit in a PRIMARY KEY (SQLite allows NULL to repeat, '' cannot)
+  qty           REAL NOT NULL DEFAULT 0,
+  updated_at    TEXT,
+  PRIMARY KEY (bin_id, item_number, variant_code)
+);
+
+-- ── UOM & BARCODE CROSS-REFERENCE ──────────────────────────────────
+CREATE TABLE IF NOT EXISTS uoms (
+  code         TEXT PRIMARY KEY,
+  description  TEXT NOT NULL DEFAULT ''
+);
+INSERT OR IGNORE INTO uoms (code, description) VALUES
+  ('EA', 'Each'), ('MM', 'Millimeter'), ('FT', 'Foot'), ('KG', 'Kilogram'), ('LB', 'Pound');
+
+CREATE TABLE IF NOT EXISTS item_uoms (
+  item_number             TEXT NOT NULL REFERENCES items(item_number),
+  uom_code                TEXT NOT NULL REFERENCES uoms(code),
+  conversion_factor       REAL NOT NULL,
+  is_purchase_default     TEXT NOT NULL DEFAULT 'No',
+  is_consumption_default  TEXT NOT NULL DEFAULT 'No',
+  is_shipment_default     TEXT NOT NULL DEFAULT 'No',
+  PRIMARY KEY (item_number, uom_code)
+);
+
+-- The barcode cross-reference table - resolve_scan (server.js) is the
+-- scan-resolution service (equivalent of the Supabase build's INV-018).
+-- reference_code is globally unique so a scan can never resolve
+-- ambiguously to two different items.
+CREATE TABLE IF NOT EXISTS item_references (
+  reference_code  TEXT PRIMARY KEY,
+  item_number     TEXT NOT NULL REFERENCES items(item_number),
+  variant_code    TEXT,
+  reference_type  TEXT NOT NULL CHECK (reference_type IN ('Vendor', 'Customer', 'GS1', 'Internal')),
+  uom_code        TEXT REFERENCES uoms(code),
+  is_void         TEXT NOT NULL DEFAULT 'No',
+  created_at      TEXT NOT NULL
+);
+
+-- ── LABELS ─────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS label_templates (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  label_type    TEXT NOT NULL CHECK (label_type IN ('Item', 'Bin', 'Lot', 'PanelUID', 'Pallet')),
+  name          TEXT NOT NULL,
+  field_layout  TEXT NOT NULL DEFAULT '{}',  -- JSON, same catch-all pattern as production_schedule.extra_fields
+  created_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS printers (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  station     TEXT NOT NULL UNIQUE,
+  created_at  TEXT NOT NULL
+);
+
+-- ── PURCHASING & RECEIVING ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  po_number   TEXT PRIMARY KEY,   -- server-generated 'PO-000001', see po_number_counter below
+  vendor      TEXT NOT NULL DEFAULT '',
+  status      TEXT NOT NULL DEFAULT 'Draft' CHECK (status IN ('Draft', 'Issued', 'PartiallyReceived', 'Closed')),
+  created_at  TEXT NOT NULL,
+  created_by  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS po_number_counter (
+  id          INTEGER PRIMARY KEY CHECK (id = 1),
+  next_value  INTEGER NOT NULL DEFAULT 1
+);
+INSERT OR IGNORE INTO po_number_counter (id, next_value) VALUES (1, 1);
+
+CREATE TABLE IF NOT EXISTS purchase_order_lines (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  po_number     TEXT NOT NULL REFERENCES purchase_orders(po_number),
+  item_number   TEXT NOT NULL REFERENCES items(item_number),
+  variant_code  TEXT,
+  uom_code      TEXT REFERENCES uoms(code),
+  qty_ordered   REAL NOT NULL,
+  qty_received  REAL NOT NULL DEFAULT 0,  -- maintained by the receipt-posting handler, never hand-edited
+  unit_cost     REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_po_lines_po_number ON purchase_order_lines(po_number);
+
+CREATE TABLE IF NOT EXISTS lots (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_number    TEXT NOT NULL REFERENCES items(item_number),
+  lot_number     TEXT NOT NULL,
+  mill_cert_url  TEXT,
+  created_at     TEXT NOT NULL,
+  UNIQUE (item_number, lot_number)
+);
+
+CREATE TABLE IF NOT EXISTS receipts (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  po_number     TEXT NOT NULL REFERENCES purchase_orders(po_number),
+  location_id   INTEGER NOT NULL REFERENCES locations(id),
+  received_at   TEXT NOT NULL,
+  received_by   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS receipt_lines (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  receipt_id     INTEGER NOT NULL REFERENCES receipts(id),
+  po_line_id     INTEGER NOT NULL REFERENCES purchase_order_lines(id),
+  item_number    TEXT NOT NULL REFERENCES items(item_number),
+  variant_code   TEXT,
+  uom_code       TEXT,
+  qty_expected   REAL NOT NULL,
+  qty_received   REAL NOT NULL,
+  is_over_under  TEXT NOT NULL DEFAULT 'No',  -- set by the handler (qty_received <> qty_expected), not a generated column
+  damage_notes   TEXT,
+  lot_id         INTEGER REFERENCES lots(id)
+);
+
+-- ── THE LEDGER ─────────────────────────────────────────────────────
+-- Append-only, signed qty (+ increases on-hand, - decreases). Every
+-- future posting path (movement, consumption, pick, ship, adjustment)
+-- must write through this same table the same way the receipt/put-away
+-- handlers below do - not invent its own. posted_by is a device_id or
+-- an admin-key request's identifying label - there is no real user
+-- identity in this system to attribute to.
+CREATE TABLE IF NOT EXISTS item_ledger_entries (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  entry_type       TEXT NOT NULL CHECK (entry_type IN ('Receipt', 'PutAway', 'Movement', 'Consumption', 'Output', 'Pick', 'Ship', 'Adjustment')),
+  item_number      TEXT NOT NULL REFERENCES items(item_number),
+  variant_code     TEXT,
+  lot_id           INTEGER REFERENCES lots(id),
+  qty              REAL NOT NULL,
+  uom_code         TEXT,
+  bin_id           INTEGER REFERENCES bins(id),
+  location_id      INTEGER REFERENCES locations(id),
+  reference_table  TEXT,
+  reference_id     TEXT,
+  posted_at        TEXT NOT NULL,
+  posted_by        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ledger_item_number ON item_ledger_entries(item_number);
+CREATE INDEX IF NOT EXISTS idx_ledger_bin_id ON item_ledger_entries(bin_id);
+
+-- Basic costing (one FIFO layer per receipt, at the PO's unit cost).
+-- Real FIFO layer *consumption* needs Feature 11/12-equivalent
+-- consumption/shipment postings, which don't exist yet - same honest
+-- limitation as the original Supabase design.
+CREATE TABLE IF NOT EXISTS value_entries (
+  id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_ledger_entry_id   INTEGER NOT NULL REFERENCES item_ledger_entries(id),
+  unit_cost              REAL NOT NULL,
+  total_cost             REAL NOT NULL,
+  costing_method_used    TEXT NOT NULL,
+  posted_at              TEXT NOT NULL
+);
+
+-- ── PUT-AWAY & REPLENISHMENT ───────────────────────────────────────
+CREATE TABLE IF NOT EXISTS putaway_tasks (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  receipt_line_id       INTEGER NOT NULL REFERENCES receipt_lines(id),
+  item_number           TEXT NOT NULL REFERENCES items(item_number),
+  variant_code          TEXT,
+  qty                   REAL NOT NULL,
+  suggested_bin_id      INTEGER REFERENCES bins(id),
+  status                TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Completed')),
+  completed_bin_id      INTEGER REFERENCES bins(id),
+  completed_at          TEXT,
+  completed_by          TEXT,
+  override_reason_code  TEXT REFERENCES reason_codes(code)
+);
+
+CREATE TABLE IF NOT EXISTS reason_codes (
+  code         TEXT PRIMARY KEY,
+  category     TEXT NOT NULL CHECK (category IN ('Override', 'Scrap', 'Void', 'Adjustment', 'Damage')),
+  description  TEXT NOT NULL DEFAULT ''
+);
+
+-- No scheduler reachable to trigger this automatically (same honest gap
+-- as the original design) - callable on demand only.
+CREATE TABLE IF NOT EXISTS replenishment_tasks (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  bin_id       INTEGER NOT NULL REFERENCES bins(id),
+  item_number  TEXT NOT NULL REFERENCES items(item_number),
+  qty_needed   REAL NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Completed')),
+  created_at   TEXT NOT NULL
+);
