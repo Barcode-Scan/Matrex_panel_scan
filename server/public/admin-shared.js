@@ -1044,10 +1044,13 @@ function materialDemandStats(m,items){
   // Mill vs ALUM Anodized) - same "distinct values, joined" treatment as
   // Jobs above, rather than picking just one.
   const finishes=[...new Set(items.map(b=>b.finish).filter(Boolean))].sort();
-  const onHand=materialStockCache.hasOwnProperty(m)?materialStockCache[m]:null;
+  const stockEntry=materialStockCache.hasOwnProperty(m)?materialStockCache[m]:null;
+  const onHand=stockEntry?stockEntry.on_hand_qty:null;
+  const source=stockEntry?stockEntry.source:null;
+  const itemNumbers=stockEntry?stockEntry.item_numbers:null;
   const shortfall=onHand!==null?total-onHand:null;
   const conflict=shortfall!==null&&shortfall>0;
-  return{total,unparsed,jobs,finishes,onHand,shortfall,conflict};
+  return{total,unparsed,jobs,finishes,onHand,source,itemNumbers,shortfall,conflict};
 }
 // Shared table-row builder - the standalone Material Demand tab and the
 // Weekly Detail summary show the exact same columns (Material, Finish,
@@ -1061,14 +1064,17 @@ function materialDemandRowsHtml(items,searchQuery){
   if(!materials.length)return null;
   return materials.map(m=>{
     const mItems=groups[m];
-    const{total,unparsed,jobs,finishes,onHand,shortfall,conflict}=materialDemandStats(m,mItems);
+    const{total,unparsed,jobs,finishes,onHand,source,itemNumbers,shortfall,conflict}=materialDemandStats(m,mItems);
+    const onHandCell=source==='inventory'
+      ?`<span title="Live from Inventory item ${esc(itemNumbers||'')} — edit via the Inventory tab">${onHand}<span style="color:var(--gray-500);font-weight:400"> (live)</span></span>`
+      :`<input type="number" class="gc-input" value="${onHand!==null?onHand:''}" placeholder="—" style="width:80px" onclick="event.stopPropagation()" onchange="saveMaterialStock('${esc(m)}',this.value)">`;
     return`<tr>
       <td class="gc-batch">${esc(m)}</td>
       <td>${finishes.length?esc(finishes.join(', ')):''}</td>
       <td class="gc-num">${total}${unparsed?` <span style="color:var(--gray-500);font-weight:400">(+${unparsed} unparsed)</span>`:''}</td>
       <td class="gc-num">${mItems.length}</td>
       <td>${jobs.length?esc(jobs.join(', ')):''}</td>
-      <td class="gc-num"><input type="number" class="gc-input" value="${onHand!==null?onHand:''}" placeholder="—" style="width:80px" onclick="event.stopPropagation()" onchange="saveMaterialStock('${esc(m)}',this.value)"></td>
+      <td class="gc-num">${onHandCell}</td>
       <td>${onHand===null?'':conflict?'<span style="color:var(--red-600);font-weight:700">Short by '+shortfall+'</span>':'<span style="color:var(--green-700);font-weight:700">Covered</span>'}</td>
     </tr>`;
   }).join('');
@@ -1087,20 +1093,25 @@ function renderWeekMaterialSummary(items){
 // referenced against Phase 1's own open-batch Sheet Qty totals so a
 // shortfall surfaces right where the demand is already shown, rather than
 // as a separate disconnected view.
+// Cache entries are {on_hand_qty, source, item_numbers} - source is
+// 'inventory' for a material mapped to an Inventory item (live, read-only
+// here) or 'manual' for the original typed-in-by-hand behavior.
 let materialStockCache={};
 async function loadMaterialStock(){
   if(!KEY)return;
   try{
     const data=await api('/admin/api/material-stock');
     materialStockCache={};
-    (data.stock||[]).forEach(s=>{materialStockCache[s.material]=s.on_hand_qty;});
+    (data.stock||[]).forEach(s=>{materialStockCache[s.material]={on_hand_qty:s.on_hand_qty,source:s.source,item_numbers:s.item_numbers};});
     renderMaterialDemand();
   }catch(e){/* leave last-known cache showing rather than blank it on a transient error */}
 }
 async function saveMaterialStock(material,value){
   const qty=parseFloat(value);
   if(isNaN(qty))return;
-  materialStockCache[material]=qty; // optimistic - re-render immediately, don't wait on the round-trip
+  const existing=materialStockCache[material];
+  if(existing&&existing.source==='inventory')return; // read-only cell shouldn't call this, but guard anyway
+  materialStockCache[material]={on_hand_qty:qty,source:'manual'}; // optimistic - re-render immediately, don't wait on the round-trip
   renderMaterialDemand();
   if(currentWeekKey)renderWeekMaterialSummary((groupByWeek()[currentWeekKey])||[]);
   try{await api('/admin/api/material-stock/'+encodeURIComponent(material),{method:'POST',body:JSON.stringify({on_hand_qty:qty})});}
@@ -2902,8 +2913,15 @@ async function loadInventoryTab(){
 async function invLoadItems(){
   try{
     const {items}=await api('/admin/api/inventory/items');
-    $('invItemsList').innerHTML=items.map(i=>`<tr><td>${esc(i.item_number)}</td><td>${esc(i.description)}</td><td>${esc(i.status)}</td><td>${esc(i.base_uom_code||'')}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">No items yet.</td></tr>';
-  }catch(e){$('invItemsList').innerHTML=`<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;}
+    $('invItemsList').innerHTML=items.map(i=>`<tr><td>${esc(i.item_number)}</td><td>${esc(i.description)}</td><td>${esc(i.status)}</td><td>${esc(i.base_uom_code||'')}</td>
+      <td><input value="${esc(i.material_demand_key||'')}" placeholder="e.g. ALUM Mill" style="width:140px" onclick="event.stopPropagation()" onchange="invSetMaterialDemandKey('${esc(i.item_number)}',this.value)"></td></tr>`).join('')||'<tr><td colspan="5" class="empty">No items yet.</td></tr>';
+  }catch(e){$('invItemsList').innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;}
+}
+async function invSetMaterialDemandKey(itemNumber,value){
+  try{
+    await api(`/admin/api/inventory/items/${encodeURIComponent(itemNumber)}`,{method:'PATCH',body:JSON.stringify({material_demand_key:value.trim()})});
+    if(typeof loadMaterialStock==='function')loadMaterialStock();
+  }catch(e){alert(e.message);}
 }
 async function invCreateItem(){
   const description=$('invNewItemDesc').value.trim();
@@ -3017,7 +3035,7 @@ async function invPostReceipt(){
   if(!receiveLines.length)return alert('Enter a quantity for at least one line.');
   try{
     await api('/admin/api/inventory/receipts',{method:'POST',body:JSON.stringify({po_number:invOpenPoNumber,location_id,lines:receiveLines})});
-    await invLoadPos(); await invOpenPo(invOpenPoNumber); await invLoadPutaway(); await invLoadLedger();
+    await invLoadPos(); await invOpenPo(invOpenPoNumber); await invLoadPutaway(); await invLoadLedger(); if(typeof loadMaterialStock==='function')loadMaterialStock();
   }catch(e){alert(e.message);}
 }
 
@@ -3039,7 +3057,7 @@ async function invConfirmPutaway(taskId){
   const override_reason_code=$('invPutawayReason_'+taskId).value.trim()||null;
   try{
     await api(`/admin/api/inventory/putaway-tasks/${taskId}/confirm`,{method:'POST',body:JSON.stringify({bin_id,override_reason_code})});
-    await invLoadPutaway(); await invLoadLedger();
+    await invLoadPutaway(); await invLoadLedger(); if(typeof loadMaterialStock==='function')loadMaterialStock();
   }catch(e){alert(e.message);}
 }
 
@@ -3062,7 +3080,7 @@ async function invPostMovement(){
   try{
     await api('/admin/api/inventory/movements',{method:'POST',body:JSON.stringify({item_number,variant_code,from_bin_id,to_bin_id,qty})});
     $('invMoveResult').textContent='Moved.'; $('invMoveItem').value=''; $('invMoveVariant').value=''; $('invMoveFromBin').value=''; $('invMoveToBin').value=''; $('invMoveQty').value='';
-    await invLoadLedger();
+    await invLoadLedger(); if(typeof loadMaterialStock==='function')loadMaterialStock();
   }catch(e){$('invMoveResult').textContent=e.message;}
 }
 
@@ -3102,7 +3120,7 @@ async function invReceiveTransferLine(lineId){
   const to_bin_id=Number($('invTransferRecvBin_'+lineId).value);
   try{
     await api(`/admin/api/inventory/transfer-lines/${lineId}/receive`,{method:'POST',body:JSON.stringify({to_bin_id})});
-    await invLoadTransfers(); await invLoadLedger();
+    await invLoadTransfers(); await invLoadLedger(); if(typeof loadMaterialStock==='function')loadMaterialStock();
     const openId=$('invTransferDetail').innerHTML.match(/Transfer #(\d+)/);
     if(openId)await invOpenTransfer(Number(openId[1]));
   }catch(e){alert(e.message);}
@@ -3115,7 +3133,7 @@ async function invPostConsumption(){
   try{
     await api('/admin/api/inventory/consumption',{method:'POST',body:JSON.stringify({batch,item_number,variant_code,bin_id,qty})});
     $('invConsResult').textContent='Posted.'; $('invConsBatch').value=''; $('invConsItem').value=''; $('invConsVariant').value=''; $('invConsBin').value=''; $('invConsQty').value='';
-    await invLoadLedger();
+    await invLoadLedger(); if(typeof loadMaterialStock==='function')loadMaterialStock();
   }catch(e){$('invConsResult').textContent=e.message;}
 }
 
@@ -3158,7 +3176,7 @@ async function invPickShipmentLine(shipmentId){
   if(!item_number||!bin_id||!qty)return;
   try{
     await api(`/admin/api/inventory/shipments/${shipmentId}/lines`,{method:'POST',body:JSON.stringify({item_number,variant_code,bin_id,qty})});
-    await invOpenShipment(shipmentId); await invLoadLedger();
+    await invOpenShipment(shipmentId); await invLoadLedger(); if(typeof loadMaterialStock==='function')loadMaterialStock();
   }catch(e){alert(e.message);}
 }
 async function invShipShipment(id){
@@ -3222,7 +3240,7 @@ async function invLoadVariances(){
 async function invReviewVariance(lineId,decision){
   try{
     await api(`/admin/api/inventory/variances/${lineId}/review`,{method:'POST',body:JSON.stringify({decision})});
-    await invLoadVariances(); await invLoadLedger();
+    await invLoadVariances(); await invLoadLedger(); if(typeof loadMaterialStock==='function')loadMaterialStock();
   }catch(e){alert(e.message);}
 }
 

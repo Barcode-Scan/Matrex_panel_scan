@@ -994,7 +994,8 @@
       <input id="invNewItemDesc" placeholder="Description (e.g. 6063 Mill Finish 2x2 Angle)" style="flex:1">
       <button class="btn" onclick="invCreateItem()">Add Item</button>
     </div>
-    <div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr><th>Item #</th><th>Description</th><th>Status</th><th>Base UoM</th></tr></thead><tbody id="invItemsList"></tbody></table></div>
+    <div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr><th>Item #</th><th>Description</th><th>Status</th><th>Base UoM</th><th>Material Demand Key</th></tr></thead><tbody id="invItemsList"></tbody></table></div>
+    <div class="sub" style="margin-top:6px">Setting a Material Demand Key links this item to a row on the Material Demand tab — that material's On Hand then comes live from this item's Inventory qty instead of being typed in by hand.</div>
 
     <h2 style="font-size:15px;margin:18px 0 8px">Locations, Zones &amp; Bins</h2>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">

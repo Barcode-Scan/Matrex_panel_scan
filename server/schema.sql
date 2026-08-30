@@ -262,6 +262,15 @@ CREATE TABLE IF NOT EXISTS items (
   order_multiple    REAL,
   status            TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Blocked', 'Obsolete')),
   base_uom_code     TEXT REFERENCES uoms(code),
+  -- Optional link to the pre-existing Material Demand sheet's free-text
+  -- material name (production_schedule.material / material_stock.material).
+  -- When set, that material's "On Hand" on the Material Demand tab stops
+  -- being a manually-typed number and becomes a live SUM(bin_contents.qty)
+  -- for every item mapped to it - see the material-stock endpoints in
+  -- server.js. Left NULL, an item has no effect on Material Demand at all.
+  -- (Column added after `items` already existed on the live DB, so it's
+  -- brought in via db.js's ensureColumn(), same as every other
+  -- already-live-table column addition - see db.js for why.)
   created_at        TEXT NOT NULL,
   created_by        TEXT,
   updated_at        TEXT,

@@ -36,6 +36,10 @@ ensureColumn('scans', 'acknowledged_at', 'TEXT');
 // type" reasoning already used for parts_index.scanned - avoids this
 // ever going stale if a completed batch's scan count somehow changes.
 ensureColumn('production_schedule', 'task_status', 'TEXT');
+// Links an Inventory item to the pre-existing Material Demand sheet's
+// free-text material name - see the comment on `items` in schema.sql.
+ensureColumn('items', 'material_demand_key', 'TEXT');
+db.exec('CREATE INDEX IF NOT EXISTS idx_items_material_demand_key ON items(material_demand_key)');
 // Index depends on sequence_no, so it's created here (after ensureColumn
 // guarantees the column exists) rather than in schema.sql — CREATE TABLE
 // IF NOT EXISTS is a no-op on an already-existing table, so a CREATE INDEX

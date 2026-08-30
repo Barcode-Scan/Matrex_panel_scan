@@ -1138,18 +1138,46 @@ app.get('/admin/api/device-activity', requireAdmin, (req, res) => {
 });
 
 // ── MATERIAL STOCK — manual on-hand qty per material, the minimal input
-// Phase 4 needs (no real inventory system exists to integrate with).
+// Phase 4 needed back when no real inventory system existed to integrate
+// with. Now that the Inventory system (items/bin_contents/ledger) exists,
+// an item can be mapped to a material name via items.material_demand_key -
+// when it is, that material's on-hand here is a LIVE SUM(bin_contents.qty)
+// across every item mapped to it, not the manually-typed number anymore.
+// Materials with no mapped item keep working exactly as before (manual
+// entry), so this is additive, not a breaking change to Phase 4.
 const upsertMaterialStock = db.prepare(`
   INSERT INTO material_stock (material, on_hand_qty, updated_at, updated_by)
   VALUES (@material, @on_hand_qty, @now, @updated_by)
   ON CONFLICT(material) DO UPDATE SET on_hand_qty=@on_hand_qty, updated_at=@now, updated_by=@updated_by
 `);
+const getMappedItemsForMaterial = db.prepare(
+  "SELECT item_number FROM items WHERE material_demand_key = ? ORDER BY item_number"
+);
 app.get('/admin/api/material-stock', requireAdmin, (req, res) => {
-  res.json({ ok: true, stock: db.prepare('SELECT * FROM material_stock').all() });
+  const manual = db.prepare('SELECT * FROM material_stock').all();
+  const mappedRows = db.prepare(`
+    SELECT i.material_demand_key AS material,
+           COALESCE(SUM(bc.qty), 0) AS on_hand_qty,
+           GROUP_CONCAT(DISTINCT i.item_number) AS item_numbers
+    FROM items i
+    LEFT JOIN bin_contents bc ON bc.item_number = i.item_number
+    WHERE i.material_demand_key IS NOT NULL AND i.material_demand_key <> ''
+    GROUP BY i.material_demand_key
+  `).all();
+  const mappedKeys = new Set(mappedRows.map(m => m.material));
+  const stock = [
+    ...mappedRows.map(m => ({ material: m.material, on_hand_qty: m.on_hand_qty, source: 'inventory', item_numbers: m.item_numbers })),
+    ...manual.filter(m => !mappedKeys.has(m.material)).map(m => ({ ...m, source: 'manual' }))
+  ];
+  res.json({ ok: true, stock });
 });
 app.post('/admin/api/material-stock/:material', requireAdmin, (req, res) => {
   const material = String(req.params.material || '').trim();
   if (!material) return res.status(400).json({ ok: false, error: 'material required' });
+  const mapped = getMappedItemsForMaterial.all(material);
+  if (mapped.length) {
+    return res.status(400).json({ ok: false, error: `On-hand for "${material}" is now live from Inventory item ${mapped.map(m => m.item_number).join(', ')} — edit stock via Inventory receiving/consumption/movements instead.` });
+  }
   const qty = parseFloat(req.body && req.body.on_hand_qty);
   if (isNaN(qty)) return res.status(400).json({ ok: false, error: 'on_hand_qty must be a number' });
   const actor = actorFrom(req);
@@ -1423,7 +1451,7 @@ const updateItemStmt = db.prepare(`
     description=@description, category_id=@category_id, costing_method=@costing_method,
     posting_group=@posting_group, reorder_point=@reorder_point, lead_time_days=@lead_time_days,
     default_vendor=@default_vendor, order_multiple=@order_multiple, status=@status,
-    base_uom_code=@base_uom_code, updated_at=@now, updated_by=@actor
+    base_uom_code=@base_uom_code, material_demand_key=@material_demand_key, updated_at=@now, updated_by=@actor
   WHERE item_number=@item_number
 `);
 
@@ -1468,6 +1496,7 @@ app.patch('/admin/api/inventory/items/:itemNumber', requireAdmin, (req, res) => 
     order_multiple: b.order_multiple ?? existing.order_multiple,
     status: b.status ?? existing.status,
     base_uom_code: b.base_uom_code ?? existing.base_uom_code,
+    material_demand_key: b.material_demand_key !== undefined ? (b.material_demand_key || null) : existing.material_demand_key,
     now: nowIso(), actor
   });
   logAudit(actor, 'ITEM_UPDATE', req.params.itemNumber, JSON.stringify(b));
