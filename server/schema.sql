@@ -531,3 +531,133 @@ CREATE TABLE IF NOT EXISTS replenishment_tasks (
   status       TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Completed')),
   created_at   TEXT NOT NULL
 );
+
+-- ════════════════════════════════════════════════════════════════════
+-- INVENTORY PHASE 3 — Internal Movements, Production Consumption,
+-- Pick/Pack/Ship, Cycle Counting, Valuation. Added 2026-08-30, same
+-- session as Phase 1/2 above.
+--
+-- Feature 11 (Production Consumption) deliberately does NOT touch
+-- production_schedule's own status/completion fields at all - that
+-- table already owns "is this batch done" via its existing cut/bent/
+-- completed status machinery, and duplicating that ownership here was
+-- exactly the UPD-002 conflict flagged (and left open) in the original
+-- Supabase-era design. Consumption postings below reference a batch by
+-- its free-text name only, as a tag, the same way scans.batch already
+-- does for DIRECTED-mode scans - additive tracking, not a competing
+-- source of truth.
+--
+-- Feature 12 (Pick/Pack/Ship) has no formal sales-order/job-release
+-- record behind it, same honest gap flagged as DEC-010 in the original
+-- design (no such source exists anywhere in this system either) -
+-- shipments below carry a free-text reference instead of a real order
+-- FK. Building a fake order table to point at would be worse than
+-- being honest that this posts against a note, not a formal release.
+-- ════════════════════════════════════════════════════════════════════
+
+-- ── INTERNAL MOVEMENTS & TRANSFERS ─────────────────────────────────
+-- Same-location bin-to-bin has no header record - it's two ledger rows
+-- (a decrement + an increment) posted atomically by one handler, same
+-- as every other posting path in this system.
+CREATE TABLE IF NOT EXISTS transfer_orders (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_location_id  INTEGER NOT NULL REFERENCES locations(id),
+  to_location_id    INTEGER NOT NULL REFERENCES locations(id),
+  status        TEXT NOT NULL DEFAULT 'InTransit' CHECK (status IN ('InTransit', 'Received')),
+  created_at    TEXT NOT NULL,
+  created_by    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS transfer_order_lines (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  transfer_order_id INTEGER NOT NULL REFERENCES transfer_orders(id),
+  item_number       TEXT NOT NULL REFERENCES items(item_number),
+  variant_code      TEXT,
+  qty               REAL NOT NULL,
+  from_bin_id       INTEGER REFERENCES bins(id),
+  to_bin_id         INTEGER REFERENCES bins(id),
+  received_at       TEXT,
+  received_by       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_transfer_lines_order ON transfer_order_lines(transfer_order_id);
+
+-- ── PRODUCTION CONSUMPTION & OUTPUT ────────────────────────────────
+-- No BOM/routing table - what raw material a given panel/part actually
+-- consumes is a real glazing/fabrication process fact this system has
+-- no basis to guess at (matches "do not guess at glazing or
+-- fabrication process rules" from the original build instructions).
+-- Each consumption posting is a manual, explicit entry - item, qty,
+-- batch reference - not auto-derived from a formula that doesn't exist
+-- yet. If a real BOM gets defined later, this table is what a BOM-driven
+-- poster would write to; nothing here needs to change to support that.
+CREATE TABLE IF NOT EXISTS production_consumption (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch        TEXT,  -- free-text reference to production_schedule.batch - a tag, not an FK/ownership claim
+  item_number  TEXT NOT NULL REFERENCES items(item_number),
+  variant_code TEXT,
+  qty          REAL NOT NULL,
+  bin_id       INTEGER REFERENCES bins(id),
+  posted_at    TEXT NOT NULL,
+  posted_by    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_production_consumption_batch ON production_consumption(batch);
+
+-- ── PICK, PACK & SHIPMENT ──────────────────────────────────────────
+-- reference_note is free text (e.g. a job/customer name) - see the
+-- honest gap noted above about no formal order/release record existing.
+CREATE TABLE IF NOT EXISTS shipments (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  reference_note  TEXT,
+  location_id     INTEGER NOT NULL REFERENCES locations(id),
+  status          TEXT NOT NULL DEFAULT 'Picking' CHECK (status IN ('Picking', 'Shipped')),
+  created_at      TEXT NOT NULL,
+  created_by      TEXT,
+  shipped_at      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS shipment_lines (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  shipment_id   INTEGER NOT NULL REFERENCES shipments(id),
+  item_number   TEXT NOT NULL REFERENCES items(item_number),
+  variant_code  TEXT,
+  qty           REAL NOT NULL,
+  bin_id        INTEGER REFERENCES bins(id)  -- which bin it was picked from
+);
+CREATE INDEX IF NOT EXISTS idx_shipment_lines_shipment ON shipment_lines(shipment_id);
+
+-- ── CYCLE COUNTING & PHYSICAL INVENTORY ────────────────────────────
+-- Blind count: system_qty is captured on submit (not shown to the
+-- counter beforehand) - enforced by the client UI not fetching/
+-- displaying it during entry, same as the original design's approach.
+CREATE TABLE IF NOT EXISTS count_sessions (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  location_id  INTEGER NOT NULL REFERENCES locations(id),
+  status       TEXT NOT NULL DEFAULT 'Open' CHECK (status IN ('Open', 'Closed')),
+  created_at   TEXT NOT NULL,
+  created_by   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS count_lines (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id    INTEGER NOT NULL REFERENCES count_sessions(id),
+  bin_id        INTEGER NOT NULL REFERENCES bins(id),
+  item_number   TEXT NOT NULL REFERENCES items(item_number),
+  variant_code  TEXT,
+  system_qty    REAL NOT NULL,   -- snapshotted from bin_contents at the moment of counting, not live
+  counted_qty   REAL NOT NULL,
+  variance      REAL NOT NULL,   -- counted_qty - system_qty, computed by the handler, not the client
+  status        TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Approved', 'Rejected')),
+  counted_at    TEXT NOT NULL,
+  counted_by    TEXT,
+  reviewed_at   TEXT,
+  reviewed_by   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_count_lines_session ON count_lines(session_id);
+
+-- Adjustment postings (variance approval -> ledger). Ledger stays
+-- append-only per section 3.3 - this is what an approved variance
+-- writes to item_ledger_entries as an offsetting entry, not a direct
+-- bin_contents edit.
+-- (No new table needed here - adjustments post through
+-- item_ledger_entries with entry_type='Adjustment', same ledger every
+-- other posting path already uses.)

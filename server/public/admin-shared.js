@@ -2892,7 +2892,11 @@ async function bulkVoidSelectedLabels(){
 let invLocationsCache=[], invZonesCache=[], invBinsCache=[], invPosCache=[];
 
 async function loadInventoryTab(){
-  await Promise.all([invLoadItems(), invLoadLocationsZonesBins(), invLoadPos(), invLoadPutaway(), invLoadLedger()]);
+  await Promise.all([invLoadItems(), invLoadLocationsZonesBins(), invLoadPos(), invLoadPutaway(), invLoadLedger(),
+    invLoadTransfers(), invLoadShipments(), invLoadCountSessions(), invLoadVariances(), invLoadValuation()]);
+  const locOptions=invLocationsCache.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')||'<option value="">(add a location first)</option>';
+  $('invTransferFromLoc').innerHTML=locOptions; $('invTransferToLoc').innerHTML=locOptions;
+  $('invNewShipLoc').innerHTML=locOptions; $('invNewCountLoc').innerHTML=locOptions;
 }
 
 async function invLoadItems(){
@@ -3047,6 +3051,187 @@ async function invLoadLedger(){
       return `<tr><td>${new Date(e.posted_at).toLocaleString()}</td><td>${esc(e.entry_type)}</td><td>${esc(e.item_number)}</td><td>${e.qty>0?'+':''}${e.qty}</td><td>${bin?esc(bin.code):''}</td></tr>`;
     }).join('')||'<tr><td colspan="5" class="empty">No ledger entries yet.</td></tr>';
   }catch(e){$('invLedgerList').innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;}
+}
+
+// ── PHASE 3: movements, transfers, consumption, shipments, counting, valuation ──
+
+async function invPostMovement(){
+  const item_number=$('invMoveItem').value.trim(), variant_code=$('invMoveVariant').value.trim()||null;
+  const from_bin_id=Number($('invMoveFromBin').value), to_bin_id=Number($('invMoveToBin').value), qty=Number($('invMoveQty').value);
+  if(!item_number||!from_bin_id||!to_bin_id||!qty)return;
+  try{
+    await api('/admin/api/inventory/movements',{method:'POST',body:JSON.stringify({item_number,variant_code,from_bin_id,to_bin_id,qty})});
+    $('invMoveResult').textContent='Moved.'; $('invMoveItem').value=''; $('invMoveVariant').value=''; $('invMoveFromBin').value=''; $('invMoveToBin').value=''; $('invMoveQty').value='';
+    await invLoadLedger();
+  }catch(e){$('invMoveResult').textContent=e.message;}
+}
+
+async function invLoadTransfers(){
+  try{
+    const {transfers}=await api('/admin/api/inventory/transfers');
+    $('invTransfersList').innerHTML=transfers.map(t=>{
+      const from=invLocationsCache.find(l=>l.id===t.from_location_id), to=invLocationsCache.find(l=>l.id===t.to_location_id);
+      return `<tr><td>${t.id}</td><td>${esc(from?from.name:'')}</td><td>${esc(to?to.name:'')}</td><td>${esc(t.status)}</td><td><a href="#" onclick="invOpenTransfer(${t.id});return false">Open</a></td></tr>`;
+    }).join('')||'<tr><td colspan="5" class="empty">No transfers yet.</td></tr>';
+  }catch(e){$('invTransfersList').innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;}
+}
+async function invCreateTransfer(){
+  const from_location_id=Number($('invTransferFromLoc').value), to_location_id=Number($('invTransferToLoc').value);
+  const item_number=$('invTransferItem').value.trim(), variant_code=$('invTransferVariant').value.trim()||null;
+  const from_bin_id=Number($('invTransferFromBin').value), qty=Number($('invTransferQty').value);
+  if(!from_location_id||!to_location_id||!item_number||!from_bin_id||!qty)return;
+  try{
+    await api('/admin/api/inventory/transfers',{method:'POST',body:JSON.stringify({from_location_id,to_location_id,lines:[{item_number,variant_code,from_bin_id,qty}]})});
+    $('invTransferItem').value=''; $('invTransferVariant').value=''; $('invTransferFromBin').value=''; $('invTransferQty').value='';
+    await invLoadTransfers(); await invLoadLedger();
+  }catch(e){alert(e.message);}
+}
+async function invOpenTransfer(id){
+  const {lines}=await api(`/admin/api/inventory/transfers/${id}/lines`);
+  const el=$('invTransferDetail'); el.style.display='';
+  const binOptions=invBinsCache.map(b=>`<option value="${b.id}">${esc(b.code)}</option>`).join('');
+  el.innerHTML=`<b>Transfer #${id}</b><br><br><table class="sched-grid static"><thead><tr><th>Item</th><th>Qty</th><th>From bin</th><th>Received</th><th></th></tr></thead><tbody>`
+    +lines.map(l=>{
+      const fromBin=invBinsCache.find(b=>b.id===l.from_bin_id);
+      return `<tr><td>${esc(l.item_number)}</td><td>${l.qty}</td><td>${fromBin?esc(fromBin.code):''}</td><td>${l.received_at?new Date(l.received_at).toLocaleString():'—'}</td>`
+        +(l.received_at?'<td></td>':`<td><select id="invTransferRecvBin_${l.id}">${binOptions}</select> <button class="btn" onclick="invReceiveTransferLine(${l.id})">Receive</button></td>`)+`</tr>`;
+    }).join('')
+    +`</tbody></table><button class="secondary" style="margin-top:10px" onclick="$('invTransferDetail').style.display='none'">Close</button>`;
+}
+async function invReceiveTransferLine(lineId){
+  const to_bin_id=Number($('invTransferRecvBin_'+lineId).value);
+  try{
+    await api(`/admin/api/inventory/transfer-lines/${lineId}/receive`,{method:'POST',body:JSON.stringify({to_bin_id})});
+    await invLoadTransfers(); await invLoadLedger();
+    const openId=$('invTransferDetail').innerHTML.match(/Transfer #(\d+)/);
+    if(openId)await invOpenTransfer(Number(openId[1]));
+  }catch(e){alert(e.message);}
+}
+
+async function invPostConsumption(){
+  const batch=$('invConsBatch').value.trim()||null, item_number=$('invConsItem').value.trim(), variant_code=$('invConsVariant').value.trim()||null;
+  const bin_id=Number($('invConsBin').value), qty=Number($('invConsQty').value);
+  if(!item_number||!bin_id||!qty)return;
+  try{
+    await api('/admin/api/inventory/consumption',{method:'POST',body:JSON.stringify({batch,item_number,variant_code,bin_id,qty})});
+    $('invConsResult').textContent='Posted.'; $('invConsBatch').value=''; $('invConsItem').value=''; $('invConsVariant').value=''; $('invConsBin').value=''; $('invConsQty').value='';
+    await invLoadLedger();
+  }catch(e){$('invConsResult').textContent=e.message;}
+}
+
+async function invLoadShipments(){
+  try{
+    const {shipments}=await api('/admin/api/inventory/shipments');
+    $('invShipmentsList').innerHTML=shipments.map(s=>`<tr><td>${s.id}</td><td>${esc(s.reference_note||'')}</td><td>${esc(s.status)}</td><td><a href="#" onclick="invOpenShipment(${s.id});return false">Open</a></td></tr>`).join('')||'<tr><td colspan="4" class="empty">No shipments yet.</td></tr>';
+  }catch(e){$('invShipmentsList').innerHTML=`<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;}
+}
+async function invCreateShipment(){
+  const reference_note=$('invNewShipNote').value.trim()||null, location_id=Number($('invNewShipLoc').value);
+  if(!location_id)return;
+  try{ await api('/admin/api/inventory/shipments',{method:'POST',body:JSON.stringify({reference_note,location_id})}); $('invNewShipNote').value=''; await invLoadShipments(); }
+  catch(e){alert(e.message);}
+}
+async function invOpenShipment(id){
+  const shipment=(await api('/admin/api/inventory/shipments')).shipments.find(s=>s.id===id);
+  const {lines}=await api(`/admin/api/inventory/shipments/${id}/lines`);
+  const el=$('invShipmentDetail'); el.style.display='';
+  const binOptions=invBinsCache.map(b=>`<option value="${b.id}">${esc(b.code)}</option>`).join('');
+  const linesHtml=lines.map(l=>{
+    const bin=invBinsCache.find(b=>b.id===l.bin_id);
+    return `<tr><td>${esc(l.item_number)}</td><td>${l.qty}</td><td>${bin?esc(bin.code):''}</td></tr>`;
+  }).join('');
+  el.innerHTML=`<b>Shipment #${id}</b> — ${esc(shipment.status)}<br><br>
+    <table class="sched-grid static"><thead><tr><th>Item</th><th>Qty</th><th>Bin</th></tr></thead><tbody>${linesHtml||'<tr><td colspan="3" class="empty">No lines yet.</td></tr>'}</tbody></table>
+    ${shipment.status==='Picking'?`<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <input id="invShipLineItem" placeholder="Item #" style="flex:1;min-width:90px">
+      <input id="invShipLineVariant" placeholder="Variant" style="flex:1;min-width:90px">
+      <select id="invShipLineBin" style="flex:1;min-width:110px">${binOptions}</select>
+      <input id="invShipLineQty" type="number" placeholder="Qty" style="width:80px">
+      <button class="btn" onclick="invPickShipmentLine(${id})">Pick</button>
+    </div>
+    <button class="btn" style="margin-top:10px" onclick="invShipShipment(${id})">Mark Shipped</button>`:''}
+    <button class="secondary" style="margin-top:10px" onclick="$('invShipmentDetail').style.display='none'">Close</button>`;
+}
+async function invPickShipmentLine(shipmentId){
+  const item_number=$('invShipLineItem').value.trim(), variant_code=$('invShipLineVariant').value.trim()||null;
+  const bin_id=Number($('invShipLineBin').value), qty=Number($('invShipLineQty').value);
+  if(!item_number||!bin_id||!qty)return;
+  try{
+    await api(`/admin/api/inventory/shipments/${shipmentId}/lines`,{method:'POST',body:JSON.stringify({item_number,variant_code,bin_id,qty})});
+    await invOpenShipment(shipmentId); await invLoadLedger();
+  }catch(e){alert(e.message);}
+}
+async function invShipShipment(id){
+  try{ await api(`/admin/api/inventory/shipments/${id}/ship`,{method:'POST'}); await invLoadShipments(); await invOpenShipment(id); await invLoadLedger(); }
+  catch(e){alert(e.message);}
+}
+
+async function invLoadCountSessions(){
+  try{
+    const {sessions}=await api('/admin/api/inventory/count-sessions');
+    $('invCountSessionsList').innerHTML=sessions.map(s=>{
+      const loc=invLocationsCache.find(l=>l.id===s.location_id);
+      return `<tr><td>${s.id}</td><td>${esc(loc?loc.name:'')}</td><td>${esc(s.status)}</td><td><a href="#" onclick="invOpenCountSession(${s.id});return false">Open</a></td></tr>`;
+    }).join('')||'<tr><td colspan="4" class="empty">No count sessions yet.</td></tr>';
+  }catch(e){$('invCountSessionsList').innerHTML=`<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;}
+}
+async function invCreateCountSession(){
+  const location_id=Number($('invNewCountLoc').value);
+  if(!location_id)return;
+  try{ await api('/admin/api/inventory/count-sessions',{method:'POST',body:JSON.stringify({location_id})}); await invLoadCountSessions(); }
+  catch(e){alert(e.message);}
+}
+// Deliberately does not show system_qty before submit - the server
+// computes and stores system_qty + variance itself at submit time, this
+// form is blind by construction, not just by convention.
+async function invOpenCountSession(id){
+  const {bins}=await api(`/admin/api/inventory/count-sessions/${id}/bins`);
+  const el=$('invCountDetail'); el.style.display='';
+  el.innerHTML=`<b>Count Session #${id}</b><br><br>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <select id="invCountBin">${bins.map(b=>`<option value="${b.id}">${esc(b.code)}</option>`).join('')}</select>
+      <input id="invCountItem" placeholder="Item #" style="flex:1;min-width:90px">
+      <input id="invCountVariant" placeholder="Variant" style="flex:1;min-width:90px">
+      <input id="invCountQty" type="number" placeholder="Counted qty" style="width:100px">
+      <button class="btn" onclick="invSubmitCountLine(${id})">Submit Count</button>
+    </div>
+    <div id="invCountLineResult" class="sub" style="margin-top:6px"></div>
+    <button class="secondary" style="margin-top:10px" onclick="$('invCountDetail').style.display='none'">Close</button>`;
+}
+async function invSubmitCountLine(sessionId){
+  const bin_id=Number($('invCountBin').value), item_number=$('invCountItem').value.trim(), variant_code=$('invCountVariant').value.trim()||null;
+  const counted_qty=Number($('invCountQty').value);
+  if(!bin_id||!item_number||Number.isNaN(counted_qty))return;
+  try{
+    await api(`/admin/api/inventory/count-sessions/${sessionId}/lines`,{method:'POST',body:JSON.stringify({bin_id,item_number,variant_code,counted_qty})});
+    $('invCountLineResult').textContent='Recorded — variance will show below once reviewed.';
+    $('invCountItem').value=''; $('invCountVariant').value=''; $('invCountQty').value='';
+    await invLoadVariances();
+  }catch(e){$('invCountLineResult').textContent=e.message;}
+}
+async function invLoadVariances(){
+  try{
+    const {variances}=await api('/admin/api/inventory/variances');
+    $('invVariancesList').innerHTML=variances.map(v=>{
+      const bin=invBinsCache.find(b=>b.id===v.bin_id);
+      return `<tr><td>${bin?esc(bin.code):''}</td><td>${esc(v.item_number)}</td><td>${v.system_qty}</td><td>${v.counted_qty}</td><td>${v.variance>0?'+':''}${v.variance}</td>
+        <td><button class="btn" onclick="invReviewVariance(${v.id},'Approved')">Approve</button> <button class="secondary" onclick="invReviewVariance(${v.id},'Rejected')">Reject</button></td></tr>`;
+    }).join('')||'<tr><td colspan="6" class="empty">No pending variances.</td></tr>';
+  }catch(e){$('invVariancesList').innerHTML=`<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;}
+}
+async function invReviewVariance(lineId,decision){
+  try{
+    await api(`/admin/api/inventory/variances/${lineId}/review`,{method:'POST',body:JSON.stringify({decision})});
+    await invLoadVariances(); await invLoadLedger();
+  }catch(e){alert(e.message);}
+}
+
+async function invLoadValuation(){
+  try{
+    const {items,total_value}=await api('/admin/api/inventory/valuation');
+    $('invValuationTotal').textContent=`Total on-hand value: ${total_value.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+    $('invValuationList').innerHTML=items.filter(i=>i.on_hand_qty).map(i=>`<tr><td>${esc(i.item_number)}</td><td>${esc(i.description)}</td><td>${i.on_hand_qty}</td><td>${i.last_unit_cost??''}</td><td>${i.value.toFixed(2)}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">Nothing on hand yet.</td></tr>';
+  }catch(e){$('invValuationList').innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;}
 }
 
 // Production Schedule is the landing tab now, so its grid needs to load

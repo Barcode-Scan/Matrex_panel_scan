@@ -1842,6 +1842,307 @@ app.post('/admin/api/inventory/reason-codes', requireAdmin, (req, res) => {
 });
 app.get('/admin/api/inventory/reason-codes', requireAdmin, (req, res) => res.json({ ok: true, reason_codes: listReasonCodes.all() }));
 
+// ════════════════════════════════════════════════════════════════════
+// INVENTORY PHASE 3 — Internal Movements, Production Consumption,
+// Pick/Pack/Ship, Cycle Counting, Valuation. See schema.sql's own
+// header comment above these tables for the UPD-002/DEC-010-equivalent
+// reasoning behind production_consumption.batch and shipments.reference_note
+// being free text, not real FKs to something that doesn't exist yet.
+// ════════════════════════════════════════════════════════════════════
+
+const getBinContentsQty = db.prepare('SELECT qty FROM bin_contents WHERE bin_id = ? AND item_number = ? AND variant_code = ?');
+
+// ── INTERNAL MOVEMENTS ─────────────────────────────────────────────
+// Bin-to-bin within one location - two ledger rows (a decrement + an
+// increment) posted atomically, same posting-function discipline as
+// receiving/put-away above.
+app.post('/admin/api/inventory/movements', requireAdmin, (req, res) => {
+  const { item_number, variant_code, from_bin_id, to_bin_id, qty } = req.body || {};
+  if (!item_number || !from_bin_id || !to_bin_id || !qty) {
+    return res.status(400).json({ ok: false, error: 'item_number, from_bin_id, to_bin_id, qty required' });
+  }
+  const vc = variant_code || '';
+  const actor = actorFrom(req);
+  const now = nowIso();
+
+  const current = getBinContentsQty.get(from_bin_id, item_number, vc);
+  if (!current || current.qty < qty) {
+    return res.status(400).json({ ok: false, error: `Not enough on hand in source bin (has ${current ? current.qty : 0}, need ${qty})` });
+  }
+
+  db.exec('BEGIN');
+  try {
+    insertLedgerEntry.run({ entry_type: 'Movement', item_number, variant_code: variant_code || null, lot_id: null, qty: -qty, uom_code: null, bin_id: from_bin_id, location_id: null, reference_table: null, reference_id: null, now, posted_by: actor });
+    insertLedgerEntry.run({ entry_type: 'Movement', item_number, variant_code: variant_code || null, lot_id: null, qty: qty, uom_code: null, bin_id: to_bin_id, location_id: null, reference_table: null, reference_id: null, now, posted_by: actor });
+    upsertBinContents.run({ bin_id: from_bin_id, item_number, variant_code: vc, qty: -qty, now });
+    upsertBinContents.run({ bin_id: to_bin_id, item_number, variant_code: vc, qty: qty, now });
+    db.exec('COMMIT');
+    logAudit(actor, 'MOVEMENT_POST', item_number, JSON.stringify({ from_bin_id, to_bin_id, qty }));
+    res.json({ ok: true });
+  } catch (e) {
+    db.exec('ROLLBACK');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── TRANSFER ORDERS (cross-location) ───────────────────────────────
+const insertTransferOrder = db.prepare('INSERT INTO transfer_orders (from_location_id, to_location_id, created_at, created_by) VALUES (?, ?, ?, ?)');
+const insertTransferLine = db.prepare(`
+  INSERT INTO transfer_order_lines (transfer_order_id, item_number, variant_code, qty, from_bin_id)
+  VALUES (@transfer_order_id, @item_number, @variant_code, @qty, @from_bin_id)
+`);
+const getTransferLine = db.prepare('SELECT * FROM transfer_order_lines WHERE id = ?');
+const listTransferOrders = db.prepare('SELECT * FROM transfer_orders ORDER BY id DESC');
+const listTransferLines = db.prepare('SELECT * FROM transfer_order_lines WHERE transfer_order_id = ?');
+const receiveTransferLine = db.prepare('UPDATE transfer_order_lines SET to_bin_id=@to_bin_id, received_at=@now, received_by=@actor WHERE id=@id');
+const countUnreceivedTransferLines = db.prepare('SELECT COUNT(*) c FROM transfer_order_lines WHERE transfer_order_id = ? AND received_at IS NULL');
+const updateTransferStatus = db.prepare('UPDATE transfer_orders SET status = ? WHERE id = ?');
+
+app.post('/admin/api/inventory/transfers', requireAdmin, (req, res) => {
+  const { from_location_id, to_location_id, lines } = req.body || {};
+  if (!from_location_id || !to_location_id || !Array.isArray(lines) || !lines.length) {
+    return res.status(400).json({ ok: false, error: 'from_location_id, to_location_id, lines[] required' });
+  }
+  const actor = actorFrom(req);
+  const now = nowIso();
+  db.exec('BEGIN');
+  try {
+    const result = insertTransferOrder.run(from_location_id, to_location_id, now, actor);
+    const transferId = result.lastInsertRowid;
+    for (const line of lines) {
+      const current = getBinContentsQty.get(line.from_bin_id, line.item_number, line.variant_code || '');
+      if (!current || current.qty < line.qty) throw new Error(`Not enough on hand for ${line.item_number} in the source bin`);
+      insertTransferLine.run({ transfer_order_id: transferId, item_number: line.item_number, variant_code: line.variant_code || null, qty: line.qty, from_bin_id: line.from_bin_id });
+      insertLedgerEntry.run({ entry_type: 'Movement', item_number: line.item_number, variant_code: line.variant_code || null, lot_id: null, qty: -line.qty, uom_code: null, bin_id: line.from_bin_id, location_id: from_location_id, reference_table: 'transfer_order_lines', reference_id: null, now, posted_by: actor });
+      upsertBinContents.run({ bin_id: line.from_bin_id, item_number: line.item_number, variant_code: line.variant_code || '', qty: -line.qty, now });
+    }
+    db.exec('COMMIT');
+    logAudit(actor, 'TRANSFER_SHIP', String(transferId), JSON.stringify({ from_location_id, to_location_id }));
+    res.json({ ok: true, transfer_order_id: transferId });
+  } catch (e) {
+    db.exec('ROLLBACK');
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
+app.get('/admin/api/inventory/transfers', requireAdmin, (req, res) => res.json({ ok: true, transfers: listTransferOrders.all() }));
+app.get('/admin/api/inventory/transfers/:id/lines', requireAdmin, (req, res) => res.json({ ok: true, lines: listTransferLines.all(req.params.id) }));
+
+app.post('/admin/api/inventory/transfer-lines/:lineId/receive', requireAdmin, (req, res) => {
+  const line = getTransferLine.get(req.params.lineId);
+  if (!line || line.received_at) return res.status(400).json({ ok: false, error: 'line not found or already received' });
+  const { to_bin_id } = req.body || {};
+  if (!to_bin_id) return res.status(400).json({ ok: false, error: 'to_bin_id required' });
+  const actor = actorFrom(req);
+  const now = nowIso();
+  db.exec('BEGIN');
+  try {
+    insertLedgerEntry.run({ entry_type: 'Movement', item_number: line.item_number, variant_code: line.variant_code, lot_id: null, qty: line.qty, uom_code: null, bin_id: to_bin_id, location_id: null, reference_table: 'transfer_order_lines', reference_id: String(line.id), now, posted_by: actor });
+    upsertBinContents.run({ bin_id: to_bin_id, item_number: line.item_number, variant_code: line.variant_code || '', qty: line.qty, now });
+    receiveTransferLine.run({ id: line.id, to_bin_id, now, actor });
+    const stillOpen = countUnreceivedTransferLines.get(line.transfer_order_id).c;
+    updateTransferStatus.run(stillOpen > 0 ? 'InTransit' : 'Received', line.transfer_order_id);
+    db.exec('COMMIT');
+    logAudit(actor, 'TRANSFER_RECEIVE', String(line.id), JSON.stringify({ to_bin_id }));
+    res.json({ ok: true });
+  } catch (e) {
+    db.exec('ROLLBACK');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── PRODUCTION CONSUMPTION ─────────────────────────────────────────
+// batch is a free-text reference to production_schedule.batch, a tag
+// only - see schema.sql's header comment on this table for why this
+// deliberately does not touch production_schedule's own status fields.
+const insertConsumption = db.prepare(`
+  INSERT INTO production_consumption (batch, item_number, variant_code, qty, bin_id, posted_at, posted_by)
+  VALUES (@batch, @item_number, @variant_code, @qty, @bin_id, @now, @actor)
+`);
+function postConsumption(req, res) {
+  const { batch, item_number, variant_code, qty, bin_id, device_id } = req.body || {};
+  if (!item_number || !qty || !bin_id) return res.status(400).json({ ok: false, error: 'item_number, qty, bin_id required' });
+  const vc = variant_code || '';
+  const current = getBinContentsQty.get(bin_id, item_number, vc);
+  if (!current || current.qty < qty) return res.status(400).json({ ok: false, error: `Not enough on hand in that bin (has ${current ? current.qty : 0}, need ${qty})` });
+
+  const actor = device_id || actorFrom(req);
+  const now = nowIso();
+  db.exec('BEGIN');
+  try {
+    const result = insertConsumption.run({ batch: batch || null, item_number, variant_code: variant_code || null, qty, bin_id, now, actor });
+    insertLedgerEntry.run({ entry_type: 'Consumption', item_number, variant_code: variant_code || null, lot_id: null, qty: -qty, uom_code: null, bin_id, location_id: null, reference_table: 'production_consumption', reference_id: String(result.lastInsertRowid), now, posted_by: actor });
+    upsertBinContents.run({ bin_id, item_number, variant_code: vc, qty: -qty, now });
+    db.exec('COMMIT');
+    logAudit(actor, 'CONSUMPTION_POST', item_number, JSON.stringify({ batch, qty, bin_id }));
+    res.json({ ok: true });
+  } catch (e) {
+    db.exec('ROLLBACK');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+}
+app.post('/admin/api/inventory/consumption', requireAdmin, postConsumption);
+app.post('/inventory/consumption', deviceGate, postConsumption);
+
+// ── PICK, PACK & SHIPMENT ──────────────────────────────────────────
+const insertShipment = db.prepare('INSERT INTO shipments (reference_note, location_id, created_at, created_by) VALUES (?, ?, ?, ?)');
+const getShipment = db.prepare('SELECT * FROM shipments WHERE id = ?');
+const listShipments = db.prepare('SELECT * FROM shipments ORDER BY id DESC');
+const insertShipmentLine = db.prepare('INSERT INTO shipment_lines (shipment_id, item_number, variant_code, qty, bin_id) VALUES (@shipment_id, @item_number, @variant_code, @qty, @bin_id)');
+const listShipmentLines = db.prepare('SELECT * FROM shipment_lines WHERE shipment_id = ?');
+const markShipmentShipped = db.prepare("UPDATE shipments SET status='Shipped', shipped_at=? WHERE id=?");
+
+app.post('/admin/api/inventory/shipments', requireAdmin, (req, res) => {
+  const { reference_note, location_id } = req.body || {};
+  if (!location_id) return res.status(400).json({ ok: false, error: 'location_id required' });
+  const result = insertShipment.run(reference_note || null, location_id, nowIso(), actorFrom(req));
+  res.json({ ok: true, shipment: getShipment.get(result.lastInsertRowid) });
+});
+app.get('/admin/api/inventory/shipments', requireAdmin, (req, res) => res.json({ ok: true, shipments: listShipments.all() }));
+app.get('/admin/api/inventory/shipments/:id/lines', requireAdmin, (req, res) => res.json({ ok: true, lines: listShipmentLines.all(req.params.id) }));
+
+// Picking: adds a line AND immediately decrements the bin (INV-054's
+// "scan-confirmed picking" is this same action, just triggered from a
+// scan instead of a form - the posting itself doesn't differ by caller).
+app.post('/admin/api/inventory/shipments/:id/lines', requireAdmin, (req, res) => {
+  const shipment = getShipment.get(req.params.id);
+  if (!shipment || shipment.status !== 'Picking') return res.status(400).json({ ok: false, error: 'shipment not found or already shipped' });
+  const { item_number, variant_code, qty, bin_id } = req.body || {};
+  if (!item_number || !qty || !bin_id) return res.status(400).json({ ok: false, error: 'item_number, qty, bin_id required' });
+  const vc = variant_code || '';
+  const current = getBinContentsQty.get(bin_id, item_number, vc);
+  if (!current || current.qty < qty) return res.status(400).json({ ok: false, error: `Not enough on hand in that bin (has ${current ? current.qty : 0}, need ${qty})` });
+
+  const actor = actorFrom(req);
+  const now = nowIso();
+  db.exec('BEGIN');
+  try {
+    const result = insertShipmentLine.run({ shipment_id: shipment.id, item_number, variant_code: variant_code || null, qty, bin_id });
+    insertLedgerEntry.run({ entry_type: 'Pick', item_number, variant_code: variant_code || null, lot_id: null, qty: -qty, uom_code: null, bin_id, location_id: null, reference_table: 'shipment_lines', reference_id: String(result.lastInsertRowid), now, posted_by: actor });
+    upsertBinContents.run({ bin_id, item_number, variant_code: vc, qty: -qty, now });
+    db.exec('COMMIT');
+    res.json({ ok: true, lines: listShipmentLines.all(shipment.id) });
+  } catch (e) {
+    db.exec('ROLLBACK');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+// Shipping is a status flip + a Ship ledger entry per line (the Pick
+// entries above already moved it out of the bin - Ship marks it as
+// having actually left, a separate fact for reporting/traceability).
+app.post('/admin/api/inventory/shipments/:id/ship', requireAdmin, (req, res) => {
+  const shipment = getShipment.get(req.params.id);
+  if (!shipment || shipment.status !== 'Picking') return res.status(400).json({ ok: false, error: 'shipment not found or already shipped' });
+  const lines = listShipmentLines.all(shipment.id);
+  if (!lines.length) return res.status(400).json({ ok: false, error: 'no lines to ship' });
+  const actor = actorFrom(req);
+  const now = nowIso();
+  db.exec('BEGIN');
+  try {
+    for (const line of lines) {
+      insertLedgerEntry.run({ entry_type: 'Ship', item_number: line.item_number, variant_code: line.variant_code, lot_id: null, qty: 0, uom_code: null, bin_id: null, location_id: shipment.location_id, reference_table: 'shipment_lines', reference_id: String(line.id), now, posted_by: actor });
+    }
+    markShipmentShipped.run(now, shipment.id);
+    db.exec('COMMIT');
+    logAudit(actor, 'SHIPMENT_SHIP', String(shipment.id), JSON.stringify({ reference_note: shipment.reference_note }));
+    res.json({ ok: true });
+  } catch (e) {
+    db.exec('ROLLBACK');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── CYCLE COUNTING ──────────────────────────────────────────────────
+const insertCountSession = db.prepare('INSERT INTO count_sessions (location_id, created_at, created_by) VALUES (?, ?, ?)');
+const getCountSession = db.prepare('SELECT * FROM count_sessions WHERE id = ?');
+const listCountSessions = db.prepare('SELECT * FROM count_sessions ORDER BY id DESC');
+const listBinsForCount = db.prepare(`
+  SELECT b.id, b.code FROM bins b JOIN zones z ON z.id = b.zone_id WHERE z.location_id = ? ORDER BY b.code
+`);
+const insertCountLine = db.prepare(`
+  INSERT INTO count_lines (session_id, bin_id, item_number, variant_code, system_qty, counted_qty, variance, counted_at, counted_by)
+  VALUES (@session_id, @bin_id, @item_number, @variant_code, @system_qty, @counted_qty, @variance, @now, @actor)
+`);
+const listCountLines = db.prepare('SELECT * FROM count_lines WHERE session_id = ?');
+const getCountLine = db.prepare('SELECT * FROM count_lines WHERE id = ?');
+const reviewCountLine = db.prepare("UPDATE count_lines SET status=@status, reviewed_at=@now, reviewed_by=@actor WHERE id=@id");
+const listPendingVariances = db.prepare("SELECT * FROM count_lines WHERE status = 'Pending' AND variance <> 0");
+
+app.post('/admin/api/inventory/count-sessions', requireAdmin, (req, res) => {
+  const { location_id } = req.body || {};
+  if (!location_id) return res.status(400).json({ ok: false, error: 'location_id required' });
+  const result = insertCountSession.run(location_id, nowIso(), actorFrom(req));
+  res.json({ ok: true, session: getCountSession.get(result.lastInsertRowid) });
+});
+app.get('/admin/api/inventory/count-sessions', requireAdmin, (req, res) => res.json({ ok: true, sessions: listCountSessions.all() }));
+app.get('/admin/api/inventory/count-sessions/:id/bins', requireAdmin, (req, res) => {
+  const session = getCountSession.get(req.params.id);
+  if (!session) return res.status(404).json({ ok: false, error: 'session not found' });
+  res.json({ ok: true, bins: listBinsForCount.all(session.location_id) });
+});
+
+// Blind entry: the client is not expected to fetch/display system_qty
+// before submitting - system_qty is captured here, server-side, at
+// submit time, and variance is computed here too, never trusted from
+// the client.
+app.post('/admin/api/inventory/count-sessions/:id/lines', requireAdmin, (req, res) => {
+  const session = getCountSession.get(req.params.id);
+  if (!session || session.status !== 'Open') return res.status(400).json({ ok: false, error: 'session not found or closed' });
+  const { bin_id, item_number, variant_code, counted_qty } = req.body || {};
+  if (!bin_id || !item_number || counted_qty == null) return res.status(400).json({ ok: false, error: 'bin_id, item_number, counted_qty required' });
+  const vc = variant_code || '';
+  const current = getBinContentsQty.get(bin_id, item_number, vc);
+  const systemQty = current ? current.qty : 0;
+  const variance = counted_qty - systemQty;
+  const result = insertCountLine.run({ session_id: session.id, bin_id, item_number, variant_code: variant_code || null, system_qty: systemQty, counted_qty, variance, now: nowIso(), actor: actorFrom(req) });
+  res.json({ ok: true, line_id: result.lastInsertRowid, variance });
+});
+
+app.get('/admin/api/inventory/variances', requireAdmin, (req, res) => res.json({ ok: true, variances: listPendingVariances.all() }));
+
+// INV-061: adjustment posting, offsetting entry only (append-only
+// ledger per section 3.3) - approving a variance writes the delta as a
+// real Adjustment ledger row, it never edits bin_contents by hand.
+app.post('/admin/api/inventory/variances/:lineId/review', requireAdmin, (req, res) => {
+  const line = getCountLine.get(req.params.lineId);
+  if (!line || line.status !== 'Pending') return res.status(400).json({ ok: false, error: 'line not found or already reviewed' });
+  const { decision } = req.body || {}; // 'Approved' | 'Rejected'
+  if (!['Approved', 'Rejected'].includes(decision)) return res.status(400).json({ ok: false, error: 'decision must be Approved or Rejected' });
+  const actor = actorFrom(req);
+  const now = nowIso();
+  db.exec('BEGIN');
+  try {
+    reviewCountLine.run({ id: line.id, status: decision, now, actor });
+    if (decision === 'Approved' && line.variance !== 0) {
+      insertLedgerEntry.run({ entry_type: 'Adjustment', item_number: line.item_number, variant_code: line.variant_code, lot_id: null, qty: line.variance, uom_code: null, bin_id: line.bin_id, location_id: null, reference_table: 'count_lines', reference_id: String(line.id), now, posted_by: actor });
+      upsertBinContents.run({ bin_id: line.bin_id, item_number: line.item_number, variant_code: line.variant_code || '', qty: line.variance, now });
+    }
+    db.exec('COMMIT');
+    logAudit(actor, 'VARIANCE_' + decision.toUpperCase(), String(line.id), JSON.stringify({ variance: line.variance }));
+    res.json({ ok: true });
+  } catch (e) {
+    db.exec('ROLLBACK');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── VALUATION REPORTING ────────────────────────────────────────────
+// Simplified: current on-hand qty (from bin_contents) times the most
+// recent unit_cost this item was received at (from value_entries) -
+// not a real FIFO-layer valuation, which needs Feature 11/12
+// consumption to actually consume specific layers in order (still not
+// built - see schema.sql's note on this same limitation from Phase 2).
+app.get('/admin/api/inventory/valuation', requireAdmin, (req, res) => {
+  const rows = db.prepare(`
+    SELECT i.item_number, i.description,
+      COALESCE((SELECT SUM(qty) FROM bin_contents WHERE item_number = i.item_number), 0) AS on_hand_qty,
+      (SELECT ve.unit_cost FROM value_entries ve JOIN item_ledger_entries le ON le.id = ve.item_ledger_entry_id
+       WHERE le.item_number = i.item_number ORDER BY ve.posted_at DESC LIMIT 1) AS last_unit_cost
+    FROM items i
+  `).all();
+  const valued = rows.map(r => ({ ...r, value: (r.on_hand_qty || 0) * (r.last_unit_cost || 0) }));
+  res.json({ ok: true, items: valued, total_value: valued.reduce((s, r) => s + r.value, 0) });
+});
+
 const PORT = process.env.PORT || 8765;
 // Plain HTTP — kept for LAN tools/scripts that don't need TLS, and for
 // anything still pointed at :8765 directly. No host argument to listen()

@@ -1030,6 +1030,65 @@
 
     <h2 style="font-size:15px;margin:18px 0 8px">Ledger</h2>
     <div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr><th>When</th><th>Type</th><th>Item</th><th>Qty</th><th>Bin</th></tr></thead><tbody id="invLedgerList"></tbody></table></div>
+
+    <h2 style="font-size:15px;margin:18px 0 8px">Internal Movement (bin to bin)</h2>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <input id="invMoveItem" placeholder="Item #" style="flex:1;min-width:100px">
+      <input id="invMoveVariant" placeholder="Variant (optional)" style="flex:1;min-width:100px">
+      <input id="invMoveFromBin" placeholder="From bin id" style="flex:1;min-width:90px">
+      <input id="invMoveToBin" placeholder="To bin id" style="flex:1;min-width:90px">
+      <input id="invMoveQty" type="number" placeholder="Qty" style="flex:1;min-width:80px">
+      <button class="btn" onclick="invPostMovement()">Move</button>
+    </div>
+    <div id="invMoveResult" class="sub"></div>
+
+    <h2 style="font-size:15px;margin:18px 0 8px">Transfer Orders (cross-location)</h2>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <select id="invTransferFromLoc" style="flex:1;min-width:130px"></select>
+      <select id="invTransferToLoc" style="flex:1;min-width:130px"></select>
+      <input id="invTransferItem" placeholder="Item #" style="flex:1;min-width:90px">
+      <input id="invTransferVariant" placeholder="Variant (optional)" style="flex:1;min-width:100px">
+      <input id="invTransferFromBin" placeholder="From bin id" style="flex:1;min-width:90px">
+      <input id="invTransferQty" type="number" placeholder="Qty" style="flex:1;min-width:80px">
+      <button class="btn" onclick="invCreateTransfer()">Ship Transfer</button>
+    </div>
+    <div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr><th>#</th><th>From</th><th>To</th><th>Status</th><th></th></tr></thead><tbody id="invTransfersList"></tbody></table></div>
+    <div id="invTransferDetail" style="display:none;margin-top:12px;padding:12px;background:var(--gray-50,#F9FAFB);border-radius:8px"></div>
+
+    <h2 style="font-size:15px;margin:18px 0 8px">Production Consumption</h2>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <input id="invConsBatch" placeholder="Batch (optional, free text)" style="flex:1;min-width:100px">
+      <input id="invConsItem" placeholder="Item #" style="flex:1;min-width:90px">
+      <input id="invConsVariant" placeholder="Variant (optional)" style="flex:1;min-width:100px">
+      <input id="invConsBin" placeholder="Bin id" style="flex:1;min-width:80px">
+      <input id="invConsQty" type="number" placeholder="Qty" style="flex:1;min-width:80px">
+      <button class="btn" onclick="invPostConsumption()">Post Consumption</button>
+    </div>
+    <div id="invConsResult" class="sub"></div>
+
+    <h2 style="font-size:15px;margin:18px 0 8px">Pick, Pack &amp; Shipment</h2>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <input id="invNewShipNote" placeholder="Reference note (optional)" style="flex:1">
+      <select id="invNewShipLoc" style="flex:1;min-width:130px"></select>
+      <button class="btn" onclick="invCreateShipment()">New Shipment</button>
+    </div>
+    <div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr><th>#</th><th>Reference</th><th>Status</th><th></th></tr></thead><tbody id="invShipmentsList"></tbody></table></div>
+    <div id="invShipmentDetail" style="display:none;margin-top:12px;padding:12px;background:var(--gray-50,#F9FAFB);border-radius:8px"></div>
+
+    <h2 style="font-size:15px;margin:18px 0 8px">Cycle Counting</h2>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <select id="invNewCountLoc" style="flex:1;min-width:130px"></select>
+      <button class="btn" onclick="invCreateCountSession()">New Count Session</button>
+    </div>
+    <div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr><th>#</th><th>Location</th><th>Status</th><th></th></tr></thead><tbody id="invCountSessionsList"></tbody></table></div>
+    <div id="invCountDetail" style="display:none;margin-top:12px;padding:12px;background:var(--gray-50,#F9FAFB);border-radius:8px"></div>
+    <h3 style="font-size:13px;margin:14px 0 6px">Pending Variances</h3>
+    <div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr><th>Bin</th><th>Item</th><th>System</th><th>Counted</th><th>Variance</th><th></th></tr></thead><tbody id="invVariancesList"></tbody></table></div>
+
+    <h2 style="font-size:15px;margin:18px 0 8px">Valuation</h2>
+    <div class="sub" style="margin-bottom:10px">On-hand qty × most recent receipt cost. Not a real FIFO layer valuation — see the pivot note for why.</div>
+    <div id="invValuationTotal" class="sub" style="font-weight:600"></div>
+    <div class="sched-grid-wrap"><table class="sched-grid static"><thead><tr><th>Item #</th><th>Description</th><th>On hand</th><th>Last unit cost</th><th>Value</th></tr></thead><tbody id="invValuationList"></tbody></table></div>
   </div>
 
   <div id="tabCompleted" style="display:none">
