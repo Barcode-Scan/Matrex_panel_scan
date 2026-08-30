@@ -1762,13 +1762,28 @@ const completePutawayTask = db.prepare(`
 `);
 
 app.get('/admin/api/inventory/putaway-tasks', requireAdmin, (req, res) => res.json({ ok: true, tasks: listPendingPutawayTasks.all() }));
+// Device-gated twin of the line above - INV-036 is a scanner task, not
+// an admin one, so an approved phone needs to see its own pending work
+// without the admin key. Same shared-handler pattern as addNote/
+// /parts/notes vs /admin/api/parts/notes elsewhere in this file.
+// GET carries no body, so deviceGate (which only reads req.body.device_id)
+// doesn't apply here - same query-param device check as the existing
+// GET /parts/:id/notes elsewhere in this file.
+app.get('/inventory/putaway-tasks', (req, res) => {
+  const row = getDevice.get(req.query.device_id || '');
+  if (!row || row.status !== 'APPROVED') return res.status(403).json({ ok: false, error: 'not approved' });
+  res.json({ ok: true, tasks: listPendingPutawayTasks.all() });
+});
 
 // INV-036/038: confirm put-away - real capacity enforcement, override
-// requires a reason code (checked here, not just in the UI).
-app.post('/admin/api/inventory/putaway-tasks/:id/confirm', requireAdmin, (req, res) => {
+// requires a reason code (checked here, not just in the UI). Shared by
+// both the admin-key path (admin.html, desk use) and the device-gated
+// path (the phone, actual shop-floor use) - actor is the device_id when
+// called from a phone, or the typed admin name otherwise.
+function confirmPutaway(req, res) {
   const task = getPutawayTask.get(req.params.id);
   if (!task || task.status === 'Completed') return res.status(400).json({ ok: false, error: 'task not found or already completed' });
-  const { bin_id, override_reason_code } = req.body || {};
+  const { bin_id, override_reason_code, device_id } = req.body || {};
   if (!bin_id) return res.status(400).json({ ok: false, error: 'bin_id required' });
 
   const bin = getBin.get(bin_id);
@@ -1783,7 +1798,7 @@ app.post('/admin/api/inventory/putaway-tasks/:id/confirm', requireAdmin, (req, r
     return res.status(400).json({ ok: false, error: 'Overriding the suggested bin requires a reason code' });
   }
 
-  const actor = actorFrom(req);
+  const actor = device_id || actorFrom(req);
   const now = nowIso();
   db.exec('BEGIN');
   try {
@@ -1801,7 +1816,9 @@ app.post('/admin/api/inventory/putaway-tasks/:id/confirm', requireAdmin, (req, r
     db.exec('ROLLBACK');
     res.status(500).json({ ok: false, error: e.message });
   }
-});
+}
+app.post('/admin/api/inventory/putaway-tasks/:id/confirm', requireAdmin, confirmPutaway);
+app.post('/inventory/putaway-tasks/:id/confirm', deviceGate, confirmPutaway);
 
 // ── LEDGER EXPLORER (INV-075) ─────────────────────────────────────
 app.get('/admin/api/inventory/ledger', requireAdmin, (req, res) => {
