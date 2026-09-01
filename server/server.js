@@ -1192,7 +1192,13 @@ app.get('/admin/api/parts/:id', requireAdmin, (req, res) => {
   if (!idx) return res.json({ ok: true, found: false });
   const detail = idx.department === 'PANEL' ? getMatchPanel.get(uid) : null;
   const deliveredInternally = getInternalDelivery.get(uid) ? 'Yes' : 'No';
-  res.json({ ok: true, found: true, index: { ...idx, delivered_internally: deliveredInternally }, detail, notes: listNotes.all(uid) });
+  // Every stage this specific part has been scanned at (multi-stage
+  // scanning) - lets the detail popup show "Cutting/Bending" instead of
+  // a flat "Scanned" when it's been through more than one station.
+  // Empty for a classic (no-stage) scan, same as stages_scanned on the
+  // batch-detail endpoint.
+  const stagesScanned = db.prepare('SELECT stage_number FROM stage_scans WHERE unique_id = ? ORDER BY stage_number ASC').all(uid).map(r => r.stage_number);
+  res.json({ ok: true, found: true, index: { ...idx, delivered_internally: deliveredInternally, stages_scanned: stagesScanned }, detail, notes: listNotes.all(uid) });
 });
 
 // ── REPORTING — admin-key gated, read-only. Three separate small

@@ -295,10 +295,25 @@ $('partId').addEventListener('keydown',e=>{if(e.key==='Enter')lookupPart();});
 // Shared by the Part Lookup page and the Batch Labels click-through
 // modal below - both show the same index+detail shape from
 // /admin/api/parts/:id, just in two different places.
+// Resolves an array of stage_numbers (a part's stages_scanned, from
+// either the batch-detail or single-part endpoint) to their configured
+// names, joined with "/" - a part scanned at both Cutting and Bending
+// shows "Cutting/Bending" instead of a flat "Scanned". Falls back to
+// "Stage N" for a number whose definition has since been removed (scan
+// history outlives the definition, same as everywhere else in this
+// feature). Empty for a classic (no-stage) scan.
+function stagesScannedLabel(stagesScanned){
+  if(!stagesScanned||!stagesScanned.length)return'';
+  return stagesScanned.map(n=>{
+    const s=stageDefinitions.find(x=>x.stage_number===n);
+    return s?s.stage_name:('Stage '+n);
+  }).join('/');
+}
 function partStatusPillHtml(idx){
+  const stagesLabel=idx.scanned==='Yes'?stagesScannedLabel(idx.stages_scanned):'';
   return idx.void==='Yes'?'<span class="pill REVOKED">VOID</span>'
     :idx.delivered_internally==='Yes'?'<span class="pill neutral">DELIVERED (INTERNAL)</span>'
-    :idx.scanned==='Yes'?'<span class="pill APPROVED">SCANNED</span>':'<span class="pill PENDING">NOT SCANNED</span>';
+    :idx.scanned==='Yes'?`<span class="pill APPROVED">${stagesLabel?esc(stagesLabel.toUpperCase()):'SCANNED'}</span>`:'<span class="pill PENDING">NOT SCANNED</span>';
 }
 // Same bwip-js PDF417 endpoint + params the Excel label generator
 // itself calls to print the physical label (UID_API_BASE/DM_SCALE in
@@ -3074,7 +3089,8 @@ function labelRowsHtml(labels){
   if(!labels.length)return'<div class="empty">No labels in this batch.</div>';
   return labels.map(l=>{
     const dc=l.void==='Yes'?'void':l.delivered_internally==='Yes'?'internal':l.scanned==='Yes'?'scanned':'';
-    const statusText=l.void==='Yes'?'VOID':l.delivered_internally==='Yes'?'Delivered (Internal)':l.scanned==='Yes'?'Scanned':'Not scanned';
+    const stagesLabel=l.scanned==='Yes'?stagesScannedLabel(l.stages_scanned):'';
+    const statusText=l.void==='Yes'?'VOID':l.delivered_internally==='Yes'?'Delivered (Internal)':l.scanned==='Yes'?(stagesLabel||'Scanned'):'Not scanned';
     const sub=[l.project,l.floor,l.part_type,[l.width,l.height].filter(Boolean).join(' X '),l.qty,l.colour].filter(Boolean).map(esc).join(' · ');
     // Already-voided labels can't be voided again (the endpoint rejects
     // it), so they get no checkbox - nothing for a bulk action to do to

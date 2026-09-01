@@ -125,6 +125,12 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .eng-pill.scanning .eng-val{color:var(--blue-600)}
 .eng-pill.err .eng-dot{background:var(--red-600)}
 .eng-pill.err .eng-val{color:var(--red-600)}
+/* Multi-stage scanning: which station this phone is set to (Settings ->
+   Production stage) - a static config indicator, not a live status, so
+   it always uses the same accent rather than switching colors. Hidden
+   entirely for a classic (no stage) phone. */
+.eng-pill.stage .eng-dot{background:var(--blue-600)}
+.eng-pill.stage .eng-val{color:var(--blue-600)}
 
 /* COUNTERS */
 .counters{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
@@ -466,6 +472,11 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
         <span style="color:var(--gray-500)">Scanner</span>
         <span class="eng-val" id="engVal">Starting…</span>
       </div>
+      <div class="eng-pill stage" id="stagePill" style="margin-bottom:12px;display:none">
+        <div class="eng-dot"></div>
+        <span style="color:var(--gray-500)">Stage</span>
+        <span class="eng-val" id="stageVal"></span>
+      </div>
     </div>
 
     <div class="counters">
@@ -792,8 +803,8 @@ function registerDevice(url){
 // device name), not something the server assigns - the stage list
 // itself (which numbers/names exist at all) is admin-defined though, so
 // this fetches it fresh whenever Settings opens rather than hardcoding
-// options here. device-gated, not key-gated, same as every other
-// phone-facing endpoint.
+// options here. Ungated (GET /parts/stages needs no device approval or
+// key), same low-sensitivity category as /health.
 async function loadStageOptions(){
   const sel=$('setStage');
   const prevValue=cfg.stageNumber?String(cfg.stageNumber):'';
@@ -814,6 +825,21 @@ async function loadStageOptions(){
     sel.innerHTML=classicOpt+(prevValue?`<option value="${prevValue}">Stage ${prevValue} (offline — name unavailable)</option>`:'');
   }
   sel.value=prevValue;
+  refreshStagePill();
+}
+// Shows/hides the Stage pill on the main scan screen (right next to the
+// Scanner status pill) so whoever's holding this phone can see at a
+// glance which station it's set to scan for, without opening Settings.
+// Resolves the number to its real name via stageOptionsCache when
+// available, falling back to "Stage N" if the cache hasn't loaded yet
+// (e.g. right at boot, before Settings has been opened this session) -
+// hidden entirely for a classic (no stage) phone.
+function refreshStagePill(){
+  const pill=$('stagePill');
+  if(!cfg.stageNumber){pill.style.display='none';return;}
+  const match=stageOptionsCache.find(s=>s.stage_number===cfg.stageNumber);
+  $('stageVal').textContent=match?match.stage_name:('Stage '+cfg.stageNumber);
+  pill.style.display='';
 }
 let scans=[],currentSkid=null,today=todayStr(),viewDate=today,syncedCount=0;
 let skidTarget=null,delTarget=null,pendingDup=null;
@@ -1624,7 +1650,7 @@ $('bSaveSet').onclick=async()=>{
   if(u&&!validUrl(u)){showFlash('bad','Receiver URL must start with http:// or https://');return;}
   const prefix=$('setFilePrefix').value.trim().replace(/[\\/:*?"<>|]/g,'').replace(/\s+/g,'_');
   const stageVal=$('setStage').value;
-  cfg.url=u;cfg.dev=$('setDev').value.trim()||'MATREX-PHONE';cfg.filePrefix=prefix||'Matrex_Scans';cfg.stageNumber=stageVal?parseInt(stageVal,10):null;lsSet(LS.cfg,cfg);show('scrScan');refreshSettings();
+  cfg.url=u;cfg.dev=$('setDev').value.trim()||'MATREX-PHONE';cfg.filePrefix=prefix||'Matrex_Scans';cfg.stageNumber=stageVal?parseInt(stageVal,10):null;lsSet(LS.cfg,cfg);show('scrScan');refreshSettings();refreshStagePill();
   if(cfg.url&&scans.length)scheduleAutoUpload(); // flush anything already queued instead of waiting for the next scan
   if(u){const st=await registerDevice();showFlash(st==='APPROVED'?'ok':'bad','Settings saved — device '+st.toLowerCase());}
   else showFlash('ok','Settings saved');
@@ -2520,6 +2546,7 @@ document.addEventListener('click',e=>{
 // ── CLOCK ──────────────────────────────────────────────────
 function tick(){$('topDate').textContent=today+'  '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
 setInterval(tick,1000);tick();
+refreshStagePill(); // show the Stage pill immediately at boot if one was already saved from a previous session
 
 // ── SOUND ──────────────────────────────────────────────────
 // Mobile browsers create a new AudioContext in a 'suspended' state unless
