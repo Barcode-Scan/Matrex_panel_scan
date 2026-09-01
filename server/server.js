@@ -1177,6 +1177,21 @@ const insertPackingSlip = db.prepare(`
 const listPackingSlips = db.prepare('SELECT id, slip_number, batch, slip_date, department, ship_to, created_at FROM packing_slips ORDER BY id DESC');
 const getPackingSlip = db.prepare('SELECT * FROM packing_slips WHERE id = ?');
 const getPackingSlipByNumber = db.prepare('SELECT * FROM packing_slips WHERE slip_number = ?');
+const listPackingSlipPartsForBatch = db.prepare('SELECT parts_snapshot FROM packing_slips WHERE batch = ?');
+// Every unique_id already sitting on ANY existing slip for this batch
+// (split shipments - a batch can now have more than one slip, each
+// covering a different subset of its parts). Computed fresh from the
+// DB, never trusted from the client, same reasoning as includeUnscanned
+// below - what's still eligible for a NEW slip has to be decided here.
+function alreadyPackedUniqueIds(batch) {
+  const ids = new Set();
+  for (const row of listPackingSlipPartsForBatch.all(batch)) {
+    let parts = [];
+    try { parts = JSON.parse(row.parts_snapshot) || []; } catch (e) { parts = []; }
+    for (const p of parts) { if (p && p.unique_id) ids.add(p.unique_id); }
+  }
+  return ids;
+}
 // COUNT(*)+1 looked right but breaks the moment any slip is ever deleted -
 // deleting PS-26-001 drops the count back to 0, so the next slip computes
 // "PS-26-001" again and collides with whatever's still using PS-26-002+.
@@ -1258,24 +1273,46 @@ app.post('/admin/api/packing-slips', requireAdmin, (req, res) => {
   // validation below). A genuinely fully-scanned batch has nothing to
   // exclude either way, so include_unscanned is moot there.
   const includeUnscanned = fullyScanned || b.include_unscanned !== false;
-  let authoritative = getBatchParts.all(batch);
+  // ── SPLIT SHIPMENTS — a batch can now have more than one packing
+  // slip, each covering a different subset of its parts (partial
+  // shipments). Whatever's already on an earlier slip for this batch is
+  // never eligible for a new one - excluded here, server-side, same as
+  // includeUnscanned above, so a stale/tampered client can't double-pack
+  // a part onto two slips.
+  const packedIds = alreadyPackedUniqueIds(batch);
+  let authoritative = getBatchParts.all(batch).filter(p => !packedIds.has(p.unique_id));
   if (!includeUnscanned) authoritative = authoritative.filter(p => p.scanned === 'Yes');
+  if (!authoritative.length) {
+    return res.status(400).json({ ok: false, error: 'every part in this batch is already on a packing slip' });
+  }
 
-  // The admin UI lets someone reorder parts and cluster them into named
-  // groups before generating (e.g. "RAILINGS") - that arrangement comes
-  // back here as b.parts_snapshot. Never trust it for the actual part
-  // *data* though (tag/type/size/qty/colour always come from the
-  // authoritative query above, keyed by unique_id) - only its order and
-  // group labels are used. If the set of unique_ids doesn't exactly match
-  // what's actually on the batch (stale client, or the batch changed
-  // underneath it), reject rather than silently falling back, since that
-  // would quietly discard whatever arranging was just done.
+  // An explicitly-empty parts_snapshot (Remove Selected took every part
+  // off this slip) means zero parts, not "not sent" - has to be caught
+  // before the length check below, which would otherwise treat an empty
+  // array the same as an omitted one and silently fall back to
+  // authoritative (i.e. quietly ignore that everything was removed).
+  if (Array.isArray(b.parts_snapshot) && !b.parts_snapshot.length) {
+    return res.status(400).json({ ok: false, error: 'parts_snapshot is empty - a slip needs at least one part' });
+  }
+  // The admin UI lets someone reorder parts, cluster them into named
+  // groups (e.g. "RAILINGS"), and - for a split shipment - remove some
+  // of them from THIS slip entirely so they're left for a follow-up one
+  // (Remove Selected). All of that comes back here as b.parts_snapshot.
+  // Never trust it for the actual part *data* though (tag/type/size/qty/
+  // colour always come from the authoritative query above, keyed by
+  // unique_id) - only its order, grouping, and (now) which subset of
+  // authoritative it kept are used. A genuine subset is fine (that's the
+  // whole point of Remove Selected) - what's NOT fine is a unique_id
+  // that isn't in authoritative at all (stale client, or the batch
+  // changed underneath it) or a duplicate, either of which gets
+  // rejected rather than silently falling back, since that would
+  // quietly discard whatever arranging/splitting was just done.
   let parts = authoritative;
   if (Array.isArray(b.parts_snapshot) && b.parts_snapshot.length) {
     const byId = new Map(authoritative.map(p => [p.unique_id, p]));
     const seen = new Set();
     const reordered = [];
-    let valid = authoritative.length === b.parts_snapshot.length;
+    let valid = authoritative.length >= b.parts_snapshot.length;
     if (valid) {
       for (const item of b.parts_snapshot) {
         const uid = item && item.unique_id;

@@ -1032,13 +1032,14 @@
       <button onclick="submitPackingForm()" id="packingFormSubmitBtn" style="margin-top:4px">Generate Packing Slip</button>
     </div>
     <h2>Part List Preview</h2>
-    <div class="sub" style="margin-bottom:8px">Filter to find parts, group related ones under a shared heading for easier reading on the printed slip, and use the arrows to reorder (a group moves together as one section).</div>
+    <div class="sub" style="margin-bottom:8px">Filter to find parts, group related ones under a shared heading for easier reading on the printed slip, and use the arrows to reorder (a group moves together as one section). Select some and remove them if you want to split this batch across two or more slips - they stay available to add to a follow-up slip.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
       <input id="pfPartsFilter" placeholder="Filter parts (tag, type, colour)..." oninput="renderPackingPartsPreview()" style="flex:1;min-width:200px">
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
       <input id="pfGroupName" placeholder="Group name (e.g. RAILINGS)" style="flex:1;min-width:200px">
       <button type="button" class="secondary" onclick="groupSelectedPackingParts()" style="width:auto;padding:10px 18px">Group Selected</button>
+      <button type="button" class="secondary" onclick="removeSelectedPackingParts()" style="width:auto;padding:10px 18px" title="Take the selected parts off THIS slip - they stay available for a follow-up slip">Remove Selected (split shipment)</button>
     </div>
     <div id="packingFormPartsPreview"></div>
   </div>

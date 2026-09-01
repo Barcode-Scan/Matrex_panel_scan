@@ -1478,20 +1478,38 @@ let packingIncludeUnscanned=true;
 function unscannedDot(p){
   return p.scanned&&p.scanned!=='Yes'?'<span class="ps-unscanned-dot" title="Not scanned">&#9679;</span> ':'';
 }
+// ── SPLIT SHIPMENTS — a batch's parts don't all have to go out on one
+// slip. Every part already placed on ANY existing slip for a batch
+// (unioned across all of them, deduped by unique_id) is what "already
+// packed" means here - openPackingForm below excludes these by default
+// so a follow-up slip naturally offers only what's left, and
+// renderPackingTab uses this same count to decide whether a batch still
+// belongs in Ready to Pack (now: "has anything left to pack", not just
+// "has no slip yet").
+function packedUniqueIds(batch){
+  const ids=new Set();
+  packingSlipsCache.filter(s=>s.batch===batch).forEach(s=>(s.parts_snapshot||[]).forEach(p=>ids.add(p.unique_id)));
+  return ids;
+}
 
-// A packing slip being generated at all now means the batch's task is done
-// - it drops out of Ready to Pack the moment its first slip exists, and
-// shows up instead in Completed Tasks (renderCompletedTasks below), so a
-// batch no longer sits in both places at once the way it used to.
+// A batch stays in Ready to Pack as long as it still has at least one
+// part not yet on any packing slip - not just "no slip yet", so a
+// partial shipment (some parts slipped today, the rest later) keeps the
+// batch reachable here for a follow-up slip instead of disappearing the
+// moment the first one exists. It only drops out once every part has
+// actually been packed somewhere, at which point it shows up instead in
+// Completed Tasks (renderCompletedTasks below).
 function renderPackingTab(){
-  const ready=scheduleBatches.filter(b=>rowStatus(b)==='complete'&&!packingSlipsCache.some(s=>s.batch===b.batch));
+  const ready=scheduleBatches.filter(b=>rowStatus(b)==='complete'&&packedUniqueIds(b.batch).size<b.total);
   $('readyToPackList').innerHTML=ready.length?ready.map(b=>{
+    const packedCount=packedUniqueIds(b.batch).size;
+    const hasSlip=packingSlipsCache.some(s=>s.batch===b.batch);
     return`<div class="card">
       <div>
         <div class="name">${esc(b.batch)}</div>
-        <div class="meta">${esc(b.job_name||'(no job)')} · ${b.scanned}/${b.total} scanned</div>
+        <div class="meta">${esc(b.job_name||'(no job)')} · ${b.scanned}/${b.total} scanned${hasSlip?` · ${packedCount}/${b.total} already on a slip`:''}</div>
       </div>
-      <button onclick="openPackingForm('${esc(b.batch)}')">Create Packing Slip</button>
+      <button onclick="openPackingForm('${esc(b.batch)}')">${hasSlip?`Create Another Slip (${b.total-packedCount} left)`:'Create Packing Slip'}</button>
     </div>`;
   }).join(''):'<div class="empty">No fully-scanned batches yet.</div>';
 
@@ -1617,9 +1635,10 @@ async function loadPackingSlips(){
 async function openPackingForm(batch){
   editingSlipId=null;
   currentPackingBatch=batch;
-  $('packingFormTitle').textContent='New Packing Slip';
-  $('packingFormSubmitBtn').textContent='Generate Packing Slip';
   const b=scheduleBatches.find(x=>x.batch===batch)||{};
+  const alreadySlipped=packingSlipsCache.some(s=>s.batch===batch);
+  $('packingFormTitle').textContent=alreadySlipped?'New Packing Slip (additional shipment)':'New Packing Slip';
+  $('packingFormSubmitBtn').textContent='Generate Packing Slip';
   $('packingFormBatchLabel').textContent=batch+' — '+b.scanned+'/'+b.total+' scanned';
   $('pfDepartment').value='';
   $('pfDate').value=new Date().toISOString().slice(0,10);
@@ -1638,18 +1657,34 @@ async function openPackingForm(batch){
   showTab('packingForm');
   try{
     const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
-    const labels=data.labels||[];
+    const allLabels=data.labels||[];
+    // ── SPLIT SHIPMENTS — parts already placed on an earlier slip for
+    // this batch are excluded by default, so a second/third slip for the
+    // same batch naturally starts from just what's left instead of
+    // re-offering everything (removeSelectedPackingParts below lets the
+    // remaining set be narrowed further, e.g. splitting today's leftover
+    // parts across two more slips instead of one).
+    const packedIds=packedUniqueIds(batch);
+    const labels=allLabels.filter(l=>!packedIds.has(l.unique_id));
+    if(alreadySlipped&&!labels.length){
+      alert('Every part in this batch is already on a packing slip.');
+      showTab('packing');
+      return;
+    }
     const unscannedCount=labels.filter(l=>l.scanned!=='Yes').length;
     // A manually-completed batch (Task Status -> Complete (Manual)) can
     // still have unscanned parts on record - ask once, up front, whether
     // this slip should include them or just what was actually scanned.
     // A genuinely fully-scanned batch never has an unscanned part to ask
-    // about, so this never fires for the normal path.
+    // about, so this never fires for the normal path. Counts here are
+    // against the not-yet-packed set, not the whole batch, so the
+    // numbers stay accurate on a second/third slip too.
     if(unscannedCount>0&&isForceComplete(b)){
+      const packedNote=alreadySlipped?` (${packedIds.size} part(s) already on an earlier slip aren't included in this count)`:'';
       packingIncludeUnscanned=confirm(
-        `This batch was marked Complete (Manual) with ${unscannedCount} of ${labels.length} part(s) still not scanned.\n\n`+
+        `This batch was marked Complete (Manual) with ${unscannedCount} of ${labels.length} not-yet-packed part(s) still not scanned${packedNote}.\n\n`+
         `Include the ${unscannedCount} unscanned part(s) on this packing slip?\n\n`+
-        `OK = include all ${labels.length} parts.\nCancel = only the ${labels.length-unscannedCount} already-scanned part(s).`
+        `OK = include all ${labels.length} remaining parts.\nCancel = only the ${labels.length-unscannedCount} already-scanned part(s).`
       );
     }
     const visibleLabels=packingIncludeUnscanned?labels:labels.filter(l=>l.scanned==='Yes');
@@ -1720,6 +1755,20 @@ function groupSelectedPackingParts(){
 }
 function ungroupPackingGroup(group){
   currentPackingParts=currentPackingParts.map(p=>p.group===group?{...p,group:''}:p);
+  renderPackingPartsPreview();
+}
+// ── SPLIT SHIPMENTS — takes the selected parts out of THIS slip
+// entirely (not just ungrouped), for splitting a batch's remaining
+// parts across two or more slips in one sitting: remove a few now,
+// generate this slip, then open "Create Another Slip" for the batch
+// again and the ones just removed are still sitting there waiting
+// (they were never actually submitted, so packedUniqueIds never counted
+// them) - same selection checkboxes Group Selected already uses, just a
+// different action on the selection.
+function removeSelectedPackingParts(){
+  if(!packingPartsSelected.size){alert('Select at least one part to remove.');return;}
+  currentPackingParts=currentPackingParts.filter(p=>!packingPartsSelected.has(p.unique_id));
+  packingPartsSelected=new Set();
   renderPackingPartsPreview();
 }
 // Filter only narrows what's visible while arranging - it never removes a
@@ -1795,6 +1844,14 @@ $('bBackPackingForm').onclick=()=>{currentPackingBatch=null;editingSlipId=null;s
 
 async function submitPackingForm(){
   if(!currentPackingBatch)return;
+  // Removing every part via Remove Selected leaves nothing to submit -
+  // the server would otherwise treat an empty parts_snapshot as "not
+  // sent" and silently fall back to including everything eligible,
+  // which is the opposite of what an empty list here should mean.
+  if(!editingSlipId&&!currentPackingParts.length){
+    alert('This slip has no parts left on it - add at least one back before generating it.');
+    return;
+  }
   const fields={
     department:$('pfDepartment').value.trim(),
     slip_date:$('pfDate').value||undefined,
