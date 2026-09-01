@@ -1195,16 +1195,17 @@ const getBatchCompletion = db.prepare(`
 `);
 // Voided lines never shipped - a packing slip lists what actually left
 // the floor, not everything ever registered under this batch name. This
-// deliberately does NOT filter on pi.scanned - a batch let through the
-// completion gate below via the admin's manual-complete override can
-// still have unscanned lines, and those still belong on the slip (the
-// whole point of the override is finishing the paperwork for a batch
-// that's done even though the scan count doesn't say so). For a batch
-// that reached here the normal way (scanned === total), every
-// non-voided line is scanned anyway, so this filter alone already
-// produced "scanned, non-voided parts only" before the override existed.
+// deliberately does NOT filter on pi.scanned in the query itself - a
+// batch let through the completion gate below via the admin's manual-
+// complete override can still have unscanned lines, and whether those
+// belong on the slip is the admin's own choice at creation time (see
+// include_unscanned below), not something to bake into this query.
+// scanned is carried through into parts_snapshot too, both to let the
+// POST handler filter it out when asked and so the printed slip can
+// mark still-unscanned parts (a small dot - see packingSlipBodyRowsHtml
+// client-side).
 const getBatchParts = db.prepare(`
-  SELECT pp.unique_id, pp.tag, pp.part_type, pp.width, pp.height, pp.qty, pp.colour
+  SELECT pp.unique_id, pp.tag, pp.part_type, pp.width, pp.height, pp.qty, pp.colour, pi.scanned
   FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
   WHERE pp.batch = ? AND pi.void = 'No'
   ORDER BY pp.sequence_no ASC, pp.tag ASC
@@ -1241,13 +1242,24 @@ app.post('/admin/api/packing-slips', requireAdmin, (req, res) => {
   let scheduleExtra = {};
   if (schedule.extra_fields) { try { scheduleExtra = JSON.parse(schedule.extra_fields); } catch (e) { scheduleExtra = {}; } }
   const manuallyCompleted = !!scheduleExtra.forceComplete;
-  if (completion.scanned !== completion.total && !manuallyCompleted) {
+  const fullyScanned = completion.scanned === completion.total;
+  if (!fullyScanned && !manuallyCompleted) {
     return res.status(400).json({ ok: false, error: 'batch is not fully scanned yet — cannot create a packing slip' });
   }
 
   const now = new Date().toISOString();
   const prefix = `PS-${new Date().getFullYear().toString().slice(-2)}-`;
-  const authoritative = getBatchParts.all(batch);
+  // A manually-completed batch that isn't fully scanned lets the admin
+  // choose (a confirm dialog client-side) whether the slip should
+  // include the still-unscanned parts or just the ones actually
+  // scanned. Computed here off the real scan status pulled fresh from
+  // the DB - never trusting the client's parts_snapshot for WHICH parts
+  // are eligible, only for their order/grouping (see the reorder/group
+  // validation below). A genuinely fully-scanned batch has nothing to
+  // exclude either way, so include_unscanned is moot there.
+  const includeUnscanned = fullyScanned || b.include_unscanned !== false;
+  let authoritative = getBatchParts.all(batch);
+  if (!includeUnscanned) authoritative = authoritative.filter(p => p.scanned === 'Yes');
 
   // The admin UI lets someone reorder parts and cluster them into named
   // groups before generating (e.g. "RAILINGS") - that arrangement comes

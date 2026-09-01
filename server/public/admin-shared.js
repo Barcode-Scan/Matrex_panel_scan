@@ -1463,6 +1463,21 @@ let packingSlipsCache=[];
 let currentPackingBatch=null;
 let currentPackingParts=[];
 let editingSlipId=null; // null = creating a new slip; set = editing an existing one
+// Whether the slip currently being built should include still-unscanned
+// parts - only ever meaningful for a manually-completed batch that isn't
+// fully scanned (openPackingForm asks once, up front); true otherwise,
+// since a genuinely fully-scanned batch has nothing to exclude.
+let packingIncludeUnscanned=true;
+// A part with no recorded scan yet gets a small dot next to its tag on
+// both the editable/locked previews and the printed slip itself, so
+// "which of these did I actually scan" stays visible even once the
+// unscanned ones are included. p.scanned is only present on parts
+// loaded fresh (openPackingForm) or on a slip created after this
+// feature shipped - an older slip's snapshot predates the field, so
+// this quietly renders no dot for it rather than guessing.
+function unscannedDot(p){
+  return p.scanned&&p.scanned!=='Yes'?'<span class="ps-unscanned-dot" title="Not scanned">&#9679;</span> ':'';
+}
 
 // A packing slip being generated at all now means the batch's task is done
 // - it drops out of Ready to Pack the moment its first slip exists, and
@@ -1618,11 +1633,27 @@ async function openPackingForm(batch){
   if($('pfPartsFilter'))$('pfPartsFilter').value='';
   if($('pfGroupName'))$('pfGroupName').value='';
   packingPartsEditable=true;
+  packingIncludeUnscanned=true;
   $('packingFormPartsPreview').innerHTML='<div class="empty">Loading part list…</div>';
   showTab('packingForm');
   try{
     const data=await api('/viewer/api/batches/'+encodeURIComponent(batch));
-    currentPackingParts=(data.labels||[]).map(l=>({unique_id:l.unique_id,tag:l.tag,part_type:l.part_type,width:l.width,height:l.height,qty:l.qty,colour:l.colour,group:''}));
+    const labels=data.labels||[];
+    const unscannedCount=labels.filter(l=>l.scanned!=='Yes').length;
+    // A manually-completed batch (Task Status -> Complete (Manual)) can
+    // still have unscanned parts on record - ask once, up front, whether
+    // this slip should include them or just what was actually scanned.
+    // A genuinely fully-scanned batch never has an unscanned part to ask
+    // about, so this never fires for the normal path.
+    if(unscannedCount>0&&isForceComplete(b)){
+      packingIncludeUnscanned=confirm(
+        `This batch was marked Complete (Manual) with ${unscannedCount} of ${labels.length} part(s) still not scanned.\n\n`+
+        `Include the ${unscannedCount} unscanned part(s) on this packing slip?\n\n`+
+        `OK = include all ${labels.length} parts.\nCancel = only the ${labels.length-unscannedCount} already-scanned part(s).`
+      );
+    }
+    const visibleLabels=packingIncludeUnscanned?labels:labels.filter(l=>l.scanned==='Yes');
+    currentPackingParts=visibleLabels.map(l=>({unique_id:l.unique_id,tag:l.tag,part_type:l.part_type,width:l.width,height:l.height,qty:l.qty,colour:l.colour,scanned:l.scanned,group:''}));
     renderPackingPartsPreview();
   }catch(e){
     $('packingFormPartsPreview').innerHTML='<div class="empty">Could not load part list.</div>';
@@ -1705,7 +1736,7 @@ function renderPackingPartsPreview(){
       +'<div class="sched-grid-wrap"><table class="rep-tbl"><thead><tr><th>Tag</th><th>Part Type</th><th>Size</th><th>Qty</th><th>Colour</th></tr></thead><tbody>'
       +parts.map((p,i)=>{
         const header=p.group&&(i===0||parts[i-1].group!==p.group)?`<tr><td colspan="5" style="background:var(--gray-100);font-weight:700;text-align:left">${esc(p.group)}</td></tr>`:'';
-        return header+`<tr><td>${esc(p.tag||p.unique_id)}</td><td>${esc(p.part_type||'')}</td><td>${esc([p.width,p.height].filter(Boolean).join(' X '))}</td><td>${esc(p.qty||'')}</td><td>${esc(p.colour||'')}</td></tr>`;
+        return header+`<tr><td>${unscannedDot(p)}${esc(p.tag||p.unique_id)}</td><td>${esc(p.part_type||'')}</td><td>${esc([p.width,p.height].filter(Boolean).join(' X '))}</td><td>${esc(p.qty||'')}</td><td>${esc(p.colour||'')}</td></tr>`;
       }).join('')
       +'</tbody></table></div>';
     return;
@@ -1721,7 +1752,7 @@ function renderPackingPartsPreview(){
     const block=getPackingBlockRange(parts,i);
     rows+=`<tr>
       <td><input type="checkbox" ${packingPartsSelected.has(p.unique_id)?'checked':''} onchange="togglePackingPartSelect('${esc(p.unique_id)}',this.checked)"></td>
-      <td>${esc(p.tag||p.unique_id)}</td><td>${esc(p.part_type||'')}</td>
+      <td>${unscannedDot(p)}${esc(p.tag||p.unique_id)}</td><td>${esc(p.part_type||'')}</td>
       <td>${esc([p.width,p.height].filter(Boolean).join(' X '))}</td>
       <td>${esc(p.qty||'')}</td><td>${esc(p.colour||'')}</td>
       <td style="white-space:nowrap">
@@ -1777,7 +1808,7 @@ async function submitPackingForm(){
   try{
     const data=editingSlipId
       ?await api('/admin/api/packing-slips/'+editingSlipId,{method:'POST',body:JSON.stringify(fields)})
-      :await api('/admin/api/packing-slips',{method:'POST',body:JSON.stringify({...fields,batch:currentPackingBatch,parts_snapshot:currentPackingParts})});
+      :await api('/admin/api/packing-slips',{method:'POST',body:JSON.stringify({...fields,batch:currentPackingBatch,parts_snapshot:currentPackingParts,include_unscanned:packingIncludeUnscanned})});
     editingSlipId=null;
     await loadPackingSlips();
     renderPackingSlip(data.slip);
@@ -1814,7 +1845,7 @@ function packingSlipBodyRowsHtml(parts,cell){
     const header=p.group&&(i===0||parts[i-1].group!==p.group)
       ?`<tr class="ps-group-row"><td colspan="6">${cell(p.group)}</td></tr>`:'';
     n++;
-    return header+`<tr><td>${n}</td><td>${cell(p.tag||p.unique_id)}</td><td>${cell(p.part_type)}</td><td>${cell([p.width,p.height].filter(Boolean).join(' X '))}</td><td>${cell(p.qty)}</td><td>${cell(p.colour)}</td></tr>`;
+    return header+`<tr><td>${n}</td><td>${unscannedDot(p)}${cell(p.tag||p.unique_id)}</td><td>${cell(p.part_type)}</td><td>${cell([p.width,p.height].filter(Boolean).join(' X '))}</td><td>${cell(p.qty)}</td><td>${cell(p.colour)}</td></tr>`;
   }).join('');
 }
 function renderPackingSlip(slip){
