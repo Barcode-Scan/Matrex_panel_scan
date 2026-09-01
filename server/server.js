@@ -1186,7 +1186,14 @@ const insertPackingSlip = db.prepare(`
     @parts_snapshot, @now, @created_by
   )
 `);
-const listPackingSlips = db.prepare('SELECT id, slip_number, batch, slip_date, department, ship_to, created_at FROM packing_slips ORDER BY id DESC');
+// parts_snapshot IS included here (unlike the metadata-only columns
+// around it) - the dashboard's packedUniqueIds/accountedForCount need
+// to know exactly which parts each existing slip already covers to
+// compute "how many parts are actually left" for Ready to Pack and the
+// "Create Another Slip" button, not just whether a slip exists at all.
+// loadPackingSlips() is called once at boot plus after create/delete/
+// edit (never on the 4s poll), so the extra payload size here is fine.
+const listPackingSlips = db.prepare('SELECT id, slip_number, batch, slip_date, department, ship_to, created_at, parts_snapshot FROM packing_slips ORDER BY id DESC');
 const getPackingSlip = db.prepare('SELECT * FROM packing_slips WHERE id = ?');
 const getPackingSlipByNumber = db.prepare('SELECT * FROM packing_slips WHERE slip_number = ?');
 const listPackingSlipPartsForBatch = db.prepare('SELECT parts_snapshot FROM packing_slips WHERE batch = ?');
@@ -1277,7 +1284,7 @@ function formatPackingSlip(row) {
 }
 
 app.get('/admin/api/packing-slips', requireAdmin, (req, res) => {
-  res.json({ ok: true, slips: listPackingSlips.all() });
+  res.json({ ok: true, slips: listPackingSlips.all().map(formatPackingSlip) });
 });
 
 app.get('/admin/api/packing-slips/:id', requireAdmin, (req, res) => {
