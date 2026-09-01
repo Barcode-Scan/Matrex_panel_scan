@@ -826,11 +826,16 @@ app.post('/parts/match', deviceGate, (req, res) => {
   res.json({ ok: true, status: 'MATCHED_NEW', ...fields, scanned_at: now, scanned_by_device: device_id || '', note_count });
 });
 
-// Device-gated (not admin-key) read of the configured stage list, so the
-// phone's own Settings screen can offer a dropdown of "Stage N - Name"
-// without needing any admin credential - matches the deviceGate pattern
-// every other phone-facing endpoint here already uses.
-app.get('/parts/stages', deviceGate, (req, res) => {
+// Ungated (not admin-key, not device-approval) read of the configured
+// stage list, so the phone's own Settings screen can offer a dropdown
+// of "Stage N - Name" before that phone is even approved yet - stage
+// names are the same low-sensitivity category as /health, not scan
+// data or an approval-gated action. deviceGate was tried here first but
+// doesn't work for a GET: it only ever reads req.body.device_id, and a
+// GET request has no body, so it 403'd every single call regardless of
+// approval status - found live (the phone's Settings dropdown always
+// showed just the classic option, never any real stages).
+app.get('/parts/stages', (req, res) => {
   res.json({ ok: true, stages: listStages.all() });
 });
 
