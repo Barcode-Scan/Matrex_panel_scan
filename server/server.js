@@ -1194,10 +1194,15 @@ const getBatchCompletion = db.prepare(`
   WHERE pp.batch = ? AND pi.void = 'No'
 `);
 // Voided lines never shipped - a packing slip lists what actually left
-// the floor, not everything ever registered under this batch name. The
-// completion gate above already guarantees every non-voided line is
-// scanned by the time a slip can be created, so this filter alone is
-// enough to make the snapshot "scanned, non-voided parts only".
+// the floor, not everything ever registered under this batch name. This
+// deliberately does NOT filter on pi.scanned - a batch let through the
+// completion gate below via the admin's manual-complete override can
+// still have unscanned lines, and those still belong on the slip (the
+// whole point of the override is finishing the paperwork for a batch
+// that's done even though the scan count doesn't say so). For a batch
+// that reached here the normal way (scanned === total), every
+// non-voided line is scanned anyway, so this filter alone already
+// produced "scanned, non-voided parts only" before the override existed.
 const getBatchParts = db.prepare(`
   SELECT pp.unique_id, pp.tag, pp.part_type, pp.width, pp.height, pp.qty, pp.colour
   FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
@@ -1226,11 +1231,22 @@ app.post('/admin/api/packing-slips', requireAdmin, (req, res) => {
 
   const completion = getBatchCompletion.get(batch);
   if (!completion || !completion.total) return res.status(400).json({ ok: false, error: 'batch has no registered parts' });
-  if (completion.scanned !== completion.total) return res.status(400).json({ ok: false, error: 'batch is not fully scanned yet — cannot create a packing slip' });
+  const schedule = getProductionSchedule.get(batch) || {};
+  // The admin dashboards already treat a manually-forced-complete batch
+  // (Task Status -> "Complete (Manual)", see saveTaskStatus/isForceComplete
+  // client-side) as done and let a packing slip be started for it even
+  // when the real scan count is behind - that override has to be honored
+  // here too, or the "Create Packing Slip" button they already see just
+  // 400s the moment they click it.
+  let scheduleExtra = {};
+  if (schedule.extra_fields) { try { scheduleExtra = JSON.parse(schedule.extra_fields); } catch (e) { scheduleExtra = {}; } }
+  const manuallyCompleted = !!scheduleExtra.forceComplete;
+  if (completion.scanned !== completion.total && !manuallyCompleted) {
+    return res.status(400).json({ ok: false, error: 'batch is not fully scanned yet — cannot create a packing slip' });
+  }
 
   const now = new Date().toISOString();
   const prefix = `PS-${new Date().getFullYear().toString().slice(-2)}-`;
-  const schedule = getProductionSchedule.get(batch) || {};
   const authoritative = getBatchParts.all(batch);
 
   // The admin UI lets someone reorder parts and cluster them into named
