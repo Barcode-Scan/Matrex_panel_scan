@@ -308,6 +308,11 @@ function partStatusPillHtml(idx){
 // this hits the same public API live, same as Excel does.
 const BARCODE_API_BASE='https://bwipjs-api.metafloor.com/?bcid=pdf417&columns=4&rowmult=3&eclevel=3&paddingwidth=2&paddingheight=2';
 function barcodeImgHtml(uid){
+  // Per-page opt-out, same pattern as BATCH_NAME_EDITABLE - declared
+  // per dashboard right before this script loads. Damon's dashboard
+  // doesn't show it; everywhere else defaults to showing it even if
+  // the flag isn't declared at all.
+  if(typeof SHOW_BARCODE_IMAGE!=='undefined'&&!SHOW_BARCODE_IMAGE)return'';
   const url=BARCODE_API_BASE+'&scale=6&text='+encodeURIComponent(uid);
   return`<div style="margin-top:10px;text-align:center">
     <img src="${esc(url)}" alt="Barcode for ${esc(uid)}" style="max-width:100%;height:auto;border:1px solid var(--gray-200);border-radius:6px;padding:8px;background:#fff" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
