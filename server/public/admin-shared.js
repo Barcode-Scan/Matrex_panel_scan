@@ -1965,7 +1965,6 @@ function renderPackingSlip(slip){
             </div>
             <div class="ps-title">
               <div class="ps-title-main">PACKING SLIP</div>
-              <div class="ps-title-sub">INTERNAL</div>
             </div>
             <div class="ps-numbox">
               <div class="ps-numbox-hdr">PACKING SLIP NUMBER</div>
