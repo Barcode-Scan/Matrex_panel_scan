@@ -162,6 +162,9 @@
   .field-row{display:flex;gap:10px;font-size:13px;padding:4px 0}
   .field-k{color:var(--gray-500);min-width:110px;flex-shrink:0}
   .field-v{font-weight:600}
+  .admin-modal-bg{display:none;position:fixed;inset:0;background:rgba(16,24,40,.5);z-index:80;align-items:center;justify-content:center;padding:20px}
+  .admin-modal-bg.on{display:flex}
+  .admin-modal{background:var(--white);border-radius:var(--radius-lg);padding:22px;width:100%;max-width:540px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(16,24,40,.25)}
   button.danger-solid{background:var(--red-600);color:#fff}
   .rep-tbl{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px}
   .rep-tbl th,.rep-tbl td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--gray-200)}
@@ -497,6 +500,24 @@
     </div>
     <div id="labelsBulkBar" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;background:var(--gray-100);border:1.5px solid var(--gray-200);border-radius:10px;padding:10px 12px;margin-bottom:10px"></div>
     <div id="labelsContent"></div>
+  </div>
+
+  <div class="admin-modal-bg" id="mLabelDetail" onclick="if(event.target===this)closeLabelDetail()">
+    <div class="admin-modal">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2 style="margin:0" id="labelDetailTitle"></h2>
+        <button class="secondary" onclick="closeLabelDetail()" style="width:auto;padding:6px 12px;font-size:13px">Close</button>
+      </div>
+      <div id="labelDetailBody"></div>
+      <h2 style="margin-top:16px">Notes</h2>
+      <div id="labelDetailNotes"></div>
+      <div class="keybar" style="margin-top:10px;flex-wrap:wrap">
+        <select id="labelNoteCat" style="flex:1;min-width:140px"></select>
+        <input id="labelNoteTxt" placeholder="Details (required for Other)" style="flex:2;min-width:160px">
+        <button onclick="addLabelDetailNote()" style="width:auto">Add Note</button>
+        <span id="labelDetailVoidBtn"></span>
+      </div>
+    </div>
   </div>
 
   <!-- Off-screen normally (display:none), swapped to visible only inside
