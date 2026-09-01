@@ -300,6 +300,20 @@ function partStatusPillHtml(idx){
     :idx.delivered_internally==='Yes'?'<span class="pill neutral">DELIVERED (INTERNAL)</span>'
     :idx.scanned==='Yes'?'<span class="pill APPROVED">SCANNED</span>':'<span class="pill PENDING">NOT SCANNED</span>';
 }
+// Same bwip-js PDF417 endpoint + params the Excel label generator
+// itself calls to print the physical label (UID_API_BASE/DM_SCALE in
+// the VBA macro) - the barcode only ever encodes the UID, nothing else
+// ("full data is looked up on the server"), so it can be reconstructed
+// on demand from just the unique_id. No server storage/upload needed -
+// this hits the same public API live, same as Excel does.
+const BARCODE_API_BASE='https://bwipjs-api.metafloor.com/?bcid=pdf417&columns=4&rowmult=3&eclevel=3&paddingwidth=2&paddingheight=2';
+function barcodeImgHtml(uid){
+  const url=BARCODE_API_BASE+'&scale=6&text='+encodeURIComponent(uid);
+  return`<div style="margin-top:10px;text-align:center">
+    <img src="${esc(url)}" alt="Barcode for ${esc(uid)}" style="max-width:100%;height:auto;border:1px solid var(--gray-200);border-radius:6px;padding:8px;background:#fff" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="empty" style="display:none">Could not load barcode image (barcode server unreachable).</div>
+  </div>`;
+}
 function partFieldsHtml(idx,d){
   return[['Department',idx.department],['Batch',d.batch],['Sheet Name',d.sheet_name],['Project',d.project],
     ['Floor',d.floor],['Tag',d.tag],['Type',d.part_type],['Size',[d.width,d.height].filter(Boolean).join(' X ')],
@@ -318,6 +332,7 @@ function renderPart(data){
         <div class="name">${esc(idx.unique_id)}</div>${statusPill}
       </div>
       ${fields}
+      ${barcodeImgHtml(idx.unique_id)}
     </div>
     <h2 style="margin-top:16px">Notes</h2>
     <div id="notesArea"></div>
@@ -389,7 +404,7 @@ function closeLabelDetail(){$('mLabelDetail').classList.remove('on');}
 function renderLabelDetail(data){
   const idx=data.index,d=data.detail||{};
   $('labelDetailTitle').textContent=idx.unique_id;
-  $('labelDetailBody').innerHTML=partStatusPillHtml(idx)+'<div style="margin-top:8px">'+partFieldsHtml(idx,d)+'</div>';
+  $('labelDetailBody').innerHTML=partStatusPillHtml(idx)+'<div style="margin-top:8px">'+partFieldsHtml(idx,d)+'</div>'+barcodeImgHtml(idx.unique_id);
   $('labelDetailNotes').innerHTML=notesListHtml(data.notes);
   $('labelNoteCat').innerHTML=NOTE_CATEGORIES.map(([v,l])=>`<option value="${v}">${esc(l)}</option>`).join('');
   $('labelNoteTxt').value='';
