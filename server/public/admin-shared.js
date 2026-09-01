@@ -14,7 +14,7 @@ if($('actorName')){
   $('actorName').addEventListener('change',e=>localStorage.setItem(LS_ACTOR_NAME,e.target.value.trim()));
 }
 
-function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();loadMaterialStock();loadPackingSlips();loadDeletedBatchesCount();checkAppVersion();loadCustomColumns();}
+function saveKey(){KEY=$('key').value.trim();localStorage.setItem('mx_admin_key',KEY);load();loadReports();loadTunnelUrl();loadScheduleList();loadDeviceActivity();loadExceptions();loadMaterialStock();loadPackingSlips();loadDeletedBatchesCount();checkAppVersion();loadCustomColumns();loadStageDefinitions();}
 
 // ── TABS ─────────────────────────────────────────────────────
 // Production Schedule is the landing view now, open to whoever has the
@@ -598,7 +598,8 @@ let scheduleBatches=[];
 const GRID_COLUMNS=[
   ['job_name','Job'],['floor_or_work_order','Floor or Work Order'],['target_finish','Target Finish'],
   ['material','Material'],['finish','Finish'],['part_name','Part Name'],['batch','Batch Name'],
-  ['status','Part Qty'],['sheet_qty','Sheet Qty'],['comment','Comment'],['task_status','Task Status']
+  ['status','Part Qty'],['sheet_qty','Sheet Qty'],['comment','Comment'],['task_status','Task Status'],
+  ['scan_stage','Scan Stage']
 ];
 // ── CUSTOM COLUMNS (Production Schedule only) — admin-defined columns
 // beyond the fixed 11, stored server-side (not just localStorage) so
@@ -1025,7 +1026,7 @@ function renderWeekDetail(key){
   $('weeklyDetailSub').textContent=items.length+' batch'+(items.length===1?'':'es');
   renderWeekMaterialSummary(items);
   if($('weeklyDetailTotals'))$('weeklyDetailTotals').innerHTML=scheduleTotalsBarHtml(items);
-  if(!items.length){$('weeklyDetailList').innerHTML='<tr><td colspan="11" class="empty">No batches.</td></tr>';return;}
+  if(!items.length){$('weeklyDetailList').innerHTML='<tr><td colspan="12" class="empty">No batches.</td></tr>';return;}
   const sorted=[...items].sort((a,b)=>(a.target_finish||'9999-99-99').localeCompare(b.target_finish||'9999-99-99'));
   $('weeklyDetailList').innerHTML=sorted.map(b=>scheduleRowHtml(b,false)).join('');
 }
@@ -2312,6 +2313,7 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#otherDashMenu')&&!e.target.closest('#otherDashBtn'))closeOtherDashboards();
   if(!e.target.closest('#deletedBatchesPopover')&&!e.target.closest('#bDeletedBatches'))closeDeletedBatchesPanel();
   if(!e.target.closest('#columnsPopover')&&!e.target.closest('#bColumns'))closeColumnsPanel();
+  if(!e.target.closest('#stagesPopover')&&!e.target.closest('#bStages'))closeStagesPanel();
 });
 // Not present on gm.html/damon.html/swar.html (only the main dashboard
 // links out to the others), so guarded like every other admin.html-only
@@ -2487,6 +2489,7 @@ function scheduleRowHtml(b,includeCustomColumns){
   const batchAlign=cellAlignStyle(b,'batch'),batchAlignAttr=batchAlign?` style="${batchAlign}"`:'';
   const statusAlign=cellAlignStyle(b,'status'),statusAlignAttr=statusAlign?` style="${statusAlign}"`:'';
   const taskAlign=cellAlignStyle(b,'task_status'),taskAlignAttr=taskAlign?` style="${taskAlign}"`:'';
+  const scanStageAlign=cellAlignStyle(b,'scan_stage'),scanStageAlignAttr=scanStageAlign?` style="${scanStageAlign}"`:'';
 
   let out='';
   for(let i=0;i<rowCount;i++){
@@ -2505,6 +2508,7 @@ function scheduleRowHtml(b,includeCustomColumns){
     const qtyCell=split?readOnlyTd(b,'sheet_qty',qtys[i]||'','gc-num'):editableTd(b,'sheet_qty',false,'gc-num');
     const commentCell=isFirst?editableTd(b,'comment',false,'gc-comment'):blankTd('comment','gc-comment');
     const taskCell=isFirst?`<td data-col="task_status"${taskAlignAttr}>${taskStatusCell(b,state)}</td>`:blankTd('task_status');
+    const scanStageCellHtml=isFirst?`<td data-col="scan_stage"${scanStageAlignAttr}>${scanStageCell(b)}</td>`:blankTd('scan_stage');
     out+=`<tr data-batch="${esc(b.batch)}" class="${risk?'risk-'+risk.level:''}${flagged&&isFirst?' row-flagged':''}" onclick="handleRowClick('${esc(b.batch)}')" oncontextmenu="openRowContextMenu(event,'${esc(b.batch)}')"${rowHeightStyle}>
     ${jobCell}
     ${floorCell}
@@ -2517,6 +2521,7 @@ function scheduleRowHtml(b,includeCustomColumns){
     ${qtyCell}
     ${commentCell}
     ${taskCell}
+    ${scanStageCellHtml}
     ${customCells}
   </tr>`;
   }
@@ -2564,6 +2569,118 @@ async function saveTaskStatus(batch,value){
     await api('/admin/api/schedule/'+encodeURIComponent(batch)+'/task-status',{method:'POST',body:JSON.stringify({task_status:value})});
     await loadScheduleList();
   }catch(e){alert('Could not save — check the admin key and try again.');}
+}
+
+// ── MULTI-STAGE SCANNING (Scan Stage column) — a second, independent
+// progress signal from Task Status above: this one is driven by real
+// scans (see stage_scans/production_stages in schema.sql and
+// /parts/match's stage-aware branch server-side), not a manual pick.
+// The server sends the auto-derived value on every batch as scan_stage_
+// number/name/complete ("furthest stage every non-voided part has
+// actually been scanned at" - same all-or-nothing rule rowStatus()
+// already uses for scan completion). A manual override lives in
+// extra_fields.scanStageOverride (a stage_number, or the string
+// 'COMPLETE') - same "override lives in extra_fields, display logic
+// lives client-side" architecture as isForceComplete/task_status,
+// deliberately kept separate from that field rather than folded into
+// it (Task Status stays exactly as it already was).
+let stageDefinitions=[]; // [{stage_number,stage_name}], fetched once, kept in sync locally after add/remove
+async function loadStageDefinitions(){
+  if(!KEY)return;
+  try{
+    const data=await api('/admin/api/stages');
+    stageDefinitions=data.stages||[];
+    if(currentTab==='schedule')renderScheduleGrid();
+  }catch(e){}
+}
+function isScanStageOverridden(b){return!!(b.extra_fields&&b.extra_fields.scanStageOverride!=null&&b.extra_fields.scanStageOverride!=='');}
+function scanStageCell(b){
+  const overridden=isScanStageOverridden(b);
+  // Locks the same way taskStatusCell does for a genuine completion -
+  // nothing left to override once every part has actually gone through
+  // every configured stage.
+  if(b.scan_stage_complete&&!overridden)return`<select class="ts-select" disabled><option selected>Complete</option></select>`;
+  const val=overridden?String(b.extra_fields.scanStageOverride):(b.scan_stage_number!=null?String(b.scan_stage_number):'');
+  const opts=[['','Not Started'],...stageDefinitions.map(s=>[String(s.stage_number),s.stage_name]),['COMPLETE','Complete (Manual)']];
+  const optsHtml=opts.map(([v,label])=>`<option value="${esc(v)}" ${val===v?'selected':''}>${esc(label)}</option>`).join('');
+  return`<select class="ts-select${overridden?' ts-forced':''}" onclick="event.stopPropagation()" onchange="event.stopPropagation();saveScanStage('${esc(b.batch)}',this.value)">${optsHtml}</select>`;
+}
+async function saveScanStage(batch,value){
+  const b=scheduleBatches.find(x=>x.batch===batch);
+  if(value===''){
+    // Not Started here means "clear the override, go back to whatever
+    // the real scans say" - not "force it to blank". If nothing's
+    // actually been scanned yet the auto value is blank anyway, so
+    // this reads correctly either way.
+    const extra=Object.assign({},(b&&b.extra_fields)||{});
+    delete extra.scanStageOverride;
+    if(b)b.extra_fields=extra;
+    try{
+      await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'POST',body:JSON.stringify({extra_fields:extra})});
+      await loadScheduleList();
+    }catch(e){alert('Could not save — check the admin key and try again.');}
+    return;
+  }
+  const label=value==='COMPLETE'?'Complete':((stageDefinitions.find(s=>String(s.stage_number)===value)||{}).stage_name||value);
+  if(!confirm(`Manually set ${batch}'s Scan Stage to "${label}"?\n\nThis overrides what the real scans say until cleared (pick "Not Started" to go back to automatic).`))return;
+  const extra=Object.assign({},(b&&b.extra_fields)||{},{scanStageOverride:value==='COMPLETE'?'COMPLETE':parseInt(value,10)});
+  if(b)b.extra_fields=extra;
+  try{
+    await api('/admin/api/schedule/'+encodeURIComponent(batch),{method:'POST',body:JSON.stringify({extra_fields:extra})});
+    await loadScheduleList();
+  }catch(e){alert('Could not save — check the admin key and try again.');}
+}
+// ── STAGE DEFINITIONS PANEL — add/remove the shop-floor stages
+// themselves (number + name), same popover shell as Columns/Deleted
+// Batches. Removing a stage never touches stage_scans - parts already
+// scanned at that stage keep that history, same "definition removed,
+// values stay" reasoning as custom columns.
+function renderStagesPanel(){
+  const el=$('stagesPanelList');
+  if(!el)return;
+  const rows=stageDefinitions.map(s=>
+    `<div class="columns-pop-row"><label style="flex:1;display:flex;align-items:center;gap:8px;margin:0;cursor:default">Stage ${s.stage_number} — ${esc(s.stage_name)}</label><button class="secondary" onclick="removeStageDefinition(${s.stage_number})" style="width:auto;padding:2px 8px;font-size:11px" title="Remove this stage">&times;</button></div>`
+  ).join('');
+  el.innerHTML=(rows||'<div class="sub" style="padding:4px">No stages set up yet.</div>')+
+    `<div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--gray-200)">
+      <input id="newStageNumber" type="number" min="1" placeholder="#" style="width:50px;min-width:0;font-size:12.5px;padding:6px 8px">
+      <input id="newStageName" placeholder="Stage name (e.g. Cutting)" style="flex:1;min-width:0;font-size:12.5px;padding:6px 8px">
+      <button onclick="addStageDefinition()" style="width:auto;padding:6px 10px;font-size:12px">Add</button>
+    </div>`;
+}
+function toggleStagesPanel(evt){
+  evt.stopPropagation();
+  const pop=$('stagesPopover');
+  if(!pop)return;
+  if(pop.style.display==='block'){pop.style.display='none';return;}
+  renderStagesPanel();
+  pop.style.display='block';
+}
+function closeStagesPanel(){const pop=$('stagesPopover');if(pop)pop.style.display='none';}
+async function addStageDefinition(){
+  const numInput=$('newStageNumber'),nameInput=$('newStageName');
+  const num=parseInt((numInput&&numInput.value)||'',10);
+  const name=((nameInput&&nameInput.value)||'').trim();
+  if(!Number.isInteger(num)||num<1){alert('Enter a stage number (1, 2, 3...).');return;}
+  if(!name){alert('Enter a name for the stage.');return;}
+  try{
+    await api('/admin/api/stages',{method:'POST',body:JSON.stringify({stage_number:num,stage_name:name})});
+    await loadStageDefinitions();
+    if(numInput)numInput.value='';
+    if(nameInput)nameInput.value='';
+    renderStagesPanel();
+    if(currentTab==='schedule')renderScheduleGrid();
+  }catch(e){alert('Could not add stage: '+e.message);}
+}
+async function removeStageDefinition(stageNumber){
+  const s=stageDefinitions.find(x=>x.stage_number===stageNumber);
+  if(!confirm(`Remove Stage ${stageNumber}${s?' ("'+s.stage_name+'")':''}?\n\nScans already recorded at this stage stay on record - re-adding a stage with this same number later brings it back into the Scan Stage calculation.`))return;
+  try{
+    await api('/admin/api/stages/'+stageNumber,{method:'DELETE'});
+    await loadStageDefinitions();
+    renderStagesPanel();
+    if(currentTab==='schedule')renderScheduleGrid();
+  }catch(e){alert('Could not remove stage: '+e.message);}
 }
 // One search box across every GRID_COLUMNS field at once (Find), ANDed
 // with whatever per-column filters are already active - same colValue()
@@ -3028,4 +3145,5 @@ async function bulkMarkInternalDeliverySelectedLabels(){
 // and left the grid empty until something re-triggered it, e.g. clicking
 // the tab).
 loadScheduleList();
-loadCustomColumns();
+loadCustomColumns();
+loadStageDefinitions();

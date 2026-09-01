@@ -707,6 +707,13 @@
         </div>
       </div>
       <div style="position:relative;flex-shrink:0">
+        <button class="secondary" id="bStages" onclick="toggleStagesPanel(event)" style="width:auto;padding:10px 12px;font-size:12px" title="Set up multi-stage scanning stations (Cutting, Bending, Assembly...)">&#127919; Stages</button>
+        <div class="deleted-pop" id="stagesPopover">
+          <div class="deleted-pop-head">Production Stages</div>
+          <div id="stagesPanelList"></div>
+        </div>
+      </div>
+      <div style="position:relative;flex-shrink:0">
         <button class="secondary" id="bDeletedBatches" onclick="toggleDeletedBatchesPanel(event)" style="width:auto;padding:10px 12px;font-size:12px">&#128465; Deleted Batches<span class="deleted-count-badge" id="deletedBatchesCount" style="margin-left:6px"></span></button>
         <div class="deleted-pop" id="deletedBatchesPopover">
           <div class="deleted-pop-head">Deleted Batches</div>
@@ -819,7 +826,7 @@
       <thead>
         <tr>
           <th>Job</th><th>Floor or Work Order</th><th>Target Finish</th><th>Material</th><th>Finish</th>
-          <th>Part Name</th><th>Batch Name</th><th>Part Qty</th><th>Sheet Qty</th><th>Comment</th><th>Task Status</th>
+          <th>Part Name</th><th>Batch Name</th><th>Part Qty</th><th>Sheet Qty</th><th>Comment</th><th>Task Status</th><th>Scan Stage</th>
         </tr>
       </thead>
       <tbody id="weeklyDetailList"></tbody>

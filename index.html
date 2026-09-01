@@ -648,6 +648,8 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
         <div class="fg"><label class="fg-label" for="setUrl">Receiver URL</label><input class="fg-input" id="setUrl" inputmode="url" autocapitalize="off" placeholder="https://your-receiver-url"></div>
         <div class="f-hint" id="urlMixedWarn" style="display:none;color:var(--amber-700);margin-bottom:14px">⚠ This app loads over HTTPS, so browsers block plain <code>http://</code> requests to your receiver (even on your local WiFi). Ask IT for an <code>https://</code> receiver URL, or scans will only save to the phone.</div>
         <div class="fg"><label class="fg-label" for="setDev">Device name</label><input class="fg-input" id="setDev" autocapitalize="characters" placeholder="e.g. PHONE-DARPIT"></div>
+        <div class="fg"><label class="fg-label" for="setStage">Production stage (optional)</label><select class="fg-input" id="setStage"><option value="">No stage — single scan (classic)</option></select></div>
+        <div class="f-hint" style="margin-bottom:14px">Set this if this phone scans one specific station (Cutting, Bending, Assembly...). The same tag can then be scanned again at each stage without counting as a duplicate. Leave blank for normal one-scan-per-part use. Stages are set up by an admin.</div>
         <div class="fg"><label class="fg-label" for="setFilePrefix">CSV file name</label><input class="fg-input" id="setFilePrefix" autocapitalize="characters" placeholder="e.g. Matrex_Scans"></div>
         <div class="f-hint" style="margin-bottom:14px">Saved as &lt;name&gt;_YYYY-MM-DD.csv — the date is always added automatically.</div>
         <button class="btn btn-solid" id="bSaveSet" type="button" style="font-size:17px;padding:14px">Save Settings</button>
@@ -775,6 +777,7 @@ const fmtT=iso=>iso?new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'
 const fmtDT=iso=>iso?new Date(iso).toLocaleDateString([],{month:'short',day:'numeric'})+' '+fmtT(iso):'Never';
 
 let cfg=lsGet(LS.cfg)||{url:'',dev:'MATREX-PHONE',filePrefix:'Matrex_Scans'};
+let stageOptionsCache=[]; // [{stage_number,stage_name}] - last list fetched from /parts/stages, for resolving a number to its name in flash messages
 let deviceId=lsGet(LS.deviceId);
 if(!deviceId){deviceId=uuid();lsSet(LS.deviceId,deviceId);}
 let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
@@ -784,6 +787,33 @@ function registerDevice(url){
   return fetch(target+'/devices/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device_name:cfg.dev})})
     .then(r=>r.json()).then(j=>{deviceStatus=j.status||'UNKNOWN';return deviceStatus;})
     .catch(()=>{deviceStatus='UNKNOWN';return deviceStatus;});
+}
+// ── MULTI-STAGE SCANNING — a phone's stage is a local setting (same as
+// device name), not something the server assigns - the stage list
+// itself (which numbers/names exist at all) is admin-defined though, so
+// this fetches it fresh whenever Settings opens rather than hardcoding
+// options here. device-gated, not key-gated, same as every other
+// phone-facing endpoint.
+async function loadStageOptions(){
+  const sel=$('setStage');
+  const prevValue=cfg.stageNumber?String(cfg.stageNumber):'';
+  const classicOpt='<option value="">No stage — single scan (classic)</option>';
+  if(!cfg.url){sel.innerHTML=classicOpt;sel.value='';return;}
+  try{
+    const res=await fetch(cfg.url+'/parts/stages');
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    const stages=data.stages||[];
+    stageOptionsCache=stages;
+    sel.innerHTML=classicOpt+stages.map(s=>`<option value="${s.stage_number}">Stage ${s.stage_number} — ${esc(s.stage_name)}</option>`).join('');
+  }catch(e){
+    // Couldn't reach the server to confirm the current stage list - keep
+    // the classic option plus whatever was already saved (as a bare
+    // number, name unknown) so opening Settings offline never silently
+    // clears an existing stage assignment out from under someone.
+    sel.innerHTML=classicOpt+(prevValue?`<option value="${prevValue}">Stage ${prevValue} (offline — name unavailable)</option>`:'');
+  }
+  sel.value=prevValue;
 }
 let scans=[],currentSkid=null,today=todayStr(),viewDate=today,syncedCount=0;
 let skidTarget=null,delTarget=null,pendingDup=null;
@@ -1314,8 +1344,12 @@ function scanKey(p){
 // * Project * Floor * Type * Tag * Dimension * Qty * Colour), plus the
 // scanned unique ID and its verification result when this was a SCAN.
 const MATCH_LABELS={MATCHED_NEW:'Matched ✓',MATCHED_ALREADY:'Already scanned',VOIDED:'VOIDED',NOT_FOUND:'Not registered',UNVERIFIED:'Unverified — offline'};
+function matchLabel(p){
+  if(p.matchStatus==='MATCHED_ALREADY'&&p.stageName)return'Already scanned at '+p.stageName;
+  return MATCH_LABELS[p.matchStatus]||'';
+}
 function dataHtml(p){
-  return[['Unique ID',p.uniqueId],['Match',MATCH_LABELS[p.matchStatus]||''],
+  return[['Unique ID',p.uniqueId],['Match',matchLabel(p)],
          ['Programme / Sheet Number',p.batchSheet],['Project',p.project],['Floor',p.floor],
          ['Type',p.partType],['Tag',p.partName],['Dimension',p.size],
          ['Qty',p.qty],['Colour',p.colour]]
@@ -1355,7 +1389,12 @@ function blankPart(uniqueId){
     uniqueId,raw:uniqueId,batchSheet:'',project:'',floor:'',partType:'',
     partName:uniqueId,size:'',qty:'',colour:'',
     date:today,time:new Date().toISOString(),method:'SCAN',flag:'',matchStatus:'',noteCount:0,
-    skid:currentSkid||'',scanId:uuid()
+    skid:currentSkid||'',scanId:uuid(),
+    // Captured at scan time (not read fresh from cfg later) so a
+    // reconcile that runs after the phone's stage setting has since
+    // changed still submits under whatever stage was actually active
+    // when this part was scanned.
+    stageNumber:cfg.stageNumber||null
   };
 }
 // Applies a /parts/match response onto a part record. NOT_FOUND has no
@@ -1371,6 +1410,12 @@ function applyMatch(part,data){
   part.size=[data.width,data.height].filter(Boolean).join(' X ');
   part.qty=data.qty||'';part.colour=data.colour||'';
   part.flag=data.status==='VOIDED'?'VOID':data.status==='MATCHED_ALREADY'?'DUPLICATE':'';
+  // Multi-stage: the server's MATCHED_ALREADY is scoped to just this
+  // one stage when stage_number comes back on the response - stash the
+  // name so commit()'s flash message can say "already scanned at Stage
+  // 2" instead of the flatly wrong-sounding classic "Already scanned"
+  // (which would otherwise read like the WHOLE part was already done).
+  if(data.stage_number!=null)part.stageName=stageOptionsCache.find(s=>s.stage_number===data.stage_number)?.stage_name||('Stage '+data.stage_number);
 }
 async function handleScan(uniqueId){
   // Local guard against re-adding the identical ID twice in today's list
@@ -1393,7 +1438,7 @@ async function handleScan(uniqueId){
   }
 
   try{
-    const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time})});
+    const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined})});
     if(res.status===403){
       const j=await res.json().catch(()=>({}));
       deviceStatus=j.status||'UNKNOWN';
@@ -1420,7 +1465,7 @@ async function reconcileUnverified(){
   reconciling=true;
   for(const part of pending){
     try{
-      const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:part.uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time})});
+      const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:part.uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined})});
       if(!res.ok)continue; // still unreachable/unapproved — leave UNVERIFIED, try again next time
       const data=await res.json();
       applyMatch(part,data);
@@ -1436,7 +1481,12 @@ function commit(part){
   scans.push(part);saveScans();
   beep(part.flag?'err':'ok');updateCounters();renderRecent();
   const base=part.partName+(part.colour?' — '+part.colour:'');
-  showFlash(part.flag?'bad':'ok',FLAG_MSGS[part.flag]?base+' ('+FLAG_MSGS[part.flag]+')':base);
+  // A stage-scoped duplicate ("already scanned at Stage 2") reads very
+  // differently from a classic one ("already scanned" full stop, the
+  // part is just done) - part.stageName is only ever set when the
+  // server's MATCHED_ALREADY came back scoped to one specific stage.
+  const flagMsg=part.flag==='DUPLICATE'&&part.stageName?'Already scanned at '+part.stageName:FLAG_MSGS[part.flag];
+  showFlash(part.flag?'bad':'ok',flagMsg?base+' ('+flagMsg+')':base);
   if(part.method==='SCAN')showScanToast(part.partName);
   if(!cfg.url)setSyncUI('','Saved on phone');else scheduleAutoUpload();
 }
@@ -1546,6 +1596,7 @@ function openSettingsScreen(){
   $('setUrl').value=cfg.url;$('setDev').value=cfg.dev;$('setFilePrefix').value=cfg.filePrefix||'Matrex_Scans';$('connRes').textContent='';refreshSettings();checkMixedWarn();show('scrSettings');
   $('setSoundOn').checked=!isAudioMuted();
   $('setDarkMode').checked=!!lsGet(LS.darkMode);
+  loadStageOptions();
 }
 $('setUrl').addEventListener('input',checkMixedWarn);
 $('setSoundOn').addEventListener('change',e=>{lsSet(LS.muteAudio,!e.target.checked);});
@@ -1572,7 +1623,8 @@ $('bSaveSet').onclick=async()=>{
   const u=$('setUrl').value.trim().replace(/\/+$/,'');
   if(u&&!validUrl(u)){showFlash('bad','Receiver URL must start with http:// or https://');return;}
   const prefix=$('setFilePrefix').value.trim().replace(/[\\/:*?"<>|]/g,'').replace(/\s+/g,'_');
-  cfg.url=u;cfg.dev=$('setDev').value.trim()||'MATREX-PHONE';cfg.filePrefix=prefix||'Matrex_Scans';lsSet(LS.cfg,cfg);show('scrScan');refreshSettings();
+  const stageVal=$('setStage').value;
+  cfg.url=u;cfg.dev=$('setDev').value.trim()||'MATREX-PHONE';cfg.filePrefix=prefix||'Matrex_Scans';cfg.stageNumber=stageVal?parseInt(stageVal,10):null;lsSet(LS.cfg,cfg);show('scrScan');refreshSettings();
   if(cfg.url&&scans.length)scheduleAutoUpload(); // flush anything already queued instead of waiting for the next scan
   if(u){const st=await registerDevice();showFlash(st==='APPROVED'?'ok':'bad','Settings saved — device '+st.toLowerCase());}
   else showFlash('ok','Settings saved');

@@ -109,6 +109,42 @@ CREATE TABLE IF NOT EXISTS parts_panel (
   sequence_no   INTEGER  -- directed-scan order within its batch; defaults to registration order, admin-editable
 );
 
+-- ── PRODUCTION STAGES — admin-defined shop-floor stations (e.g. Cutting,
+-- Bending, Assembly), each one scanned by its own phone. stage_number is
+-- the admin's own choice (not autoincrement) since it's also the
+-- ordering - "furthest stage every part has finished" (see stage_scans
+-- below) walks stages in this numeric order. Deliberately separate from
+-- production_schedule.task_status (the existing manual Cut/Bending/
+-- Assembly dropdown) - that stays exactly as it is; this is a second,
+-- independent progress signal driven by real scans instead of a manual
+-- pick.
+CREATE TABLE IF NOT EXISTS production_stages (
+  stage_number  INTEGER PRIMARY KEY,
+  stage_name    TEXT NOT NULL,
+  created_at    TEXT NOT NULL
+);
+
+-- ── STAGE SCANS — one row per (part, stage) a phone assigned to that
+-- stage has scanned that part's tag at. The classic parts_index.scanned
+-- flag is untouched by which stage did the scanning - it's set to 'Yes'
+-- on the FIRST scan at any stage, same as always, so every existing
+-- feature (Part Qty progress, Ready to Pack, packing slips...) keeps
+-- working unchanged for a batch that never uses stages at all. This
+-- table is purely additive: a part's overall "furthest stage every part
+-- in its batch has reached" is derived by walking production_stages in
+-- order and checking which ones this table has a row for, for every
+-- non-voided part in the batch - the same "derive, don't type" pattern
+-- task_status/rowStatus already use for completion.
+CREATE TABLE IF NOT EXISTS stage_scans (
+  unique_id     TEXT NOT NULL REFERENCES parts_index(unique_id),
+  stage_number  INTEGER NOT NULL,
+  scanned_at    TEXT NOT NULL,
+  device_id     TEXT,
+  device        TEXT,
+  PRIMARY KEY (unique_id, stage_number)
+);
+CREATE INDEX IF NOT EXISTS idx_stage_scans_unique_id ON stage_scans(unique_id);
+
 -- ── PRODUCTION SCHEDULE — one row per batch, batch-level metadata that
 -- doesn't belong on any individual label (job name, work order, target
 -- finish, material, etc.). Separate from parts_panel (per-label, write-once

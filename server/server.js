@@ -579,6 +579,7 @@ app.delete('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
   const getPanelRow = db.prepare('SELECT * FROM parts_panel WHERE unique_id = ?');
   const getNotesFor = db.prepare('SELECT * FROM part_notes WHERE unique_id = ?');
   const getScansFor = db.prepare('SELECT * FROM scans WHERE unique_id = ?');
+  const getStageScansFor = db.prepare('SELECT * FROM stage_scans WHERE unique_id = ?');
   const parts = uids.map(uid => ({
     index: getIndexRow.get(uid),
     panel: getPanelRow.get(uid),
@@ -589,12 +590,20 @@ app.delete('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
     // regardless, so a deleted batch doesn't silently lose "this part
     // never needed a packing slip" and a restore doesn't silently make
     // it need one again.
-    internalDelivery: getInternalDelivery.get(uid) || null
+    internalDelivery: getInternalDelivery.get(uid) || null,
+    // stage_scans is an array like notes/scans (one row per stage a
+    // part passed through) - both parts_index.unique_id AND
+    // stage_scans.unique_id are FOREIGN KEY-enforced here (confirmed
+    // live: deleting parts_index with stage_scans rows still pointing
+    // at it fails the whole delete), so this has to be captured and
+    // cleared right alongside notes/scans, not treated as optional.
+    stageScans: getStageScansFor.all(uid)
   }));
   const scannedCount = parts.filter(p => p.index && p.index.scanned === 'Yes').length;
 
   const delNotes = db.prepare('DELETE FROM part_notes WHERE unique_id = ?');
   const delScans = db.prepare('DELETE FROM scans WHERE unique_id = ?');
+  const delStageScans = db.prepare('DELETE FROM stage_scans WHERE unique_id = ?');
   const delPanel = db.prepare('DELETE FROM parts_panel WHERE unique_id = ?');
   const delIndex = db.prepare('DELETE FROM parts_index WHERE unique_id = ?');
   const now = new Date().toISOString();
@@ -610,6 +619,7 @@ app.delete('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
     for (const uid of uids) {
       delNotes.run(uid);
       delScans.run(uid);
+      delStageScans.run(uid);
       deleteInternalDelivery.run(uid);
       delPanel.run(uid);
       delIndex.run(uid);
@@ -654,6 +664,7 @@ app.post('/admin/api/deleted-batches/:id/restore', requireAdmin, (req, res) => {
   const insertScan = db.prepare(`INSERT INTO scans (scan_id,date,scanned_at,received_at,device,device_id,unique_id,match_status,batch_sheet,project,floor,part_type,part_name,size,qty,colour,skid,method,flag,raw,mode,batch,acknowledged,acknowledged_at) VALUES (@scan_id,@date,@scanned_at,@received_at,@device,@device_id,@unique_id,@match_status,@batch_sheet,@project,@floor,@part_type,@part_name,@size,@qty,@colour,@skid,@method,@flag,@raw,@mode,@batch,@acknowledged,@acknowledged_at)`);
   const insertSchedule = db.prepare(`INSERT INTO production_schedule (batch,job_name,floor_or_work_order,target_finish,material,finish,part_name,sheet_qty,comment,tasked,task_status,extra_fields,source,created_at,updated_at,updated_by) VALUES (@batch,@job_name,@floor_or_work_order,@target_finish,@material,@finish,@part_name,@sheet_qty,@comment,@tasked,@task_status,@extra_fields,@source,@created_at,@updated_at,@updated_by)`);
   const insertInternalDeliveryRestore = db.prepare(`INSERT INTO internal_deliveries (unique_id,batch,delivered_at,delivered_by) VALUES (@unique_id,@batch,@delivered_at,@delivered_by)`);
+  const insertStageScanRestore = db.prepare(`INSERT INTO stage_scans (unique_id,stage_number,scanned_at,device_id,device) VALUES (@unique_id,@stage_number,@scanned_at,@device_id,@device)`);
 
   db.exec('BEGIN');
   try {
@@ -672,6 +683,9 @@ app.post('/admin/api/deleted-batches/:id/restore', requireAdmin, (req, res) => {
       // internal_deliveries has no autoincrement id (unique_id IS the
       // primary key) - captured/restored as one object, not an array.
       if (p.internalDelivery) insertInternalDeliveryRestore.run(p.internalDelivery);
+      // stage_scans has no autoincrement id either (unique_id+stage_number
+      // is the primary key) - restored the same array way as notes/scans.
+      (p.stageScans || []).forEach(s => insertStageScanRestore.run(s));
     }
     db.prepare('DELETE FROM deleted_batches WHERE id = ?').run(req.params.id);
     db.exec('COMMIT');
@@ -746,8 +760,19 @@ const markScanned = db.prepare(`
 `);
 const countNotes = db.prepare('SELECT COUNT(*) AS c FROM part_notes WHERE unique_id = ?');
 
+// ── MULTI-STAGE SCANNING — see schema.sql for the two tables backing
+// this. A phone picks its stage once in its own Settings (not a
+// server-side device property) and sends stage_number with every scan;
+// getStageScan/insertStageScan are what /parts/match below branches on.
+const getStageScan = db.prepare('SELECT * FROM stage_scans WHERE unique_id = ? AND stage_number = ?');
+const insertStageScan = db.prepare(`
+  INSERT INTO stage_scans (unique_id, stage_number, scanned_at, device_id, device)
+  VALUES (@unique_id, @stage_number, @now, @device_id, @device)
+`);
+const listStages = db.prepare('SELECT stage_number, stage_name FROM production_stages ORDER BY stage_number ASC');
+
 app.post('/parts/match', deviceGate, (req, res) => {
-  const { unique_id, device_id, device } = req.body || {};
+  const { unique_id, device_id, device, stage_number } = req.body || {};
   const uid = String(unique_id || '').trim();
   if (!uid) return res.status(400).json({ ok: false, error: 'unique_id required' });
 
@@ -765,6 +790,30 @@ app.post('/parts/match', deviceGate, (req, res) => {
     return res.json({ ok: true, status: 'VOIDED', ...fields, note_count });
   }
 
+  // A stage-scanning phone (stage_number present in the request) gets
+  // its own, entirely separate "already scanned" check - scoped to just
+  // THIS stage, in stage_scans, never the classic scanned flag below.
+  // That's what lets the same tag be scanned again at Stage 2 without
+  // it looking like a duplicate of Stage 1's scan.
+  const stageNum = Number.isInteger(stage_number) ? stage_number : parseInt(stage_number, 10);
+  if (Number.isInteger(stageNum)) {
+    const already = getStageScan.get(uid, stageNum);
+    if (already) {
+      return res.json({
+        ok: true, status: 'MATCHED_ALREADY', ...fields, note_count, stage_number: stageNum,
+        scanned_at: already.scanned_at, scanned_by_device: already.device_id
+      });
+    }
+    const now = new Date().toISOString();
+    insertStageScan.run({ unique_id: uid, stage_number: stageNum, now, device_id: device_id || null, device: device || null });
+    // First scan at ANY stage still flips the classic flag exactly as
+    // before - every existing feature (Part Qty progress, Ready to
+    // Pack, packing slips...) keeps working unchanged for a batch that
+    // never touches stages, and stays correct for one that does.
+    if (idx.scanned !== 'Yes') markScanned.run({ now, device_id: device_id || null, unique_id: uid });
+    return res.json({ ok: true, status: 'MATCHED_NEW', ...fields, note_count, stage_number: stageNum, scanned_at: now, scanned_by_device: device_id || '' });
+  }
+
   if (idx.scanned === 'Yes') {
     return res.json({
       ok: true, status: 'MATCHED_ALREADY', ...fields,
@@ -776,6 +825,85 @@ app.post('/parts/match', deviceGate, (req, res) => {
   markScanned.run({ now, device_id: device_id || null, unique_id: uid });
   res.json({ ok: true, status: 'MATCHED_NEW', ...fields, scanned_at: now, scanned_by_device: device_id || '', note_count });
 });
+
+// Device-gated (not admin-key) read of the configured stage list, so the
+// phone's own Settings screen can offer a dropdown of "Stage N - Name"
+// without needing any admin credential - matches the deviceGate pattern
+// every other phone-facing endpoint here already uses.
+app.get('/parts/stages', deviceGate, (req, res) => {
+  res.json({ ok: true, stages: listStages.all() });
+});
+
+// ── ADMIN STAGE MANAGEMENT — stage_number is the admin's own choice
+// (not autoincrement), upserted by number so re-adding the same number
+// just renames it rather than erroring. Removing a stage definition
+// never touches stage_scans - parts already scanned at that stage keep
+// that history, same "definition removed, values stay" reasoning as
+// custom_columns.
+app.get('/admin/api/stages', requireAdmin, (req, res) => {
+  res.json({ ok: true, stages: listStages.all() });
+});
+app.post('/admin/api/stages', requireAdmin, (req, res) => {
+  const stageNumber = parseInt((req.body && req.body.stage_number), 10);
+  const stageName = String((req.body && req.body.stage_name) || '').trim();
+  if (!Number.isInteger(stageNumber) || stageNumber < 1) return res.status(400).json({ ok: false, error: 'stage number must be a positive whole number' });
+  if (!stageName) return res.status(400).json({ ok: false, error: 'stage name required' });
+  db.prepare(`
+    INSERT INTO production_stages (stage_number, stage_name, created_at)
+    VALUES (@stage_number, @stage_name, @now)
+    ON CONFLICT(stage_number) DO UPDATE SET stage_name=excluded.stage_name
+  `).run({ stage_number: stageNumber, stage_name: stageName, now: new Date().toISOString() });
+  logAudit(actorFrom(req), 'STAGE_UPSERT', String(stageNumber), stageName);
+  res.json({ ok: true, stage_number: stageNumber, stage_name: stageName });
+});
+app.delete('/admin/api/stages/:stageNumber', requireAdmin, (req, res) => {
+  const stageNumber = parseInt(req.params.stageNumber, 10);
+  db.prepare('DELETE FROM production_stages WHERE stage_number = ?').run(stageNumber);
+  logAudit(actorFrom(req), 'STAGE_REMOVE', String(stageNumber), 'stage definition removed - scan history at this stage is untouched');
+  res.json({ ok: true });
+});
+
+// ── SCAN STAGE (batch-level) — the furthest stage EVERY non-voided part
+// in a batch has been scanned at, walking production_stages in
+// ascending order. Same all-or-nothing rule rowStatus() already uses
+// for "fully scanned = complete", generalized across however many
+// stages are configured. Computed for every batch at once (3 queries
+// total, not one query per batch per stage) since /viewer/api/batches
+// is polled every 4s - stages.length===0 (the common case for a batch/
+// admin that never touches this feature) exits before any of the
+// heavier queries run, so there's no cost added when it's unused.
+function computeAllScanStages() {
+  const stages = listStages.all();
+  if (!stages.length) return {};
+  const partsByBatch = db.prepare(`
+    SELECT pp.batch, pi.unique_id FROM parts_panel pp
+    JOIN parts_index pi ON pi.unique_id = pp.unique_id
+    WHERE pi.void = 'No'
+  `).all();
+  const batchParts = new Map();
+  for (const r of partsByBatch) {
+    if (!batchParts.has(r.batch)) batchParts.set(r.batch, []);
+    batchParts.get(r.batch).push(r.unique_id);
+  }
+  const scansByPart = new Map();
+  for (const r of db.prepare('SELECT unique_id, stage_number FROM stage_scans').all()) {
+    if (!scansByPart.has(r.unique_id)) scansByPart.set(r.unique_id, new Set());
+    scansByPart.get(r.unique_id).add(r.stage_number);
+  }
+  const lastStageNumber = stages[stages.length - 1].stage_number;
+  const result = {};
+  for (const [batch, uids] of batchParts) {
+    let furthest = null;
+    for (const s of stages) {
+      const allDone = uids.every(uid => scansByPart.has(uid) && scansByPart.get(uid).has(s.stage_number));
+      if (allDone) furthest = s; else break;
+    }
+    result[batch] = furthest
+      ? { scan_stage_number: furthest.stage_number, scan_stage_name: furthest.stage_name, scan_stage_complete: furthest.stage_number === lastStageNumber }
+      : { scan_stage_number: null, scan_stage_name: null, scan_stage_complete: false };
+  }
+  return result;
+}
 
 // ── DIRECTED SCAN MODE — sequence-aware scanning for a batch, on top of
 // the same parts_index/parts_panel data /parts/match already uses (no new
@@ -1500,7 +1628,8 @@ app.get('/viewer/api/batches', requireViewer, (req, res) => {
   // Production-schedule metadata is batch-level, not per-label — enrich
   // each row here rather than adding a second request the phone/admin
   // would have to make (this endpoint is already polled every 5s).
-  const batches = rows.map(r => Object.assign({}, r, formatSchedule(getProductionSchedule.get(r.batch))));
+  const scanStages = computeAllScanStages();
+  const batches = rows.map(r => Object.assign({}, r, formatSchedule(getProductionSchedule.get(r.batch)), scanStages[r.batch] || { scan_stage_number: null, scan_stage_name: null, scan_stage_complete: false }));
   res.json({ ok: true, batches });
 });
 
@@ -1517,8 +1646,22 @@ app.get('/viewer/api/batches/:batch', requireViewer, (req, res) => {
     WHERE pp.batch = ?
     ORDER BY pi.scanned ASC, pp.tag ASC
   `).all(req.params.batch);
+  // Per-part stage history - which of the configured stages (if any)
+  // this specific part has actually been scanned at, for a label-detail
+  // view. Empty array for a batch that never touches stages.
+  const stagesByPart = new Map();
+  for (const r of db.prepare(`
+    SELECT ss.unique_id, ss.stage_number FROM stage_scans ss
+    JOIN parts_panel pp ON pp.unique_id = ss.unique_id
+    WHERE pp.batch = ?
+  `).all(req.params.batch)) {
+    if (!stagesByPart.has(r.unique_id)) stagesByPart.set(r.unique_id, []);
+    stagesByPart.get(r.unique_id).push(r.stage_number);
+  }
+  const rowsWithStages = rows.map(r => ({ ...r, stages_scanned: stagesByPart.get(r.unique_id) || [] }));
   const schedule = formatSchedule(getProductionSchedule.get(req.params.batch));
-  res.json({ ok: true, batch: req.params.batch, schedule, labels: rows });
+  const scanStage = computeAllScanStages()[req.params.batch] || { scan_stage_number: null, scan_stage_name: null, scan_stage_complete: false };
+  res.json({ ok: true, batch: req.params.batch, schedule, labels: rowsWithStages, ...scanStage });
 });
 
 // Read-only notes lookup for the Batch Status label-detail modal. Deliberately
