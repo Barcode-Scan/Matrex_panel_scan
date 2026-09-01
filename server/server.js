@@ -583,7 +583,13 @@ app.delete('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
     index: getIndexRow.get(uid),
     panel: getPanelRow.get(uid),
     notes: getNotesFor.all(uid),
-    scans: getScansFor.all(uid)
+    scans: getScansFor.all(uid),
+    // internal_deliveries is unique_id-keyed (one row max), unlike the
+    // notes/scans arrays above - captured (and restored) the same way
+    // regardless, so a deleted batch doesn't silently lose "this part
+    // never needed a packing slip" and a restore doesn't silently make
+    // it need one again.
+    internalDelivery: getInternalDelivery.get(uid) || null
   }));
   const scannedCount = parts.filter(p => p.index && p.index.scanned === 'Yes').length;
 
@@ -604,6 +610,7 @@ app.delete('/admin/api/schedule/:batch', requireAdmin, (req, res) => {
     for (const uid of uids) {
       delNotes.run(uid);
       delScans.run(uid);
+      deleteInternalDelivery.run(uid);
       delPanel.run(uid);
       delIndex.run(uid);
     }
@@ -646,6 +653,7 @@ app.post('/admin/api/deleted-batches/:id/restore', requireAdmin, (req, res) => {
   const insertNote = db.prepare(`INSERT INTO part_notes (unique_id,category,note,action,device_id,device,created_at) VALUES (@unique_id,@category,@note,@action,@device_id,@device,@created_at)`);
   const insertScan = db.prepare(`INSERT INTO scans (scan_id,date,scanned_at,received_at,device,device_id,unique_id,match_status,batch_sheet,project,floor,part_type,part_name,size,qty,colour,skid,method,flag,raw,mode,batch,acknowledged,acknowledged_at) VALUES (@scan_id,@date,@scanned_at,@received_at,@device,@device_id,@unique_id,@match_status,@batch_sheet,@project,@floor,@part_type,@part_name,@size,@qty,@colour,@skid,@method,@flag,@raw,@mode,@batch,@acknowledged,@acknowledged_at)`);
   const insertSchedule = db.prepare(`INSERT INTO production_schedule (batch,job_name,floor_or_work_order,target_finish,material,finish,part_name,sheet_qty,comment,tasked,task_status,extra_fields,source,created_at,updated_at,updated_by) VALUES (@batch,@job_name,@floor_or_work_order,@target_finish,@material,@finish,@part_name,@sheet_qty,@comment,@tasked,@task_status,@extra_fields,@source,@created_at,@updated_at,@updated_by)`);
+  const insertInternalDeliveryRestore = db.prepare(`INSERT INTO internal_deliveries (unique_id,batch,delivered_at,delivered_by) VALUES (@unique_id,@batch,@delivered_at,@delivered_by)`);
 
   db.exec('BEGIN');
   try {
@@ -661,6 +669,9 @@ app.post('/admin/api/deleted-batches/:id/restore', requireAdmin, (req, res) => {
       // here regardless: the old one has no meaning to preserve.
       (p.notes || []).forEach(n => { const { id, ...rest } = n; insertNote.run(rest); });
       (p.scans || []).forEach(s => { const { id, ...rest } = s; insertScan.run(rest); });
+      // internal_deliveries has no autoincrement id (unique_id IS the
+      // primary key) - captured/restored as one object, not an array.
+      if (p.internalDelivery) insertInternalDeliveryRestore.run(p.internalDelivery);
     }
     db.prepare('DELETE FROM deleted_batches WHERE id = ?').run(req.params.id);
     db.exec('COMMIT');
@@ -1047,7 +1058,8 @@ app.get('/admin/api/parts/:id', requireAdmin, (req, res) => {
   const idx = getMatchIndex.get(uid);
   if (!idx) return res.json({ ok: true, found: false });
   const detail = idx.department === 'PANEL' ? getMatchPanel.get(uid) : null;
-  res.json({ ok: true, found: true, index: idx, detail, notes: listNotes.all(uid) });
+  const deliveredInternally = getInternalDelivery.get(uid) ? 'Yes' : 'No';
+  res.json({ ok: true, found: true, index: { ...idx, delivered_internally: deliveredInternally }, detail, notes: listNotes.all(uid) });
 });
 
 // ── REPORTING — admin-key gated, read-only. Three separate small
@@ -1192,6 +1204,40 @@ function alreadyPackedUniqueIds(batch) {
   }
   return ids;
 }
+
+// ── INTERNAL DELIVERIES — see schema.sql for why this exists (a part
+// delivered on-site instead of shipped never needs a packing slip).
+const getPartBatch = db.prepare('SELECT batch FROM parts_panel WHERE unique_id = ?');
+const getInternalDelivery = db.prepare('SELECT * FROM internal_deliveries WHERE unique_id = ?');
+const insertInternalDelivery = db.prepare(`
+  INSERT INTO internal_deliveries (unique_id, batch, delivered_at, delivered_by)
+  VALUES (@unique_id, @batch, @now, @delivered_by)
+  ON CONFLICT(unique_id) DO UPDATE SET delivered_at=excluded.delivered_at, delivered_by=excluded.delivered_by
+`);
+const deleteInternalDelivery = db.prepare('DELETE FROM internal_deliveries WHERE unique_id = ?');
+const listInternalDeliveriesForBatch = db.prepare('SELECT unique_id FROM internal_deliveries WHERE batch = ?');
+app.post('/admin/api/parts/internal-delivery', requireAdmin, (req, res) => {
+  const uid = String((req.body && req.body.unique_id) || '').trim();
+  if (!uid) return res.status(400).json({ ok: false, error: 'unique_id required' });
+  const idx = getMatchIndex.get(uid);
+  if (!idx) return res.status(404).json({ ok: false, error: 'not found' });
+  if (idx.void === 'Yes') return res.status(400).json({ ok: false, error: 'this part is voided' });
+  const row = getPartBatch.get(uid);
+  if (!row) return res.status(404).json({ ok: false, error: 'not found' });
+  if (alreadyPackedUniqueIds(row.batch).has(uid)) {
+    return res.status(400).json({ ok: false, error: 'this part is already on a packing slip' });
+  }
+  const actor = actorFrom(req);
+  insertInternalDelivery.run({ unique_id: uid, batch: row.batch, now: new Date().toISOString(), delivered_by: actor });
+  logAudit(actor, 'INTERNAL_DELIVERY_MARK', uid, `batch ${row.batch} - no packing slip needed`);
+  res.json({ ok: true });
+});
+app.delete('/admin/api/parts/internal-delivery/:uniqueId', requireAdmin, (req, res) => {
+  const uid = req.params.uniqueId;
+  deleteInternalDelivery.run(uid);
+  logAudit(actorFrom(req), 'INTERNAL_DELIVERY_UNMARK', uid, 'part is eligible for a packing slip again');
+  res.json({ ok: true });
+});
 // COUNT(*)+1 looked right but breaks the moment any slip is ever deleted -
 // deleting PS-26-001 drops the count back to 0, so the next slip computes
 // "PS-26-001" again and collides with whatever's still using PS-26-002+.
@@ -1278,12 +1324,15 @@ app.post('/admin/api/packing-slips', requireAdmin, (req, res) => {
   // shipments). Whatever's already on an earlier slip for this batch is
   // never eligible for a new one - excluded here, server-side, same as
   // includeUnscanned above, so a stale/tampered client can't double-pack
-  // a part onto two slips.
+  // a part onto two slips. A part marked as delivered within the
+  // building (internal_deliveries) is excluded the same way - it will
+  // never need a packing slip at all.
   const packedIds = alreadyPackedUniqueIds(batch);
-  let authoritative = getBatchParts.all(batch).filter(p => !packedIds.has(p.unique_id));
+  const internalIds = new Set(listInternalDeliveriesForBatch.all(batch).map(r => r.unique_id));
+  let authoritative = getBatchParts.all(batch).filter(p => !packedIds.has(p.unique_id) && !internalIds.has(p.unique_id));
   if (!includeUnscanned) authoritative = authoritative.filter(p => p.scanned === 'Yes');
   if (!authoritative.length) {
-    return res.status(400).json({ ok: false, error: 'every part in this batch is already on a packing slip' });
+    return res.status(400).json({ ok: false, error: 'every part in this batch is already on a packing slip or marked as delivered within the building' });
   }
 
   // An explicitly-empty parts_snapshot (Remove Selected took every part
@@ -1428,7 +1477,15 @@ app.get('/viewer/api/batches', requireViewer, (req, res) => {
             JOIN parts_index pi2 ON pi2.unique_id = pn.unique_id
             JOIN parts_panel pp2 ON pp2.unique_id = pi2.unique_id
             WHERE pp2.batch = pp.batch AND pi2.scanned = 'No' AND pi2.void = 'No'
-           ) AS open_note_count
+           ) AS open_note_count,
+           -- Parts marked as delivered within the building (see
+           -- internal_deliveries in schema.sql) never need a packing
+           -- slip - the Ready to Pack card's "still has parts to pack"
+           -- math needs this count alongside packedUniqueIds client-side.
+           (SELECT COUNT(*) FROM internal_deliveries idel
+            JOIN parts_panel pp3 ON pp3.unique_id = idel.unique_id
+            WHERE pp3.batch = pp.batch
+           ) AS delivered_internally_count
     FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
     WHERE pp.batch IS NOT NULL AND pp.batch != ''
     GROUP BY pp.batch ORDER BY added_at DESC
@@ -1446,8 +1503,10 @@ app.get('/viewer/api/batches/:batch', requireViewer, (req, res) => {
            pp.width, pp.height, pp.qty, pp.colour, pp.sequence_no,
            pi.scanned, pi.scanned_at, pi.scanned_by_device,
            pi.void, pi.voided_at,
-           (SELECT COUNT(*) FROM part_notes pn WHERE pn.unique_id = pi.unique_id) AS note_count
+           (SELECT COUNT(*) FROM part_notes pn WHERE pn.unique_id = pi.unique_id) AS note_count,
+           CASE WHEN idel.unique_id IS NOT NULL THEN 'Yes' ELSE 'No' END AS delivered_internally
     FROM parts_panel pp JOIN parts_index pi ON pi.unique_id = pp.unique_id
+    LEFT JOIN internal_deliveries idel ON idel.unique_id = pi.unique_id
     WHERE pp.batch = ?
     ORDER BY pi.scanned ASC, pp.tag ASC
   `).all(req.params.batch);

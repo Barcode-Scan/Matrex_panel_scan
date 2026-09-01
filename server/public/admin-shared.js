@@ -296,7 +296,9 @@ $('partId').addEventListener('keydown',e=>{if(e.key==='Enter')lookupPart();});
 // modal below - both show the same index+detail shape from
 // /admin/api/parts/:id, just in two different places.
 function partStatusPillHtml(idx){
-  return idx.void==='Yes'?'<span class="pill REVOKED">VOID</span>':idx.scanned==='Yes'?'<span class="pill APPROVED">SCANNED</span>':'<span class="pill PENDING">NOT SCANNED</span>';
+  return idx.void==='Yes'?'<span class="pill REVOKED">VOID</span>'
+    :idx.delivered_internally==='Yes'?'<span class="pill neutral">DELIVERED (INTERNAL)</span>'
+    :idx.scanned==='Yes'?'<span class="pill APPROVED">SCANNED</span>':'<span class="pill PENDING">NOT SCANNED</span>';
 }
 function partFieldsHtml(idx,d){
   return[['Department',idx.department],['Batch',d.batch],['Sheet Name',d.sheet_name],['Project',d.project],
@@ -391,9 +393,16 @@ function renderLabelDetail(data){
   $('labelDetailNotes').innerHTML=notesListHtml(data.notes);
   $('labelNoteCat').innerHTML=NOTE_CATEGORIES.map(([v,l])=>`<option value="${v}">${esc(l)}</option>`).join('');
   $('labelNoteTxt').value='';
-  $('labelDetailVoidBtn').innerHTML=idx.void==='Yes'
+  const voidBtnHtml=idx.void==='Yes'
     ?'<button class="secondary" onclick="unvoidLabelDetailPart()" style="width:auto">Un-void This Part</button>'
     :'<button class="danger-solid" onclick="voidLabelDetailPart()" style="width:auto">Void This Part</button>';
+  // A voided part can't also be marked delivered-internally (the server
+  // rejects it) - no point offering a button that would just fail.
+  const internalBtnHtml=idx.void==='Yes'?''
+    :idx.delivered_internally==='Yes'
+      ?'<button class="secondary" onclick="unmarkLabelDetailInternalDelivery()" style="width:auto">Un-mark Delivered (Internal)</button>'
+      :'<button class="secondary" onclick="markLabelDetailInternalDelivery()" style="width:auto">Delivered Within Building</button>';
+  $('labelDetailVoidBtn').innerHTML=voidBtnHtml+internalBtnHtml;
 }
 async function addLabelDetailNote(){
   const category=$('labelNoteCat').value,note=$('labelNoteTxt').value.trim();
@@ -421,6 +430,22 @@ async function unvoidLabelDetailPart(){
     await openLabelDetail(labelDetailId);
     if(currentLabelsBatch)viewBatchLabels(currentLabelsBatch);
   }catch(e){alert('Could not un-void part: '+e.message);}
+}
+async function markLabelDetailInternalDelivery(){
+  if(!confirm('Mark '+labelDetailId+' as delivered within the building? It will no longer be offered on any packing slip for this batch.'))return;
+  try{
+    await api('/admin/api/parts/internal-delivery',{method:'POST',body:JSON.stringify({unique_id:labelDetailId})});
+    await openLabelDetail(labelDetailId);
+    if(currentLabelsBatch)viewBatchLabels(currentLabelsBatch);
+  }catch(e){alert('Could not mark part: '+e.message);}
+}
+async function unmarkLabelDetailInternalDelivery(){
+  if(!confirm('Un-mark '+labelDetailId+'? It becomes eligible for a packing slip again.'))return;
+  try{
+    await api('/admin/api/parts/internal-delivery/'+encodeURIComponent(labelDetailId),{method:'DELETE'});
+    await openLabelDetail(labelDetailId);
+    if(currentLabelsBatch)viewBatchLabels(currentLabelsBatch);
+  }catch(e){alert('Could not un-mark part: '+e.message);}
 }
 
 // ── REPORTING ────────────────────────────────────────────────
@@ -1492,24 +1517,37 @@ function packedUniqueIds(batch){
   return ids;
 }
 
+// A batch is "fully accounted for" once every part is either packed
+// (on some slip) or marked delivered within the building - either way
+// it needs no more packing-slip work. delivered_internally_count comes
+// from /viewer/api/batches as a plain aggregate (not a per-part set
+// like packedUniqueIds), which is fine here: the two buckets can't
+// overlap (the server rejects marking an already-packed part as
+// internal, and excludes internal parts from what a new slip can
+// offer), so a plain sum is exact, not just an estimate.
+function accountedForCount(b){
+  return packedUniqueIds(b.batch).size+(b.delivered_internally_count||0);
+}
 // A batch stays in Ready to Pack as long as it still has at least one
-// part not yet on any packing slip - not just "no slip yet", so a
-// partial shipment (some parts slipped today, the rest later) keeps the
-// batch reachable here for a follow-up slip instead of disappearing the
-// moment the first one exists. It only drops out once every part has
-// actually been packed somewhere, at which point it shows up instead in
-// Completed Tasks (renderCompletedTasks below).
+// part not accounted for - not just "no slip yet", so a partial
+// shipment (some parts slipped today, the rest later, or some
+// delivered on-site) keeps the batch reachable here for a follow-up
+// slip instead of disappearing the moment the first one exists. It
+// only drops out once every part is accounted for, at which point it
+// shows up instead in Completed Tasks (renderCompletedTasks below).
 function renderPackingTab(){
-  const ready=scheduleBatches.filter(b=>rowStatus(b)==='complete'&&packedUniqueIds(b.batch).size<b.total);
+  const ready=scheduleBatches.filter(b=>rowStatus(b)==='complete'&&accountedForCount(b)<b.total);
   $('readyToPackList').innerHTML=ready.length?ready.map(b=>{
-    const packedCount=packedUniqueIds(b.batch).size;
+    const accountedCount=accountedForCount(b);
     const hasSlip=packingSlipsCache.some(s=>s.batch===b.batch);
+    const deliveredCount=b.delivered_internally_count||0;
+    const metaExtra=accountedCount?` · ${accountedCount}/${b.total} already accounted for${deliveredCount?` (${deliveredCount} delivered within building)`:''}`:'';
     return`<div class="card">
       <div>
         <div class="name">${esc(b.batch)}</div>
-        <div class="meta">${esc(b.job_name||'(no job)')} · ${b.scanned}/${b.total} scanned${hasSlip?` · ${packedCount}/${b.total} already on a slip`:''}</div>
+        <div class="meta">${esc(b.job_name||'(no job)')} · ${b.scanned}/${b.total} scanned${metaExtra}</div>
       </div>
-      <button onclick="openPackingForm('${esc(b.batch)}')">${hasSlip?`Create Another Slip (${b.total-packedCount} left)`:'Create Packing Slip'}</button>
+      <button onclick="openPackingForm('${esc(b.batch)}')">${hasSlip||deliveredCount?`Create Another Slip (${b.total-accountedCount} left)`:'Create Packing Slip'}</button>
     </div>`;
   }).join(''):'<div class="empty">No fully-scanned batches yet.</div>';
 
@@ -1663,11 +1701,13 @@ async function openPackingForm(batch){
     // same batch naturally starts from just what's left instead of
     // re-offering everything (removeSelectedPackingParts below lets the
     // remaining set be narrowed further, e.g. splitting today's leftover
-    // parts across two more slips instead of one).
+    // parts across two more slips instead of one). Parts marked
+    // delivered within the building are excluded too - they never need
+    // a packing slip at all.
     const packedIds=packedUniqueIds(batch);
-    const labels=allLabels.filter(l=>!packedIds.has(l.unique_id));
-    if(alreadySlipped&&!labels.length){
-      alert('Every part in this batch is already on a packing slip.');
+    const labels=allLabels.filter(l=>!packedIds.has(l.unique_id)&&l.delivered_internally!=='Yes');
+    if(!labels.length){
+      alert('Every part in this batch is already accounted for (on a packing slip, or delivered within the building).');
       showTab('packing');
       return;
     }
@@ -2897,8 +2937,8 @@ function printPartList(){
 function labelRowsHtml(labels){
   if(!labels.length)return'<div class="empty">No labels in this batch.</div>';
   return labels.map(l=>{
-    const dc=l.void==='Yes'?'void':l.scanned==='Yes'?'scanned':'';
-    const statusText=l.void==='Yes'?'VOID':l.scanned==='Yes'?'Scanned':'Not scanned';
+    const dc=l.void==='Yes'?'void':l.delivered_internally==='Yes'?'internal':l.scanned==='Yes'?'scanned':'';
+    const statusText=l.void==='Yes'?'VOID':l.delivered_internally==='Yes'?'Delivered (Internal)':l.scanned==='Yes'?'Scanned':'Not scanned';
     const sub=[l.project,l.floor,l.part_type,[l.width,l.height].filter(Boolean).join(' X '),l.qty,l.colour].filter(Boolean).map(esc).join(' · ');
     // Already-voided labels can't be voided again (the endpoint rejects
     // it), so they get no checkbox - nothing for a bulk action to do to
@@ -2946,7 +2986,8 @@ function renderLabelsBulkBar(){
     <button class="secondary" onclick="clearLabelSelection()">Clear</button>
     <select id="bulkVoidCat">${NOTE_CATEGORIES.map(([v,l])=>`<option value="${v}">${esc(l)}</option>`).join('')}</select>
     <input id="bulkVoidTxt" placeholder="Details (required for Other)" style="flex:1;min-width:160px">
-    <button class="danger-solid" onclick="bulkVoidSelectedLabels()">Void Selected</button>`;
+    <button class="danger-solid" onclick="bulkVoidSelectedLabels()">Void Selected</button>
+    <button class="secondary" onclick="bulkMarkInternalDeliverySelectedLabels()" title="These parts were delivered on-site instead of shipped - they'll no longer be offered on any packing slip for this batch">Delivered Within Building (No Slip Needed)</button>`;
 }
 async function bulkVoidSelectedLabels(){
   const category=$('bulkVoidCat').value,note=$('bulkVoidTxt').value.trim();
@@ -2959,6 +3000,23 @@ async function bulkVoidSelectedLabels(){
     catch(e){failed++;}
   }
   if(failed)alert(failed+' of '+ids.length+' could not be voided (already voided, or a connection issue) - the rest went through.');
+  if(currentLabelsBatch)viewBatchLabels(currentLabelsBatch);
+}
+// ── INTERNAL DELIVERY — for parts moved on-site instead of shipped out,
+// so they never need to appear on a packing slip. Reuses the same
+// selection checkboxes Void Selected already has (one bulk-action bar,
+// two things you can do with a selection) rather than a separate
+// selection mechanism.
+async function bulkMarkInternalDeliverySelectedLabels(){
+  const ids=[...selectedLabelIds];
+  if(!ids.length)return;
+  if(!confirm('Mark '+ids.length+' part'+(ids.length===1?'':'s')+' as delivered within the building?\n\nThey will no longer be offered on any packing slip for this batch.'))return;
+  let failed=0,failMsg='';
+  for(const uid of ids){
+    try{await api('/admin/api/parts/internal-delivery',{method:'POST',body:JSON.stringify({unique_id:uid})});}
+    catch(e){failed++;failMsg=e.message;}
+  }
+  if(failed)alert(failed+' of '+ids.length+' could not be marked ('+failMsg+') - the rest went through.');
   if(currentLabelsBatch)viewBatchLabels(currentLabelsBatch);
 }
 

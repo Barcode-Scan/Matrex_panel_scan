@@ -191,6 +191,22 @@ CREATE TABLE IF NOT EXISTS packing_slips (
 );
 CREATE INDEX IF NOT EXISTS idx_packing_slips_batch ON packing_slips(batch);
 
+-- ── INTERNAL DELIVERIES — some parts never leave the building (moved to
+-- another floor/area on-site instead of shipped out), so they don't need
+-- a packing slip at all. One row per part marked this way. A part counts
+-- toward its batch being "fully accounted for" either by landing on a
+-- packing slip OR by being marked here - never both: the packing-slips
+-- endpoint excludes anything marked here from what a new slip can offer,
+-- and marking a part here that's already on a slip is rejected, so the
+-- two sets stay disjoint without needing a join to prove it later.
+CREATE TABLE IF NOT EXISTS internal_deliveries (
+  unique_id     TEXT PRIMARY KEY REFERENCES parts_index(unique_id),
+  batch         TEXT NOT NULL,
+  delivered_at  TEXT NOT NULL,
+  delivered_by  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_internal_deliveries_batch ON internal_deliveries(batch);
+
 -- ── AUDIT LOG — every admin-dashboard write action (not scans - those
 -- already have their own trail in `scans`/`scan_id`), so an edit made from
 -- the GM's page is reviewable later. actor is a free-text name the person
