@@ -175,6 +175,14 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 #scanToast{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .12s ease;z-index:7;padding:16px}
 #scanToast.on{opacity:1}
 #scanToast .stx{background:rgba(16,24,40,.86);color:var(--white);font-size:24px;font-weight:800;letter-spacing:.3px;padding:14px 22px;border-radius:14px;text-align:center;max-width:100%;word-break:break-word;box-shadow:0 4px 18px rgba(0,0,0,.4)}
+/* Batch progress line under the tag - same idea as the admin dashboard's
+   "5/11" Part Qty column, so the person scanning sees the batch's own
+   running count without leaving the camera view. Hidden (no sub-line
+   rendered at all) when the scan has no batch to report progress for.
+   Fixed dimmed-white (not a theme var) - the toast box itself is always
+   a fixed dark overlay regardless of light/dark page theme, same as its
+   main text already uses --white rather than a theme-flipping color. */
+#scanToast .stx-sub{margin-top:6px;font-size:15px;font-weight:700;letter-spacing:.2px;color:rgba(255,255,255,.72)}
 
 /* CAMERA PICKER — only shown when more than one camera is found */
 #camPickWrap{display:none;margin-bottom:14px}
@@ -495,7 +503,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       </div>
       <button id="torchBtn" type="button">Torch</button>
       <div id="scanLine"></div>
-      <div id="scanToast"><div class="stx" id="scanToastTxt"></div></div>
+      <div id="scanToast"><div class="stx"><div id="scanToastTxt"></div><div id="scanToastSub" class="stx-sub" style="display:none"></div></div></div>
       <div id="camStatus">
         <svg class="spin" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" style="width:28px;height:28px">
           <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
@@ -1415,6 +1423,7 @@ function blankPart(uniqueId){
     uniqueId,raw:uniqueId,batchSheet:'',project:'',floor:'',partType:'',
     partName:uniqueId,size:'',qty:'',colour:'',
     date:today,time:new Date().toISOString(),method:'SCAN',flag:'',matchStatus:'',noteCount:0,
+    batchScanned:0,batchTotal:0,
     skid:currentSkid||'',scanId:uuid(),
     // Captured at scan time (not read fresh from cfg later) so a
     // reconcile that runs after the phone's stage setting has since
@@ -1430,6 +1439,11 @@ function blankPart(uniqueId){
 function applyMatch(part,data){
   part.matchStatus=data.status||'UNVERIFIED';
   part.noteCount=data.note_count||0;
+  // batch_scanned/batch_total ride along on every /parts/match response
+  // already (server.js's batchProgressFor) - just weren't being read
+  // client-side until now. Captured regardless of status (VOIDED/
+  // MATCHED_ALREADY still carry real batch progress worth showing).
+  part.batchScanned=data.batch_scanned||0;part.batchTotal=data.batch_total||0;
   if(data.status==='NOT_FOUND'){part.flag='NOT_REGISTERED';return;}
   part.batchSheet=data.sheet_name||'';part.project=data.project||'';part.floor=data.floor||'';
   part.partType=data.part_type||'';part.partName=data.tag||part.uniqueId;
@@ -1513,15 +1527,24 @@ function commit(part){
   // server's MATCHED_ALREADY came back scoped to one specific stage.
   const flagMsg=part.flag==='DUPLICATE'&&part.stageName?'Already scanned at '+part.stageName:FLAG_MSGS[part.flag];
   showFlash(part.flag?'bad':'ok',flagMsg?base+' ('+flagMsg+')':base);
-  if(part.method==='SCAN')showScanToast(part.partName);
+  if(part.method==='SCAN')showScanToast(part.partName,part.batchScanned,part.batchTotal);
   if(!cfg.url)setSyncUI('','Saved on phone');else scheduleAutoUpload();
 }
 
 // ── SCAN TOAST — quick TAG confirmation over the camera view ───────
+// batchScanned/batchTotal (from the server's /parts/match response - see
+// applyMatch) add a second line showing that batch's own running count,
+// same "5/11" style the admin dashboard's Part Qty column already uses -
+// visible right over the camera, at the moment of scanning, instead of
+// only ever showing up later on the dashboard. Omitted (no sub-line at
+// all) when there's no batch to report progress for (NOT_FOUND, or a
+// part with no batch on record).
 let toastT=null;
-function showScanToast(tag){
-  const el=$('scanToast');
+function showScanToast(tag,batchScanned,batchTotal){
+  const el=$('scanToast'),sub=$('scanToastSub');
   $('scanToastTxt').textContent=tag;
+  if(batchTotal){sub.textContent=batchScanned+'/'+batchTotal;sub.style.display='';}
+  else{sub.style.display='none';}
   el.classList.add('on');
   clearTimeout(toastT);
   toastT=setTimeout(()=>el.classList.remove('on'),600);
