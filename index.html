@@ -132,6 +132,19 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .eng-pill.stage .eng-dot{background:var(--blue-600)}
 .eng-pill.stage .eng-val{color:var(--blue-600)}
 
+/* BATCH PROGRESS BADGE — persistent "5/11" (scanned/total for the batch
+   the LAST scanned part belongs to), sitting in the same row as the
+   Scanner/Stage pills, pushed to the far right. Unlike the scan toast
+   (which flashes for 0.6s over the camera), this stays on screen the
+   whole time you're scanning that batch's parts - exactly the ongoing
+   "how many of this job have I done so far" reference a person wants
+   while working through a batch, not just a one-off confirmation. Stays
+   hidden until the first scan of a part that has a real batch on record;
+   once shown, only ever gets REPLACED by a newer real reading (see
+   updateBatchProgressBadge) - a stray unmatched/offline scan in between
+   never makes it flicker away. */
+.batch-progress-badge{font-size:32px;font-weight:800;color:var(--red-600);line-height:1;margin-left:auto;align-self:center}
+
 /* COUNTERS */
 .counters{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
 .cbox{background:var(--white);border:none;border-radius:var(--r);padding:14px 6px;text-align:center;box-shadow:var(--shadow-sm);transition:transform .15s var(--ease)}
@@ -485,6 +498,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
         <span style="color:var(--gray-500)">Stage</span>
         <span class="eng-val" id="stageVal"></span>
       </div>
+      <div class="batch-progress-badge" id="batchProgressBadge" style="display:none"></div>
     </div>
 
     <div class="counters">
@@ -1528,7 +1542,19 @@ function commit(part){
   const flagMsg=part.flag==='DUPLICATE'&&part.stageName?'Already scanned at '+part.stageName:FLAG_MSGS[part.flag];
   showFlash(part.flag?'bad':'ok',flagMsg?base+' ('+flagMsg+')':base);
   if(part.method==='SCAN')showScanToast(part.partName,part.batchScanned,part.batchTotal);
+  updateBatchProgressBadge(part.batchScanned,part.batchTotal);
   if(!cfg.url)setSyncUI('','Saved on phone');else scheduleAutoUpload();
+}
+// Persistent "5/11" badge - see the .batch-progress-badge CSS note for
+// why this is deliberately separate from the scan toast. Only ever
+// updates the badge when THIS scan actually carried a real batch total -
+// an unmatched/offline/no-batch scan in between leaves whatever was
+// already showing untouched, rather than hiding it.
+function updateBatchProgressBadge(scanned,total){
+  if(!total)return;
+  const el=$('batchProgressBadge');
+  el.textContent=scanned+'/'+total;
+  el.style.display='';
 }
 
 // ── SCAN TOAST — quick TAG confirmation over the camera view ───────
