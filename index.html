@@ -704,6 +704,20 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       <div class="s-row"><span class="s-k">Scanner engine</span><span class="s-v" id="setEng">—</span></div>
       <div class="s-row"><span class="s-k">Server</span><span id="setSrv" class="chip chip-off"><span></span>Not configured</span></div>
     </div>
+    <div class="s-sec">Activity (non-scanning time)</div>
+    <div class="s-card">
+      <div class="s-card-body">
+        <p>Log time spent away from scanning — break, cleaning, training, a meeting. Doesn't touch your scan history.</p>
+        <div id="activityActiveBanner" style="display:none;background:var(--amber-50);color:var(--amber-700);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-weight:700;text-align:center"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="btn btn-outline" type="button" onclick="startActivity('Break')">Break</button>
+          <button class="btn btn-outline" type="button" onclick="startActivity('Cleaning')">Cleaning</button>
+          <button class="btn btn-outline" type="button" onclick="startActivity('Training')">Training</button>
+          <button class="btn btn-outline" type="button" onclick="startActivity('Meeting')">Meeting</button>
+        </div>
+        <button class="btn btn-solid mt10" id="bStopActivity" type="button" style="display:none" onclick="stopActivity()">Stop &amp; Log</button>
+      </div>
+    </div>
     <div class="s-sec">Display</div>
     <div class="s-card">
       <div class="s-row"><span class="s-k">High-glare / Dark mode</span><label class="s-switch"><input type="checkbox" id="setDarkMode"><span class="s-switch-track"></span></label></div>
@@ -791,7 +805,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 */
 
 const PASSWORD='M@trex';
-const LS={scans:d=>'mx_scans_'+d,cfg:'mx_cfg',lastUp:'mx_lastup',camSize:'mx_camsize',login:'mx_login',synced:d=>'mx_synced_'+d,deviceId:'mx_device_id',dirQueue:'mx_dir_queue',dirCache:'mx_dir_cache',muteAudio:'mx_mute_audio',activeDirBatch:'mx_active_dir_batch',viewerKey:'mx_viewer_key',darkMode:'mx_dark_mode'};
+const LS={scans:d=>'mx_scans_'+d,cfg:'mx_cfg',lastUp:'mx_lastup',camSize:'mx_camsize',login:'mx_login',synced:d=>'mx_synced_'+d,deviceId:'mx_device_id',dirQueue:'mx_dir_queue',dirCache:'mx_dir_cache',muteAudio:'mx_mute_audio',activeDirBatch:'mx_active_dir_batch',viewerKey:'mx_viewer_key',darkMode:'mx_dark_mode',activeActivity:'mx_active_activity'};
 const LOGIN_TTL_MS=30*24*60*60*1000; // stay signed in for 30 days on this phone
 
 const $=id=>document.getElementById(id);
@@ -1679,6 +1693,47 @@ function openSettingsScreen(){
   $('setSoundOn').checked=!isAudioMuted();
   $('setDarkMode').checked=!!lsGet(LS.darkMode);
   loadStageOptions();
+  renderActiveActivityBanner();
+}
+// ── INDIRECT ACTIVITY (Break/Cleaning/Training/Meeting) — non-scanning
+// time, logged separately from the real scan history so labor reporting
+// doesn't have to guess "no scans for 20 minutes" = "on break". The
+// phone tracks its own start time (persisted, so a refresh mid-activity
+// doesn't lose it) and submits one complete record when it ends -
+// best-effort only, no offline retry queue like scans get (this is a
+// labor-reporting nicety, not something worth the complexity a real
+// queue would add for what it's tracking).
+function renderActiveActivityBanner(){
+  const banner=$('activityActiveBanner'),stopBtn=$('bStopActivity');
+  if(!banner||!stopBtn)return;
+  const a=lsGet(LS.activeActivity);
+  if(a){
+    banner.style.display='';
+    banner.textContent=a.type+' since '+fmtT(a.startedAt);
+    stopBtn.style.display='';
+  }else{
+    banner.style.display='none';
+    stopBtn.style.display='none';
+  }
+}
+function startActivity(type){
+  const existing=lsGet(LS.activeActivity);
+  if(existing&&!confirm('Already logging "'+existing.type+'" - switch to "'+type+'" instead? This ends the current one WITHOUT submitting it.'))return;
+  lsSet(LS.activeActivity,{type,startedAt:new Date().toISOString()});
+  renderActiveActivityBanner();
+}
+async function stopActivity(){
+  const a=lsGet(LS.activeActivity);
+  if(!a)return;
+  lsSet(LS.activeActivity,null);
+  renderActiveActivityBanner();
+  if(!cfg.url){showFlash('bad','No server configured — not logged.');return;}
+  try{
+    await fetch(cfg.url+'/parts/activity',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      device_id:deviceId,device:cfg.dev,activity_type:a.type,started_at:a.startedAt,ended_at:new Date().toISOString()
+    })});
+    showFlash('ok',a.type+' logged');
+  }catch(e){showFlash('bad','Could not log activity — check connection');}
 }
 $('setUrl').addEventListener('input',checkMixedWarn);
 $('setSoundOn').addEventListener('change',e=>{lsSet(LS.muteAudio,!e.target.checked);});
