@@ -354,7 +354,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .fl-btn.dl:hover{color:var(--red-600);background:var(--red-50)}
 .skid-hdr{background:var(--blue-50);padding:8px 16px;font-size:12px;font-weight:800;color:var(--blue-700);text-transform:uppercase;letter-spacing:1.2px}
 .flag-pill{display:inline-block;border-radius:var(--pill);font-size:11px;font-weight:800;padding:2px 7px;margin-left:5px;letter-spacing:.4px}
-.fp-dup{background:var(--amber-50);color:var(--amber-700)}.fp-void{background:var(--red-50);color:var(--red-600)}.fp-unknown{background:var(--red-50);color:var(--red-600)}.fp-unverified{background:var(--amber-50);color:var(--amber-700)}.fp-note{background:var(--blue-50);color:var(--blue-600)}
+.fp-dup{background:var(--amber-50);color:var(--amber-700)}.fp-void{background:var(--red-50);color:var(--red-600)}.fp-unknown{background:var(--red-50);color:var(--red-600)}.fp-unverified{background:var(--amber-50);color:var(--amber-700)}.fp-note{background:var(--blue-50);color:var(--blue-600)}.fp-hold{background:var(--red-600);color:#fff}
 /* BATCH STATUS */
 .bl-row{display:flex;align-items:center;gap:12px;background:var(--white);border-radius:var(--r);padding:12px 16px;margin-bottom:8px;box-shadow:var(--shadow-sm);cursor:pointer}
 .bl-dot{width:8px;height:8px;border-radius:50%;background:var(--gray-300);flex-shrink:0}
@@ -1463,13 +1463,16 @@ function applyMatch(part,data){
   part.partType=data.part_type||'';part.partName=data.tag||part.uniqueId;
   part.size=[data.width,data.height].filter(Boolean).join(' X ');
   part.qty=data.qty||'';part.colour=data.colour||'';
-  part.flag=data.status==='VOIDED'?'VOID':data.status==='MATCHED_ALREADY'?'DUPLICATE':'';
+  part.flag=data.status==='VOIDED'?'VOID':data.status==='MATCHED_ALREADY'?'DUPLICATE':data.status==='QUALITY_HOLD'?'HOLD':'';
   // Multi-stage: the server's MATCHED_ALREADY is scoped to just this
   // one stage when stage_number comes back on the response - stash the
   // name so commit()'s flash message can say "already scanned at Stage
   // 2" instead of the flatly wrong-sounding classic "Already scanned"
   // (which would otherwise read like the WHOLE part was already done).
   if(data.stage_number!=null)part.stageName=stageOptionsCache.find(s=>s.stage_number===data.stage_number)?.stage_name||('Stage '+data.stage_number);
+  // Quality Hold (admin dashboard) - the reason travels with the part so
+  // commit()'s flash can show WHY, not just that it's held.
+  if(data.status==='QUALITY_HOLD')part.holdReason=data.hold_reason||'';
 }
 async function handleScan(uniqueId){
   // Local guard against re-adding the identical ID twice in today's list
@@ -1530,7 +1533,7 @@ async function reconcileUnverified(){
   reconciling=false;
 }
 
-const FLAG_MSGS={DUPLICATE:'Already scanned',VOID:'VOIDED part',NOT_REGISTERED:'Not registered',UNVERIFIED:'Unverified — offline'};
+const FLAG_MSGS={DUPLICATE:'Already scanned',VOID:'VOIDED part',NOT_REGISTERED:'Not registered',UNVERIFIED:'Unverified — offline',HOLD:'QUALITY HOLD'};
 function commit(part){
   scans.push(part);saveScans();
   beep(part.flag?'err':'ok');updateCounters();renderRecent();
@@ -1539,7 +1542,11 @@ function commit(part){
   // differently from a classic one ("already scanned" full stop, the
   // part is just done) - part.stageName is only ever set when the
   // server's MATCHED_ALREADY came back scoped to one specific stage.
-  const flagMsg=part.flag==='DUPLICATE'&&part.stageName?'Already scanned at '+part.stageName:FLAG_MSGS[part.flag];
+  // A Quality Hold shows its actual reason the same way, when one was
+  // given (see toggleQualityHold on the admin dashboard).
+  const flagMsg=part.flag==='DUPLICATE'&&part.stageName?'Already scanned at '+part.stageName
+    :part.flag==='HOLD'&&part.holdReason?'QUALITY HOLD — '+part.holdReason
+    :FLAG_MSGS[part.flag];
   showFlash(part.flag?'bad':'ok',flagMsg?base+' ('+flagMsg+')':base);
   if(part.method==='SCAN')showScanToast(part.partName,part.batchScanned,part.batchTotal);
   updateBatchProgressBadge(part.batchScanned,part.batchTotal);
@@ -1595,8 +1602,8 @@ function updateCounters(){
   $('nSkid').textContent=currentSkid||'—';
 }
 // Shared flag → CSS class / pill-text mapping, used by both list views.
-const FLAG_CSS={DUPLICATE:'dup',VOID:'void',NOT_REGISTERED:'unknown',UNVERIFIED:'unverified'};
-const FLAG_PILL_TEXT={DUPLICATE:'DUP',VOID:'VOID',NOT_REGISTERED:'UNKNOWN',UNVERIFIED:'PENDING'};
+const FLAG_CSS={DUPLICATE:'dup',VOID:'void',NOT_REGISTERED:'unknown',UNVERIFIED:'unverified',HOLD:'hold'};
+const FLAG_PILL_TEXT={DUPLICATE:'DUP',VOID:'VOID',NOT_REGISTERED:'UNKNOWN',UNVERIFIED:'PENDING',HOLD:'HOLD'};
 function flagClass(s){return FLAG_CSS[s.flag]||(s.method==='MANUAL'?'manual':'');}
 function flagPill(s){const t=FLAG_PILL_TEXT[s.flag];return t?`<span class="flag-pill fp-${flagClass(s)}">${t}</span>`:'';}
 // Separate from flagPill on purpose — a part can be BOTH e.g. a
