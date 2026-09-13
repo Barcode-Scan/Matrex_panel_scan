@@ -2026,6 +2026,15 @@ window.toggleGroup=function(name){
   collapsedGroups.has(name)?collapsedGroups.delete(name):collapsedGroups.add(name);
   renderBatchCards($('batchSearchInp').value);
 };
+// A batch manually marked Complete from the dashboard (extra_fields.
+// forceComplete) reads 'complete' here too, same rule the dashboard's
+// own rowStatus() uses - otherwise a force-completed batch kept showing
+// Working On It/Not Started on the phone even though the office already
+// called it done.
+function batchState(b){
+  const forced=!!(b.extra_fields&&b.extra_fields.forceComplete);
+  return forced||(b.total>0&&b.scanned===b.total)?'complete':b.scanned>0?'progress':'none';
+}
 function renderBatchCards(q){
   q=(q||'').trim().toUpperCase();
   let rows=batchListCache;
@@ -2039,15 +2048,14 @@ function renderBatchCards(q){
   rows.forEach(b=>{(groups[b.job_name||'No Job Assigned']=groups[b.job_name||'No Job Assigned']||[]).push(b);});
 
   $('batchContent').innerHTML=Object.keys(groups).sort().map(g=>{
-    const items=groups[g];
+    // Done batches sink to the bottom of their job group - a finished
+    // batch is the least useful thing to be looking at on a shop-floor
+    // status list, so it shouldn't sit above ones still being worked.
+    // Sort is stable, so everything else keeps the server's order
+    // (newest-added first) exactly as before.
+    const items=groups[g].slice().sort((a,b)=>(batchState(a)==='complete')-(batchState(b)==='complete'));
     const itemsHtml=items.map(b=>{
-      // A batch manually marked Complete from the dashboard (extra_fields.
-      // forceComplete) reads 'complete' here too, same rule the dashboard's
-      // own rowStatus() uses - otherwise a force-completed batch kept
-      // showing Working On It/Not Started on the phone even though the
-      // office already called it done.
-      const forced=!!(b.extra_fields&&b.extra_fields.forceComplete);
-      const state=forced||(b.total>0&&b.scanned===b.total)?'complete':b.scanned>0?'progress':'none';
+      const state=batchState(b);
       const stateLabel=state==='complete'?'Done':state==='progress'?'Working On It':'Not Started';
       const sub=[b.target_finish,b.material].filter(Boolean).map(esc).join(' · ');
       const avatar=b.tasked?`<div class="mon-avatar" style="background:${hashColorFor(b.tasked)}">${esc(initialsFor(b.tasked))}</div>`:'';
