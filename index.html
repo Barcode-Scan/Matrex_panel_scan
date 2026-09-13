@@ -2041,7 +2041,13 @@ function renderBatchCards(q){
   $('batchContent').innerHTML=Object.keys(groups).sort().map(g=>{
     const items=groups[g];
     const itemsHtml=items.map(b=>{
-      const state=b.total>0&&b.scanned===b.total?'complete':b.scanned>0?'progress':'none';
+      // A batch manually marked Complete from the dashboard (extra_fields.
+      // forceComplete) reads 'complete' here too, same rule the dashboard's
+      // own rowStatus() uses - otherwise a force-completed batch kept
+      // showing Working On It/Not Started on the phone even though the
+      // office already called it done.
+      const forced=!!(b.extra_fields&&b.extra_fields.forceComplete);
+      const state=forced||(b.total>0&&b.scanned===b.total)?'complete':b.scanned>0?'progress':'none';
       const stateLabel=state==='complete'?'Done':state==='progress'?'Working On It':'Not Started';
       const sub=[b.target_finish,b.material].filter(Boolean).map(esc).join(' · ');
       const avatar=b.tasked?`<div class="mon-avatar" style="background:${hashColorFor(b.tasked)}">${esc(initialsFor(b.tasked))}</div>`:'';
