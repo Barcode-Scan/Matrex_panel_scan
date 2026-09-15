@@ -131,16 +131,20 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
    entirely for a classic (no stage) phone. */
 .eng-pill.stage .eng-dot{background:var(--blue-600)}
 .eng-pill.stage .eng-val{color:var(--blue-600)}
-/* Which machine THIS scan session is tagged to (Break Press 1/2, etc.) -
-   tappable, unlike the Stage pill, since this is meant to change hands
-   mid-shift when two people share one phone across two machines -
-   orange accent so it's visually distinct from the Stage pill's blue at
-   a glance. Hidden until a machine list actually exists for this phone
-   (see refreshMachinePill()). */
-.eng-pill.machine{cursor:pointer;border:1.5px solid transparent}
-.eng-pill.machine .eng-dot{background:var(--amber-700)}
-.eng-pill.machine .eng-val{color:var(--amber-700)}
-.eng-pill.machine.unset{border-color:var(--amber-700);border-style:dashed}
+/* MACHINE QUICK-SELECT — two always-visible one-tap buttons right on the
+   scan screen (not a pill that opens something else) for whichever
+   machine THIS scan session is tagged to (Break Press 1/2, etc.) - two
+   people sharing one phone across two machines just tap their machine,
+   no menu/sheet to open first. Un-selected buttons stay neutral/white so
+   the active one (solid, its own tinted color) stands out at a glance;
+   tapping the active one again clears it back to neutral. */
+.mach-quickrow{display:flex;gap:8px;margin-bottom:12px}
+.mach-qbtn{display:flex;align-items:center;gap:8px;flex:1;background:var(--white);border:1.5px solid var(--gray-200);border-radius:var(--pill);padding:8px 14px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .1s var(--ease),background .1s,border-color .1s}
+.mach-qbtn:active{transform:scale(.96)}
+.mach-qbtn-icon{display:flex;flex-shrink:0}
+.mach-qbtn-name{font-size:13px;font-weight:700;color:var(--gray-900);text-align:left;line-height:1.2}
+.mach-qbtn.active{background:var(--amber-700);border-color:var(--amber-700)}
+.mach-qbtn.active .mach-qbtn-name{color:#fff}
 
 /* BATCH PROGRESS BADGE — persistent "5/11" (scanned/total for the batch
    the LAST scanned part belongs to), sitting in the same row as the
@@ -277,21 +281,6 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .data-k{color:var(--gray-500);font-size:13px;font-weight:600;min-width:80px;flex-shrink:0}
 .data-v{color:var(--gray-900);font-weight:700}
 .mbtns{display:flex;flex-direction:column;gap:8px;margin-top:4px}
-
-/* MACHINE PICKER — big tappable image tiles (not a text dropdown) so
-   switching machines mid-shift is a one-tap thing right on the scan
-   screen, not a trip into Settings. Two-up grid comfortably fits large
-   touch targets on a phone; wraps to one column on a narrow screen. */
-.mach-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:8px}
-@media (max-width:360px){.mach-grid{grid-template-columns:1fr}}
-.mach-tile{display:flex;flex-direction:column;align-items:center;gap:10px;background:var(--gray-100);border:2px solid transparent;border-radius:18px;padding:18px 10px 14px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .1s var(--ease)}
-.mach-tile:active{transform:scale(.96)}
-.mach-tile.active{background:var(--amber-50);border-color:var(--amber-700)}
-.mach-tile-icon{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:var(--white);box-shadow:var(--shadow-xs)}
-.mach-tile.active .mach-tile-icon{background:var(--amber-700)}
-.mach-tile-name{font-size:14px;font-weight:700;color:var(--gray-900);text-align:center;line-height:1.3}
-.mach-tile-clear{grid-column:1/-1;background:transparent;border:1.5px dashed var(--gray-200);color:var(--gray-500)}
-.mach-tile-clear .mach-tile-name{color:var(--gray-500)}
 
 /* DIRECTED SCAN */
 .dir-progress-wrap{margin-bottom:14px}
@@ -523,13 +512,13 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
         <span style="color:var(--gray-500)">Stage</span>
         <span class="eng-val" id="stageVal"></span>
       </div>
-      <div class="eng-pill machine" id="machinePill" style="margin-bottom:12px;display:none" onclick="openMachinePicker()" role="button" tabindex="0">
-        <div class="eng-dot"></div>
-        <span style="color:var(--gray-500)">Machine</span>
-        <span class="eng-val" id="machineVal">Select</span>
-      </div>
       <div class="batch-progress-badge" id="batchProgressBadge" style="display:none"></div>
     </div>
+
+    <!-- Machine quick-select: both machines sit here directly, always
+         visible - one tap on either selects it, no pill/sheet to open
+         first. See MACHINES/selectMachine() below. -->
+    <div class="mach-quickrow" id="machQuickRow" style="display:none"></div>
 
     <div class="counters">
       <div class="cbox c-scan" id="cScanned" onclick="openListScreen('all')"><div class="n" id="nTotal">0</div><div class="l">Scanned</div></div>
@@ -776,18 +765,6 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 <!-- MODALS -->
 <div class="mbg" id="mDup"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap danger"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1" fill="#FF3B30" stroke="none"/></svg></div><div class="m-title">Already Scanned</div><div class="m-desc">This part was already recorded today. Add again as a duplicate, or skip?</div><div class="data-card" id="mDupData"></div><div class="mbtns"><button class="m-confirm" id="mDupAdd" type="button">Add as Duplicate</button><button class="m-cancel" id="mDupSkip" type="button">Skip — Don't Add</button></div></div></div>
 
-<!-- MACHINE PICKER — tiles rendered by renderMachinePicker() from the
-     MACHINES array, so adding a third machine later is a one-line JS
-     edit, not new markup here. -->
-<div class="mbg" id="mMachine" onclick="if(event.target===this)closeMachinePicker()">
-  <div class="msheet">
-    <div class="mhandle"></div>
-    <div class="m-title">Select Your Machine</div>
-    <div class="m-desc">Tag every scan from here on with which machine you're running - so two people sharing this phone still show up as separate work.</div>
-    <div class="mach-grid" id="machGrid"></div>
-  </div>
-</div>
-
 <div class="mbg" id="mManual"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></div><div class="m-title">Manual Entry</div><div class="m-desc">Barcode unreadable. Only Part Name is required.</div><button class="copy-btn" id="manCopy" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy fields from last scanned part</button><div class="fg"><label class="fg-label" for="manName">Part Name<span class="fg-req">*</span></label><input class="fg-input" id="manName" autocapitalize="characters" placeholder="e.g. 177S-COL-3-MP1-R1"><div class="f-hint" id="manNameErr" style="display:none;color:var(--red-600)">Part Name is required.</div></div><div class="fg"><label class="fg-label" for="manProj">Project</label><input class="fg-input" id="manProj" autocapitalize="characters" placeholder="e.g. 177S"></div><div class="fg"><label class="fg-label" for="manFloor">Floor / WO</label><input class="fg-input" id="manFloor" autocapitalize="characters" placeholder="e.g. F18"></div><div class="fg"><label class="fg-label" for="manType">Part Type</label><input class="fg-input" id="manType" autocapitalize="characters" placeholder="e.g. SC"></div><div class="fg"><label class="fg-label" for="manSize">Size</label><input class="fg-input" id="manSize" autocapitalize="characters" placeholder="e.g. 5001 X 6001"></div><div class="fg"><label class="fg-label" for="manQty">Qty Required</label><input class="fg-input" id="manQty" placeholder="e.g. Q-1"></div><div class="fg"><label class="fg-label" for="manCol">Colour</label><input class="fg-input" id="manCol" autocapitalize="characters" placeholder="e.g. AT"></div><div class="mbtns" style="margin-top:14px"><button class="m-ok" id="manOk" type="button">Add Part</button><button class="m-cancel" id="manCancel" type="button">Cancel</button></div></div></div>
 
 <div class="mbg" id="mSkid"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div><div class="m-title">Assign Skid Number</div><div class="m-desc" id="mSkidDesc">Assign a skid number to unassigned parts.</div><div class="fg"><label class="fg-label" for="skidNum">Skid Number<span class="fg-req">*</span></label><input class="fg-input" id="skidNum" inputmode="numeric" placeholder="e.g. 1"></div><div class="mbtns"><button class="m-ok" id="skidOk" type="button">Assign</button><button class="m-cancel" id="skidCancel" type="button">Cancel</button></div></div></div>
@@ -931,59 +908,56 @@ function refreshStagePill(){
   pill.style.display='';
 }
 
-// ── MACHINE PICKER — for two (or more) people sharing one phone across
-// different physical machines (e.g. Break Press 1 vs 2), so each
-// person's work is still separable afterward. Deliberately NOT folded
-// into Settings' Production Stage dropdown - that's a "this phone is
-// permanently assigned to Bending" setting someone sets up once, while
-// Machine is meant to change hands mid-shift, so it's a one-tap picker
-// right on the scan screen instead. A short, fixed list for now (just
-// the two Break Presses that exist today) - add another machine here
-// later by adding one line, no other code changes needed. `color` picks
-// which existing CSS variable tints that machine's tile icon, purely
+// ── MACHINE QUICK-SELECT — for two (or more) people sharing one phone
+// across different physical machines (e.g. Break Press 1 vs 2), so each
+// person's work is still separable afterward. *** CHANGED *** was a
+// pill that opened a picker sheet (tap pill, then tap a tile - two
+// steps); the user explicitly wanted this down to ONE tap, both
+// machines sitting directly on the scan screen at all times, not
+// hidden behind anything. Deliberately NOT folded into Settings'
+// Production Stage dropdown - that's a "this phone is permanently
+// assigned to Bending" setting someone sets up once, while Machine is
+// meant to change hands mid-shift. A short, fixed list for now (just
+// the two Break Presses that exist today) - add a third machine later
+// by adding one line to MACHINES, no other code changes needed. `color`
+// picks which existing CSS variable tints that machine's icon, purely
 // visual so the two are easy to tell apart at a glance.
 const MACHINES=[
   {id:'BP1',name:'Break Press 1',color:'var(--blue-600)'},
   {id:'BP2',name:'Break Press 2',color:'var(--amber-700)'}
 ];
 function machineIconSvg(color){
-  return `<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
     <rect x="3" y="4" width="18" height="4" rx="1"/>
     <rect x="3" y="16" width="18" height="4" rx="1"/>
     <line x1="12" y1="9" x2="12" y2="15"/>
     <polyline points="9 12 12 15 15 12"/>
   </svg>`;
 }
-function renderMachinePicker(){
-  const grid=$('machGrid');
-  grid.innerHTML=MACHINES.map(m=>`
-    <div class="mach-tile${cfg.machine===m.id?' active':''}" onclick="selectMachine('${m.id}')">
-      <div class="mach-tile-icon">${machineIconSvg(cfg.machine===m.id?'#fff':m.color)}</div>
-      <div class="mach-tile-name">${esc(m.name)}</div>
-    </div>`).join('')
-    +`<div class="mach-tile mach-tile-clear" onclick="selectMachine(null)">
-      <div class="mach-tile-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
-      <div class="mach-tile-name">No Machine / Clear</div>
-    </div>`;
-}
-function openMachinePicker(){renderMachinePicker();modal('mMachine',true);}
-function closeMachinePicker(){modal('mMachine',false);}
+// Tapping an already-active machine clears it (back to "none picked") -
+// same toggle-off feel as everything else in this app that's a one-tap
+// selector, so there's no separate "clear" control to hunt for.
 function selectMachine(id){
-  cfg.machine=id;
+  cfg.machine=(cfg.machine===id)?null:id;
   lsSet(LS.cfg,cfg);
-  refreshMachinePill();
-  closeMachinePicker();
+  refreshMachineButtons();
 }
-// Always visible on the scan screen (unlike the Stage pill, which hides
-// entirely for a classic no-stage phone) - the whole point is a fast
-// glance-and-tap, so it needs to be reachable even before a machine's
-// ever been picked, showing a dashed "Select" state until it is.
-function refreshMachinePill(){
-  const pill=$('machinePill');
-  const match=MACHINES.find(m=>m.id===cfg.machine);
-  $('machineVal').textContent=match?match.name:'Select';
-  pill.classList.toggle('unset',!match);
-  pill.style.display='';
+function renderMachineButtons(){
+  const row=$('machQuickRow');
+  if(!row)return;
+  row.innerHTML=MACHINES.map(m=>{
+    const active=cfg.machine===m.id;
+    return`<button type="button" class="mach-qbtn${active?' active':''}" onclick="selectMachine('${m.id}')">
+      <span class="mach-qbtn-icon">${machineIconSvg(active?'#fff':m.color)}</span>
+      <span class="mach-qbtn-name">${esc(m.name)}</span>
+    </button>`;
+  }).join('');
+}
+function refreshMachineButtons(){
+  const row=$('machQuickRow');
+  if(!row)return;
+  renderMachineButtons();
+  row.style.display='';
 }
 let scans=[],currentSkid=null,today=todayStr(),viewDate=today,syncedCount=0;
 // "X/Y" progress for whatever batch was most recently scanned - not every
@@ -2836,7 +2810,7 @@ document.addEventListener('click',e=>{
 function tick(){$('topDate').textContent=today+'  '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
 setInterval(tick,1000);tick();
 refreshStagePill(); // show the Stage pill immediately at boot if one was already saved from a previous session
-refreshMachinePill(); // same - Machine pill shows (or offers "Select") right from boot
+refreshMachineButtons(); // same - the two machine buttons render and show right from boot
 
 // ── SOUND ──────────────────────────────────────────────────
 // Mobile browsers create a new AudioContext in a 'suspended' state unless
