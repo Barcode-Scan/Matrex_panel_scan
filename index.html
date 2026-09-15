@@ -1531,10 +1531,12 @@ async function runWithDevice(deviceId){
     });
     $('camStatus').classList.add('gone');
     setEngine('Scanning…','scanning');
-    // Camera just came on for a fresh scan session - if nobody's picked
-    // a machine yet, this is the moment to ask, before any scans go out
-    // untagged.
-    if(!cfg.machine)nudgeMachineSelection('Select which machine you\'re running');
+    // Camera just came on for a fresh scan session - always re-confirm
+    // the machine, even if one's already selected from a previous
+    // session (last night, or whoever had this phone before) - it's
+    // easy to still be set to a machine nobody's actually standing at
+    // anymore, so "already set" isn't proof it's still correct.
+    nudgeMachineSelection('Confirm which machine you\'re running');
 
     if(previewElem.srcObject){
       const tracks=previewElem.srcObject.getVideoTracks();
