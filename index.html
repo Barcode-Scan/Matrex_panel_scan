@@ -145,6 +145,11 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .mach-qbtn-name{font-size:13px;font-weight:700;color:var(--gray-900);text-align:left;line-height:1.2}
 .mach-qbtn.active{background:var(--amber-700);border-color:var(--amber-700)}
 .mach-qbtn.active .mach-qbtn-name{color:#fff}
+/* Attention pulse - nudgeMachineSelection() adds this class briefly so
+   the prompt points straight at the buttons to tap, not just a text
+   message somewhere else on screen. */
+.mach-quickrow.mach-attn .mach-qbtn{animation:machAttn .4s ease-in-out 2}
+@keyframes machAttn{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 3px var(--red-600)}}
 
 /* BATCH PROGRESS BADGE — persistent "5/11" (scanned/total for the batch
    the LAST scanned part belongs to), sitting in the same row as the
@@ -959,6 +964,37 @@ function refreshMachineButtons(){
   renderMachineButtons();
   row.style.display='';
 }
+// ── MACHINE SELECTION NUDGE — two trigger points, both because someone
+// forgetting to tap a machine button is exactly what silently produces
+// wrong/blank machine data: (1) the camera coming on to start a fresh
+// scan session, if nothing's selected yet - the natural "about to start
+// working" moment; (2) a scan resolving to a DIFFERENT batch than the
+// last one, mid-session - the operator may have physically moved to a
+// different press without remembering to tap the other button, and a
+// batch change is the best available signal that's happened. Reuses the
+// existing flash-message system (not a new modal) plus a brief
+// highlight pulse on the two buttons themselves, so the prompt points
+// straight at the thing to tap instead of just complaining in text.
+function nudgeMachineSelection(msg){
+  showFlash('bad',msg);
+  const row=$('machQuickRow');
+  if(!row)return;
+  row.classList.remove('mach-attn');
+  void row.offsetWidth; // restart the animation if it's already mid-pulse from a previous nudge
+  row.classList.add('mach-attn');
+  setTimeout(()=>row.classList.remove('mach-attn'),1600);
+}
+let lastScannedBatch=null;
+// Called once per successfully-matched scan (see applyMatch) - a batch
+// with no name (NOT_FOUND, or a part with no batch on record) never
+// counts as a "change", so it can't itself trigger or clear the nudge.
+function checkMachineNudgeOnBatchChange(batch){
+  if(!batch)return;
+  if(lastScannedBatch&&batch!==lastScannedBatch){
+    nudgeMachineSelection('New batch — check you\'re on the correct machine');
+  }
+  lastScannedBatch=batch;
+}
 let scans=[],currentSkid=null,today=todayStr(),viewDate=today,syncedCount=0;
 // "X/Y" progress for whatever batch was most recently scanned - not every
 // scan carries this (NOT_FOUND/manual/offline entries don't), so this is
@@ -1495,6 +1531,10 @@ async function runWithDevice(deviceId){
     });
     $('camStatus').classList.add('gone');
     setEngine('Scanning…','scanning');
+    // Camera just came on for a fresh scan session - if nobody's picked
+    // a machine yet, this is the moment to ask, before any scans go out
+    // untagged.
+    if(!cfg.machine)nudgeMachineSelection('Select which machine you\'re running');
 
     if(previewElem.srcObject){
       const tracks=previewElem.srcObject.getVideoTracks();
@@ -1608,6 +1648,8 @@ function applyMatch(part,data){
   // Quality Hold (admin dashboard) - the reason travels with the part so
   // commit()'s flash can show WHY, not just that it's held.
   if(data.status==='QUALITY_HOLD')part.holdReason=data.hold_reason||'';
+  part.batch=data.batch||'';
+  checkMachineNudgeOnBatchChange(part.batch);
 }
 async function handleScan(uniqueId){
   // Local guard against re-adding the identical ID twice in today's list
