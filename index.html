@@ -131,6 +131,16 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
    entirely for a classic (no stage) phone. */
 .eng-pill.stage .eng-dot{background:var(--blue-600)}
 .eng-pill.stage .eng-val{color:var(--blue-600)}
+/* Which machine THIS scan session is tagged to (Break Press 1/2, etc.) -
+   tappable, unlike the Stage pill, since this is meant to change hands
+   mid-shift when two people share one phone across two machines -
+   orange accent so it's visually distinct from the Stage pill's blue at
+   a glance. Hidden until a machine list actually exists for this phone
+   (see refreshMachinePill()). */
+.eng-pill.machine{cursor:pointer;border:1.5px solid transparent}
+.eng-pill.machine .eng-dot{background:var(--amber-700)}
+.eng-pill.machine .eng-val{color:var(--amber-700)}
+.eng-pill.machine.unset{border-color:var(--amber-700);border-style:dashed}
 
 /* BATCH PROGRESS BADGE — persistent "5/11" (scanned/total for the batch
    the LAST scanned part belongs to), sitting in the same row as the
@@ -267,6 +277,21 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .data-k{color:var(--gray-500);font-size:13px;font-weight:600;min-width:80px;flex-shrink:0}
 .data-v{color:var(--gray-900);font-weight:700}
 .mbtns{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+
+/* MACHINE PICKER — big tappable image tiles (not a text dropdown) so
+   switching machines mid-shift is a one-tap thing right on the scan
+   screen, not a trip into Settings. Two-up grid comfortably fits large
+   touch targets on a phone; wraps to one column on a narrow screen. */
+.mach-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:8px}
+@media (max-width:360px){.mach-grid{grid-template-columns:1fr}}
+.mach-tile{display:flex;flex-direction:column;align-items:center;gap:10px;background:var(--gray-100);border:2px solid transparent;border-radius:18px;padding:18px 10px 14px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .1s var(--ease)}
+.mach-tile:active{transform:scale(.96)}
+.mach-tile.active{background:var(--amber-50);border-color:var(--amber-700)}
+.mach-tile-icon{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:var(--white);box-shadow:var(--shadow-xs)}
+.mach-tile.active .mach-tile-icon{background:var(--amber-700)}
+.mach-tile-name{font-size:14px;font-weight:700;color:var(--gray-900);text-align:center;line-height:1.3}
+.mach-tile-clear{grid-column:1/-1;background:transparent;border:1.5px dashed var(--gray-200);color:var(--gray-500)}
+.mach-tile-clear .mach-tile-name{color:var(--gray-500)}
 
 /* DIRECTED SCAN */
 .dir-progress-wrap{margin-bottom:14px}
@@ -498,13 +523,18 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
         <span style="color:var(--gray-500)">Stage</span>
         <span class="eng-val" id="stageVal"></span>
       </div>
+      <div class="eng-pill machine" id="machinePill" style="margin-bottom:12px;display:none" onclick="openMachinePicker()" role="button" tabindex="0">
+        <div class="eng-dot"></div>
+        <span style="color:var(--gray-500)">Machine</span>
+        <span class="eng-val" id="machineVal">Select</span>
+      </div>
       <div class="batch-progress-badge" id="batchProgressBadge" style="display:none"></div>
     </div>
 
     <div class="counters">
       <div class="cbox c-scan" id="cScanned" onclick="openListScreen('all')"><div class="n" id="nTotal">0</div><div class="l">Scanned</div></div>
       <div class="cbox c-flag" id="cFlagged" onclick="openListScreen('flagged')"><div class="n" id="nFlag">0</div><div class="l">Flagged</div></div>
-      <div class="cbox"><div class="n" id="nSkid" style="font-size:22px;padding-top:6px">—</div><div class="l">Skid</div></div>
+      <div class="cbox"><div class="n" id="nBatchProgress" style="font-size:22px;padding-top:6px">—</div><div class="l">This Batch</div></div>
     </div>
 
 
@@ -560,7 +590,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
           <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1" stroke-dasharray="3 2"/>
         </svg>
         <div class="et">No scans yet</div>
-        <div class="es">Point the camera at a PDF417 barcode.<br>Keep it inside the frame.</div>
+        <div class="es">Point the camera at a PDF417 or QR barcode.<br>Keep it inside the frame.</div>
       </div>
     </div>
 
@@ -746,6 +776,18 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 <!-- MODALS -->
 <div class="mbg" id="mDup"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap danger"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1" fill="#FF3B30" stroke="none"/></svg></div><div class="m-title">Already Scanned</div><div class="m-desc">This part was already recorded today. Add again as a duplicate, or skip?</div><div class="data-card" id="mDupData"></div><div class="mbtns"><button class="m-confirm" id="mDupAdd" type="button">Add as Duplicate</button><button class="m-cancel" id="mDupSkip" type="button">Skip — Don't Add</button></div></div></div>
 
+<!-- MACHINE PICKER — tiles rendered by renderMachinePicker() from the
+     MACHINES array, so adding a third machine later is a one-line JS
+     edit, not new markup here. -->
+<div class="mbg" id="mMachine" onclick="if(event.target===this)closeMachinePicker()">
+  <div class="msheet">
+    <div class="mhandle"></div>
+    <div class="m-title">Select Your Machine</div>
+    <div class="m-desc">Tag every scan from here on with which machine you're running - so two people sharing this phone still show up as separate work.</div>
+    <div class="mach-grid" id="machGrid"></div>
+  </div>
+</div>
+
 <div class="mbg" id="mManual"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></div><div class="m-title">Manual Entry</div><div class="m-desc">Barcode unreadable. Only Part Name is required.</div><button class="copy-btn" id="manCopy" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy fields from last scanned part</button><div class="fg"><label class="fg-label" for="manName">Part Name<span class="fg-req">*</span></label><input class="fg-input" id="manName" autocapitalize="characters" placeholder="e.g. 177S-COL-3-MP1-R1"><div class="f-hint" id="manNameErr" style="display:none;color:var(--red-600)">Part Name is required.</div></div><div class="fg"><label class="fg-label" for="manProj">Project</label><input class="fg-input" id="manProj" autocapitalize="characters" placeholder="e.g. 177S"></div><div class="fg"><label class="fg-label" for="manFloor">Floor / WO</label><input class="fg-input" id="manFloor" autocapitalize="characters" placeholder="e.g. F18"></div><div class="fg"><label class="fg-label" for="manType">Part Type</label><input class="fg-input" id="manType" autocapitalize="characters" placeholder="e.g. SC"></div><div class="fg"><label class="fg-label" for="manSize">Size</label><input class="fg-input" id="manSize" autocapitalize="characters" placeholder="e.g. 5001 X 6001"></div><div class="fg"><label class="fg-label" for="manQty">Qty Required</label><input class="fg-input" id="manQty" placeholder="e.g. Q-1"></div><div class="fg"><label class="fg-label" for="manCol">Colour</label><input class="fg-input" id="manCol" autocapitalize="characters" placeholder="e.g. AT"></div><div class="mbtns" style="margin-top:14px"><button class="m-ok" id="manOk" type="button">Add Part</button><button class="m-cancel" id="manCancel" type="button">Cancel</button></div></div></div>
 
 <div class="mbg" id="mSkid"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div><div class="m-title">Assign Skid Number</div><div class="m-desc" id="mSkidDesc">Assign a skid number to unassigned parts.</div><div class="fg"><label class="fg-label" for="skidNum">Skid Number<span class="fg-req">*</span></label><input class="fg-input" id="skidNum" inputmode="numeric" placeholder="e.g. 1"></div><div class="mbtns"><button class="m-ok" id="skidOk" type="button">Assign</button><button class="m-cancel" id="skidCancel" type="button">Cancel</button></div></div></div>
@@ -805,7 +847,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 */
 
 const PASSWORD='M@trex';
-const LS={scans:d=>'mx_scans_'+d,cfg:'mx_cfg',lastUp:'mx_lastup',camSize:'mx_camsize',login:'mx_login',synced:d=>'mx_synced_'+d,deviceId:'mx_device_id',dirQueue:'mx_dir_queue',dirCache:'mx_dir_cache',muteAudio:'mx_mute_audio',activeDirBatch:'mx_active_dir_batch',viewerKey:'mx_viewer_key',darkMode:'mx_dark_mode',activeActivity:'mx_active_activity'};
+const LS={scans:d=>'mx_scans_'+d,cfg:'mx_cfg',lastUp:'mx_lastup',camSize:'mx_camsize',login:'mx_login',synced:d=>'mx_synced_'+d,deviceId:'mx_device_id',dirQueue:'mx_dir_queue',dirCache:'mx_dir_cache',muteAudio:'mx_mute_audio',activeDirBatch:'mx_active_dir_batch',viewerKey:'mx_viewer_key',darkMode:'mx_dark_mode',activeActivity:'mx_active_activity',lastScreen:'mx_last_screen'};
 const LOGIN_TTL_MS=30*24*60*60*1000; // stay signed in for 30 days on this phone
 
 const $=id=>document.getElementById(id);
@@ -816,14 +858,25 @@ function uuid(){
 const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const lsGet=k=>{try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}};
 const lsSet=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));$(id).classList.add('on');}
+// Screens safe to silently rehydrate into after a hard refresh: no
+// password prompt they'd otherwise have to pass again (scrSettings is
+// gated by SETTINGS_PASSWORD but never persists the unlock, so it's
+// deliberately left out — same reasoning as admin.html's Operations tab),
+// and no other transient setup a boot-time call can't cheaply redo.
+// scrDirected already has its own dedicated restore path (LS.activeDirBatch,
+// checked first in enterScanScreen()) so it's excluded here too.
+const RESTORABLE_SCREENS=new Set(['scrScan','scrList','scrBatch']);
+function show(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));$(id).classList.add('on');
+  if(RESTORABLE_SCREENS.has(id))lsSet(LS.lastScreen,id);
+}
 const modal=(id,on)=>$(id).classList.toggle('on',on);
 
 function todayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 const fmtT=iso=>iso?new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'—';
 const fmtDT=iso=>iso?new Date(iso).toLocaleDateString([],{month:'short',day:'numeric'})+' '+fmtT(iso):'Never';
 
-let cfg=lsGet(LS.cfg)||{url:'',dev:'MATREX-PHONE',filePrefix:'Matrex_Scans'};
+let cfg=lsGet(LS.cfg)||{url:'',dev:'MATREX-PHONE',filePrefix:'Matrex_Scans',machine:null};
 let stageOptionsCache=[]; // [{stage_number,stage_name}] - last list fetched from /parts/stages, for resolving a number to its name in flash messages
 let deviceId=lsGet(LS.deviceId);
 if(!deviceId){deviceId=uuid();lsSet(LS.deviceId,deviceId);}
@@ -877,7 +930,73 @@ function refreshStagePill(){
   $('stageVal').textContent=match?match.stage_name:('Stage '+cfg.stageNumber);
   pill.style.display='';
 }
+
+// ── MACHINE PICKER — for two (or more) people sharing one phone across
+// different physical machines (e.g. Break Press 1 vs 2), so each
+// person's work is still separable afterward. Deliberately NOT folded
+// into Settings' Production Stage dropdown - that's a "this phone is
+// permanently assigned to Bending" setting someone sets up once, while
+// Machine is meant to change hands mid-shift, so it's a one-tap picker
+// right on the scan screen instead. A short, fixed list for now (just
+// the two Break Presses that exist today) - add another machine here
+// later by adding one line, no other code changes needed. `color` picks
+// which existing CSS variable tints that machine's tile icon, purely
+// visual so the two are easy to tell apart at a glance.
+const MACHINES=[
+  {id:'BP1',name:'Break Press 1',color:'var(--blue-600)'},
+  {id:'BP2',name:'Break Press 2',color:'var(--amber-700)'}
+];
+function machineIconSvg(color){
+  return `<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="4" width="18" height="4" rx="1"/>
+    <rect x="3" y="16" width="18" height="4" rx="1"/>
+    <line x1="12" y1="9" x2="12" y2="15"/>
+    <polyline points="9 12 12 15 15 12"/>
+  </svg>`;
+}
+function renderMachinePicker(){
+  const grid=$('machGrid');
+  grid.innerHTML=MACHINES.map(m=>`
+    <div class="mach-tile${cfg.machine===m.id?' active':''}" onclick="selectMachine('${m.id}')">
+      <div class="mach-tile-icon">${machineIconSvg(cfg.machine===m.id?'#fff':m.color)}</div>
+      <div class="mach-tile-name">${esc(m.name)}</div>
+    </div>`).join('')
+    +`<div class="mach-tile mach-tile-clear" onclick="selectMachine(null)">
+      <div class="mach-tile-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+      <div class="mach-tile-name">No Machine / Clear</div>
+    </div>`;
+}
+function openMachinePicker(){renderMachinePicker();modal('mMachine',true);}
+function closeMachinePicker(){modal('mMachine',false);}
+function selectMachine(id){
+  cfg.machine=id;
+  lsSet(LS.cfg,cfg);
+  refreshMachinePill();
+  closeMachinePicker();
+}
+// Always visible on the scan screen (unlike the Stage pill, which hides
+// entirely for a classic no-stage phone) - the whole point is a fast
+// glance-and-tap, so it needs to be reachable even before a machine's
+// ever been picked, showing a dashed "Select" state until it is.
+function refreshMachinePill(){
+  const pill=$('machinePill');
+  const match=MACHINES.find(m=>m.id===cfg.machine);
+  $('machineVal').textContent=match?match.name:'Select';
+  pill.classList.toggle('unset',!match);
+  pill.style.display='';
+}
 let scans=[],currentSkid=null,today=todayStr(),viewDate=today,syncedCount=0;
+// "X/Y" progress for whatever batch was most recently scanned - not every
+// scan carries this (NOT_FOUND/manual/offline entries don't), so this is
+// derived by searching backward for the latest scan that does, rather than
+// just reading the very last scan the way currentSkid does above.
+let currentBatchScanned=null,currentBatchTotal=null;
+function refreshBatchProgressFromScans(){
+  for(let i=scans.length-1;i>=0;i--){
+    if(scans[i].batchTotal!=null){currentBatchScanned=scans[i].batchScanned;currentBatchTotal=scans[i].batchTotal;return;}
+  }
+  currentBatchScanned=null;currentBatchTotal=null;
+}
 let skidTarget=null,delTarget=null,pendingDup=null;
 let nextMidnightUpload=null,engineLabel='Starting…';
 // General buffer between any two accepted scans, and how long an identical
@@ -898,6 +1017,7 @@ let scanMode='FREE'; // 'FREE' | 'DIRECTED'
 function loadScans(){
   scans=lsGet(LS.scans(today))||[];
   currentSkid=scans.length?(scans[scans.length-1].skid||null):null;
+  refreshBatchProgressFromScans();
   syncedCount=lsGet(LS.synced(today))||0;
 }
 const saveScans=()=>lsSet(LS.scans(today),scans);
@@ -909,6 +1029,33 @@ function availableDates(){
   const set=new Set(Object.keys(localStorage).filter(k=>k.startsWith('mx_scans_')).map(k=>k.slice('mx_scans_'.length)));
   set.add(today); // today may have zero scans (and so no key yet) but must still be selectable
   return Array.from(set).sort().reverse();
+}
+// A note is attached server-side to the unique_id, so it's already correct
+// no matter which scan of that part you added it from - but locally,
+// noteCount lives on each individual SCAN RECORD, and the same physical
+// part can appear as more than one local record: today's original scan
+// plus today's duplicate scan, or a scan from an earlier day plus today's.
+// The whole point of scanning an already-scanned tag again is often just
+// to reach its detail screen and jot a quick note - if only the row that
+// happened to be open gets the updated count, the "main"/original scan of
+// that part still looks note-less everywhere else it shows up. This walks
+// every local copy (today's in-memory list, plus every other day's saved
+// list) and brings noteCount in line, so the NOTE pill is consistent
+// wherever that part appears in this phone's own history.
+function syncNoteCountEverywhere(uniqueId,count){
+  if(!uniqueId)return;
+  let touchedToday=false;
+  scans.forEach(s=>{if(s.uniqueId===uniqueId){s.noteCount=count;touchedToday=true;}});
+  if(touchedToday)saveScans();
+  availableDates().forEach(d=>{
+    if(d===today)return; // already handled above via the in-memory `scans` array
+    const key=LS.scans(d);
+    const list=lsGet(key);
+    if(!list||!list.length)return;
+    let touched=false;
+    list.forEach(s=>{if(s.uniqueId===uniqueId){s.noteCount=count;touched=true;}});
+    if(touched)lsSet(key,list);
+  });
 }
 function fmtDateNice(d){
   const dt=new Date(d+'T00:00:00');
@@ -1509,7 +1656,7 @@ async function handleScan(uniqueId){
   }
 
   try{
-    const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined})});
+    const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:cfg.machine||undefined})});
     if(res.status===403){
       const j=await res.json().catch(()=>({}));
       deviceStatus=j.status||'UNKNOWN';
@@ -1536,12 +1683,13 @@ async function reconcileUnverified(){
   reconciling=true;
   for(const part of pending){
     try{
-      const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:part.uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined})});
+      const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:part.uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:cfg.machine||undefined})});
       if(!res.ok)continue; // still unreachable/unapproved — leave UNVERIFIED, try again next time
       const data=await res.json();
       applyMatch(part,data);
     }catch(e){/* leave UNVERIFIED, will retry on the next reconnect */}
   }
+  refreshBatchProgressFromScans();
   saveScans();updateCounters();renderRecent();
   if($('scrList').classList.contains('on'))renderFull($('searchInp').value);
   reconciling=false;
@@ -1550,6 +1698,7 @@ async function reconcileUnverified(){
 const FLAG_MSGS={DUPLICATE:'Already scanned',VOID:'VOIDED part',NOT_REGISTERED:'Not registered',UNVERIFIED:'Unverified — offline',HOLD:'QUALITY HOLD'};
 function commit(part){
   scans.push(part);saveScans();
+  if(part.batchTotal!=null){currentBatchScanned=part.batchScanned;currentBatchTotal=part.batchTotal;}
   beep(part.flag?'err':'ok');updateCounters();renderRecent();
   const base=part.partName+(part.colour?' — '+part.colour:'');
   // A stage-scoped duplicate ("already scanned at Stage 2") reads very
@@ -1613,7 +1762,7 @@ function showFlash(kind,msg){
 function updateCounters(){
   $('nTotal').textContent=scans.length;
   $('nFlag').textContent=scans.filter(s=>s.flag).length;
-  $('nSkid').textContent=currentSkid||'—';
+  $('nBatchProgress').textContent=(currentBatchTotal!=null)?(currentBatchScanned+'/'+currentBatchTotal):'—';
 }
 // Shared flag → CSS class / pill-text mapping, used by both list views.
 const FLAG_CSS={DUPLICATE:'dup',VOID:'void',NOT_REGISTERED:'unknown',UNVERIFIED:'unverified',HOLD:'hold'};
@@ -1628,7 +1777,7 @@ function notePill(s){return s.noteCount>0?`<span class="flag-pill fp-note">NOTE<
 function renderRecent(){
   const el=$('list');
   if(!scans.length){
-    el.innerHTML='<div class="empty-box"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1" stroke-dasharray="3 2"/></svg><div class="et">No scans yet</div><div class="es">Point camera at PDF417 barcode.</div></div>';
+    el.innerHTML='<div class="empty-box"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1" stroke-dasharray="3 2"/></svg><div class="et">No scans yet</div><div class="es">Point camera at PDF417 or QR barcode.</div></div>';
     return;
   }
   const recent=scans.slice(-6).reverse();
@@ -1787,7 +1936,7 @@ $('bClear').onclick=()=>modal('mClear',true);
 $('mClearCancel').onclick=()=>modal('mClear',false);
 $('mClearOk').onclick=()=>{
   modal('mClear',false);
-  scans=[];currentSkid=null;syncedCount=0;saveScans();lsSet(LS.synced(today),0);
+  scans=[];currentSkid=null;currentBatchScanned=null;currentBatchTotal=null;syncedCount=0;saveScans();lsSet(LS.synced(today),0);
   updateCounters();renderRecent();show('scrScan');showFlash('bad','Scans cleared');
 };
 $('bUpload').onclick=async()=>{if(!cfg.url){showFlash('bad','No server URL — open Settings.');return;}if(!scans.length){showFlash('bad','Nothing scanned yet.');return;}const ok=await uploadToServer('manual');if(ok)showFlash('ok',csvName()+' uploaded');};
@@ -1872,7 +2021,8 @@ window.openScanDetail=async i=>{
     const data=await res.json();
     if(noteTarget!==p)return; // modal moved on to a different part while this was in flight
     p.noteCount=(data.notes||[]).length;
-    if(viewDate===today)saveScans();
+    syncNoteCountEverywhere(p.uniqueId,p.noteCount);
+    renderRecent();if($('scrList').classList.contains('on'))renderFull($('searchInp').value);
     renderNotesList(data.notes);
   }catch(e){
     $('notesList').innerHTML='<div style="font-size:13px;color:var(--gray-500)">Could not load notes.</div>';
@@ -1912,7 +2062,12 @@ $('noteSubmit').onclick=async()=>{
       noteTarget.matchStatus='VOIDED';noteTarget.flag='VOID';
       $('mScanData').innerHTML=dataHtml(noteTarget);
     }
-    if(viewDate===today)saveScans();
+    // Propagate to every other local copy of this same part (an earlier
+    // scan today, or a scan from a past day) - re-scanning an
+    // already-scanned tag just to add a quick note is exactly the
+    // workflow this covers, and the ORIGINAL scan record needs to show
+    // the note too, not just whichever row was open when it was added.
+    syncNoteCountEverywhere(noteTarget.uniqueId,noteTarget.noteCount);
     renderNotesList(data.notes);
     $('addNoteForm').style.display='none';$('notesList').style.display='block';$('noteActionBtns').style.display='flex';
     $('bAddNote').style.display='block';
@@ -1941,7 +2096,7 @@ $('bUnvoidPart').onclick=async()=>{
     noteTarget.matchStatus='MATCHED_ALREADY';noteTarget.flag='';
     $('mScanData').innerHTML=dataHtml(noteTarget);
     noteTarget.noteCount=(data.notes||[]).length;
-    if(viewDate===today)saveScans();
+    syncNoteCountEverywhere(noteTarget.uniqueId,noteTarget.noteCount);
     renderNotesList(data.notes);
     $('bVoidPart').style.display=voidEligible(noteTarget)?'block':'none';
     $('bUnvoidPart').style.display=unvoidEligible(noteTarget)?'block':'none';
@@ -2618,8 +2773,17 @@ function checkAuth(){
 // another device progressed the same batch while this one was reloading.
 function enterScanScreen(){
   const activeBatch=lsGet(LS.activeDirBatch);
-  if(activeBatch)openDirectedScanScreen(activeBatch);
-  else{show('scrScan');startScanner();}
+  if(activeBatch){openDirectedScanScreen(activeBatch);return;}
+  // No mid-job directed batch to rehydrate into — fall back to whichever
+  // of the no-prompt screens (Production Schedule / All Scans / classic
+  // Scan) was open before the refresh, instead of always dropping back to
+  // the plain Scan screen. viewerKey is already persisted (see its own
+  // comment above), so reopening Production Schedule here needs no
+  // re-prompt; Settings is deliberately excluded (see RESTORABLE_SCREENS).
+  const last=lsGet(LS.lastScreen);
+  if(last==='scrBatch'){openBatchStatusScreen();return;}
+  if(last==='scrList'){openListScreen(listFilterMode);return;}
+  show('scrScan');startScanner();
 }
 $('bLock').onclick=()=>{
   localStorage.removeItem(LS.login);stopScanner();show('scrLock');
@@ -2672,6 +2836,7 @@ document.addEventListener('click',e=>{
 function tick(){$('topDate').textContent=today+'  '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
 setInterval(tick,1000);tick();
 refreshStagePill(); // show the Stage pill immediately at boot if one was already saved from a previous session
+refreshMachinePill(); // same - Machine pill shows (or offers "Select") right from boot
 
 // ── SOUND ──────────────────────────────────────────────────
 // Mobile browsers create a new AudioContext in a 'suspended' state unless
