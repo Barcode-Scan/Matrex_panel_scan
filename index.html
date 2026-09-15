@@ -150,6 +150,16 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
    message somewhere else on screen. */
 .mach-quickrow.mach-attn .mach-qbtn{animation:machAttn .4s ease-in-out 2}
 @keyframes machAttn{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 3px var(--red-600)}}
+/* Full-screen red splash - fires alongside the pulse above, for a
+   moment impossible to miss even if you're not looking right at the
+   buttons. pointer-events:none so it never blocks the tap that's
+   supposed to fix it. Fast fade IN (.on added), slow fade back OUT
+   (class removed shortly after) - a real camera-flash feel, not a
+   static red screen sitting there. z-index 60 - above even the modal
+   backdrop (50), since this is meant to be the loudest signal in the
+   app. */
+#machRedSplash{position:fixed;inset:0;background:var(--red-600);opacity:0;pointer-events:none;z-index:60;transition:opacity .6s ease-out}
+#machRedSplash.on{opacity:.6;transition:opacity .08s ease-in}
 
 /* BATCH PROGRESS BADGE — persistent "5/11" (scanned/total for the batch
    the LAST scanned part belongs to), sitting in the same row as the
@@ -410,6 +420,10 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 </style>
 </head>
 <body>
+
+<!-- Full-screen red splash for the machine-required nudge - see
+     nudgeMachineSelection() and its CSS comment. -->
+<div id="machRedSplash"></div>
 
 <!-- LOCK -->
 <div class="screen on" id="scrLock">
@@ -978,11 +992,19 @@ function refreshMachineButtons(){
 function nudgeMachineSelection(msg){
   showFlash('bad',msg);
   const row=$('machQuickRow');
-  if(!row)return;
-  row.classList.remove('mach-attn');
-  void row.offsetWidth; // restart the animation if it's already mid-pulse from a previous nudge
-  row.classList.add('mach-attn');
-  setTimeout(()=>row.classList.remove('mach-attn'),1600);
+  if(row){
+    row.classList.remove('mach-attn');
+    void row.offsetWidth; // restart the animation if it's already mid-pulse from a previous nudge
+    row.classList.add('mach-attn');
+    setTimeout(()=>row.classList.remove('mach-attn'),1600);
+  }
+  const splash=$('machRedSplash');
+  if(splash){
+    splash.classList.remove('on');
+    void splash.offsetWidth; // restart the fade if a previous splash hasn't fully faded yet
+    splash.classList.add('on');
+    setTimeout(()=>splash.classList.remove('on'),220);
+  }
 }
 let lastScannedBatch=null;
 // Called once per successfully-matched scan (see applyMatch) - a batch
