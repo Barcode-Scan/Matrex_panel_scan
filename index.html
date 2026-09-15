@@ -147,19 +147,22 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .mach-qbtn.active .mach-qbtn-name{color:#fff}
 /* Attention pulse - nudgeMachineSelection() adds this class briefly so
    the prompt points straight at the buttons to tap, not just a text
-   message somewhere else on screen. */
-.mach-quickrow.mach-attn .mach-qbtn{animation:machAttn .4s ease-in-out 2}
+   message somewhere else on screen. Strobes 5 times (more than the
+   "3+" ask), synced to the same count/timing as the full-screen splash
+   below. */
+.mach-quickrow.mach-attn .mach-qbtn{animation:machAttn .3s ease-in-out 5}
 @keyframes machAttn{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 3px var(--red-600)}}
 /* Full-screen red splash - fires alongside the pulse above, for a
    moment impossible to miss even if you're not looking right at the
    buttons. pointer-events:none so it never blocks the tap that's
-   supposed to fix it. Fast fade IN (.on added), slow fade back OUT
-   (class removed shortly after) - a real camera-flash feel, not a
-   static red screen sitting there. z-index 60 - above even the modal
+   supposed to fix it. A real repeating strobe (5 flashes, not one
+   single fade) - each cycle fades sharply in then back out, like a
+   camera flash firing repeatedly. z-index 60 - above even the modal
    backdrop (50), since this is meant to be the loudest signal in the
    app. */
-#machRedSplash{position:fixed;inset:0;background:var(--red-600);opacity:0;pointer-events:none;z-index:60;transition:opacity .6s ease-out}
-#machRedSplash.on{opacity:.6;transition:opacity .08s ease-in}
+#machRedSplash{position:fixed;inset:0;background:var(--red-600);opacity:0;pointer-events:none;z-index:60}
+#machRedSplash.on{animation:machRedFlash .3s ease-in-out 5}
+@keyframes machRedFlash{0%,100%{opacity:0}50%{opacity:.6}}
 
 /* BATCH PROGRESS BADGE — persistent "5/11" (scanned/total for the batch
    the LAST scanned part belongs to), sitting in the same row as the
@@ -991,19 +994,21 @@ function refreshMachineButtons(){
 // straight at the thing to tap instead of just complaining in text.
 function nudgeMachineSelection(msg){
   showFlash('bad',msg);
+  // Both animations below are `.3s * 5` = 1.5s total - the timeouts
+  // match that exactly so the class isn't ripped off mid-cycle.
   const row=$('machQuickRow');
   if(row){
     row.classList.remove('mach-attn');
     void row.offsetWidth; // restart the animation if it's already mid-pulse from a previous nudge
     row.classList.add('mach-attn');
-    setTimeout(()=>row.classList.remove('mach-attn'),1600);
+    setTimeout(()=>row.classList.remove('mach-attn'),1500);
   }
   const splash=$('machRedSplash');
   if(splash){
     splash.classList.remove('on');
-    void splash.offsetWidth; // restart the fade if a previous splash hasn't fully faded yet
+    void splash.offsetWidth; // restart the strobe if a previous one hasn't finished yet
     splash.classList.add('on');
-    setTimeout(()=>splash.classList.remove('on'),220);
+    setTimeout(()=>splash.classList.remove('on'),1500);
   }
 }
 let lastScannedBatch=null;
