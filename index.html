@@ -995,6 +995,19 @@ function checkMachineNudgeOnBatchChange(batch){
   }
   lastScannedBatch=batch;
 }
+// Machine selection is only a real, hard REQUIREMENT on a phone set up
+// for the Bending stage - the two machines only exist there today, and
+// this is the one signal available (the phone's own Production Stage
+// setting, resolved to a name via stageOptionsCache - see Settings)
+// that distinguishes "a Break Press phone" from every other stage/a
+// classic no-stage phone. Without this check, making machine selection
+// mandatory would block scanning app-wide, breaking Cutting/Assembly/
+// every other phone in the building for a concept that doesn't apply to
+// them at all - scoped narrowly on purpose, not a shortcut.
+function isMachineRequiredStage(){
+  const s=stageOptionsCache.find(x=>x.stage_number===cfg.stageNumber);
+  return!!(s&&/bending/i.test(s.stage_name));
+}
 let scans=[],currentSkid=null,today=todayStr(),viewDate=today,syncedCount=0;
 // "X/Y" progress for whatever batch was most recently scanned - not every
 // scan carries this (NOT_FOUND/manual/offline entries don't), so this is
@@ -1531,12 +1544,17 @@ async function runWithDevice(deviceId){
     });
     $('camStatus').classList.add('gone');
     setEngine('Scanning…','scanning');
-    // Camera just came on for a fresh scan session - always re-confirm
-    // the machine, even if one's already selected from a previous
-    // session (last night, or whoever had this phone before) - it's
-    // easy to still be set to a machine nobody's actually standing at
-    // anymore, so "already set" isn't proof it's still correct.
-    nudgeMachineSelection('Confirm which machine you\'re running');
+    // Camera just came on for a fresh scan session - on a Bending phone,
+    // machine selection is REQUIRED, no exception: clear whatever was
+    // selected before (an already-set value isn't proof anyone's still
+    // standing at that press - could be left over from yesterday, or
+    // whoever had this phone last) so scanning stays blocked (see
+    // handleRaw) until it's actively picked again, right now, by
+    // whoever's actually holding this phone.
+    if(isMachineRequiredStage()){
+      cfg.machine=null;lsSet(LS.cfg,cfg);refreshMachineButtons();
+      nudgeMachineSelection('Select your machine before scanning — required');
+    }
 
     if(previewElem.srcObject){
       const tracks=previewElem.srcObject.getVideoTracks();
@@ -1603,6 +1621,13 @@ function logDecodeReject(raw){
 async function handleRaw(raw,method){
   raw=String(raw).trim();if(!raw)return;
   if(method!=='SCAN')return; // manual entry is handled entirely by its own modal/button, not here
+  // Hard requirement on a Bending phone - no scan gets processed (not
+  // even saved locally) without a machine actively selected. Checked
+  // here, before the barcode is even validated, so nothing about this
+  // scan attempt is recorded anywhere until it's picked.
+  if(isMachineRequiredStage()&&!cfg.machine){
+    beep('err');nudgeMachineSelection('Select your machine before scanning — required');return;
+  }
   if(raw.length!==ID_LEN){
     beep('err');showFlash('bad','Not a Matrex code — barcode ignored.');logDecodeReject(raw);return;
   }
@@ -2140,6 +2165,11 @@ $('manCopy').onclick=()=>{
   const l=scans[scans.length-1];$('manProj').value=l.project||'';$('manFloor').value=l.floor||'';$('manType').value=l.partType||'';$('manCol').value=l.colour||'';showFlash('ok','Fields copied');
 };
 $('manOk').onclick=()=>{
+  // Same hard requirement as a camera scan (see handleRaw) - manual
+  // entry is still a new part getting logged, so it's covered too.
+  if(isMachineRequiredStage()&&!cfg.machine){
+    modal('mManual',false);nudgeMachineSelection('Select your machine before scanning — required');return;
+  }
   const name=$('manName').value.trim().toUpperCase();
   if(!name){$('manName').classList.add('err');$('manNameErr').style.display='block';$('manName').focus();return;}
   modal('mManual',false);
@@ -2855,6 +2885,13 @@ function tick(){$('topDate').textContent=today+'  '+new Date().toLocaleTimeStrin
 setInterval(tick,1000);tick();
 refreshStagePill(); // show the Stage pill immediately at boot if one was already saved from a previous session
 refreshMachineButtons(); // same - the two machine buttons render and show right from boot
+// Populates stageOptionsCache early (previously only loaded on opening
+// Settings) - isMachineRequiredStage() needs a real stage NAME to check
+// for "Bending", and a returning user can land straight back on the
+// scan screen (see RESTORABLE_SCREENS) without ever opening Settings
+// this session, so waiting for that would leave the requirement
+// silently not enforced until they happened to check Settings once.
+loadStageOptions();
 
 // ── SOUND ──────────────────────────────────────────────────
 // Mobile browsers create a new AudioContext in a 'suspended' state unless
