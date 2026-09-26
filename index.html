@@ -397,6 +397,46 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 
 /* SETTINGS */
 .s-page{padding:16px;max-width:480px;margin:0 auto}
+/* ── Cutting Log screen ── */
+.cut-card{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:12px}
+.cut-card.tap{cursor:pointer;transition:transform .12s}
+.cut-card.tap:active{transform:scale(.99)}
+.cut-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.cut-batch{font-size:17px;font-weight:700;color:var(--gray-900);word-break:break-word}
+.cut-meta{font-size:13px;color:var(--gray-500);margin-top:2px;line-height:1.45}
+.cut-line{display:flex;justify-content:space-between;gap:10px;font-size:14px;color:var(--gray-700);margin-top:6px}
+.cut-line span:last-child{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600}
+.cut-tag{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;text-transform:uppercase;letter-spacing:.3px}
+.cut-tag.prog{background:var(--amber-50);color:var(--amber-700)}
+.cut-tag.done{background:var(--green-50);color:var(--green-700)}
+.cut-tag.new{background:var(--gray-100);color:var(--gray-500)}
+.cut-mat{font-size:17px;font-weight:700;color:var(--gray-900)}
+.cut-stats{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px;color:var(--gray-500);margin:6px 0 8px}
+.cut-stats b{color:var(--gray-900);font-variant-numeric:tabular-nums}
+.cut-bar{height:6px;border-radius:3px;background:var(--gray-100);overflow:hidden;margin-bottom:6px}
+.cut-bar>div{height:100%;background:var(--blue-600)}
+.cut-bar.done>div{background:var(--green-700)}
+.cut-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--gray-100)}
+.cut-row .cut-lbl{font-size:15px;font-weight:600;color:var(--gray-700);flex:1;line-height:1.3}
+.cut-row .cut-lbl small{display:block;font-size:12px;font-weight:500;color:var(--gray-500)}
+.stepper{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.stepper button{width:44px;height:44px;border-radius:12px;border:none;background:var(--gray-100);font-size:22px;font-weight:700;color:var(--gray-900);font-family:inherit;cursor:pointer}
+.stepper button:active{background:var(--gray-200)}
+.stepper input{width:62px;height:44px;text-align:center;font-size:20px;font-weight:700;border:1.5px solid var(--gray-200);border-radius:12px;background:var(--white);color:var(--gray-900);font-family:inherit;outline:none}
+.stepper input:focus{border-color:var(--blue-600)}
+.cut-quick{font-size:13px;font-weight:600;color:var(--blue-600);background:none;border:none;padding:2px 0 0;font-family:inherit;cursor:pointer;text-align:left}
+.cut-check{display:flex;align-items:center;gap:10px;padding:12px 0 4px;border-top:1px solid var(--gray-100);font-size:15px;font-weight:600;color:var(--gray-700)}
+.cut-check input{width:22px;height:22px;flex-shrink:0}
+.cut-note{width:100%;background:var(--gray-100);border:1.5px solid transparent;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit;color:var(--gray-900);outline:none;margin-top:8px}
+.cut-note:focus{background:var(--white);border-color:var(--blue-600)}
+.cut-msg{border-radius:var(--r);padding:12px 14px;font-size:15px;font-weight:500;margin-bottom:12px;line-height:1.5}
+.cut-msg.ok{background:var(--green-50);color:var(--green-700)}
+.cut-msg.err{background:var(--red-50);color:var(--red-600)}
+.cut-msg.warn{background:var(--amber-50);color:var(--amber-700)}
+.cut-more{width:100%;margin-top:10px;padding:10px;border-radius:12px;border:1.5px dashed var(--gray-300);background:none;font-size:14px;font-weight:600;color:var(--gray-700);font-family:inherit;cursor:pointer}
+.cut-hist{font-size:13px;color:var(--gray-700);padding:8px 0;border-top:1px solid var(--gray-100);line-height:1.45}
+.cut-hist span{color:var(--gray-500)}
+.cut-hist:first-child{border-top:none}
 .s-sec{font-size:12px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:1.5px;margin:22px 0 8px}
 .s-sec:first-child{margin-top:0}
 .s-card{background:var(--white);border:none;border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow-sm);margin-bottom:12px}
@@ -499,6 +539,11 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
           <button class="tb-btn" id="bBatch" aria-label="Production schedule">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
+            </svg>
+          </button>
+          <button class="tb-btn" id="bCutting" aria-label="Cutting log">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>
             </svg>
           </button>
           <button class="tb-btn" id="bSettings" aria-label="Settings">
@@ -620,6 +665,10 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
         Manual Entry
       </button>
     </div>
+    <button class="btn btn-outline" id="bCuttingMain" type="button" style="display:none;margin-top:10px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+      Cutting Log
+    </button>
     <button class="btn btn-solid mt12" id="bDone" type="button">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
@@ -702,6 +751,22 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       <button class="btn btn-outline" id="bDirUndo" type="button" disabled>Undo Last Scan</button>
     </div>
   </div>
+</div>
+
+<!-- CUTTING LOG -->
+<div class="screen" id="scrCutting">
+  <div class="topbar">
+    <button class="tb-btn" id="bBackCutting" aria-label="Back" type="button" style="width:auto;padding:0 10px;gap:6px;font-size:16px;font-weight:600">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Back
+    </button>
+    <div><div class="tb-name" style="font-size:16px" id="cutTitle">Cutting Log</div><div class="tb-date" id="cutSub">Pick a batch</div></div>
+    <div style="width:70px"></div>
+  </div>
+  <div class="search-wrap" id="cutSearchWrap">
+    <input class="search-inp" id="cutSearchInp" placeholder="Search batch, job, material…" autocapitalize="characters">
+  </div>
+  <div id="cutContent" class="page"></div>
 </div>
 
 <!-- SETTINGS -->
@@ -924,10 +989,18 @@ async function loadStageOptions(){
 // hidden entirely for a classic (no stage) phone.
 function refreshStagePill(){
   const pill=$('stagePill');
-  if(!cfg.stageNumber){pill.style.display='none';return;}
+  if(!cfg.stageNumber){pill.style.display='none';refreshCuttingButton();return;}
   const match=stageOptionsCache.find(s=>s.stage_number===cfg.stageNumber);
   $('stageVal').textContent=match?match.stage_name:('Stage '+cfg.stageNumber);
   pill.style.display='';
+  refreshCuttingButton();
+}
+// Cutting-stage phones get a big "Cutting Log" button right on the scan
+// screen; every phone can still reach it from the ⌄ menu (scissors).
+function refreshCuttingButton(){
+  const b=$('bCuttingMain');if(!b)return;
+  const match=stageOptionsCache.find(s=>s.stage_number===cfg.stageNumber);
+  b.style.display=match&&/cut/i.test(match.stage_name)?'':'none';
 }
 
 // ── MACHINE QUICK-SELECT — for two (or more) people sharing one phone
@@ -2815,6 +2888,215 @@ $('bBackBatch').onclick=()=>{
     renderBatchCards('');
   }else{
     clearInterval(batchRefreshTimer);
+    show('scrScan');startScanner();
+  }
+};
+
+// ── CUTTING LOG — the cutting operator records, per batch and per material
+// line, how many full sheets were cut, how many were damaged while cutting,
+// how many offcuts were used to finish, and when a material is finished.
+// Partial work is fine: cut 5 of 10, go to another job, come back and log
+// the other 5 - each save adds to the batch's running totals on the server
+// (cutting-log.js). Every save carries a phone-made id, so a save made with
+// no connection is kept on the phone and re-sent later without ever being
+// counted twice. Admins see it all on admin.html's Daily Cutting tab.
+const LS_CUT_OPERATOR='mx_cut_operator',LS_CUT_QUEUE='mx_cut_queue';
+let cutView='list',cutBatches=[],cutCurrent=null,cutRecent=[],cutShowAll=false,cutMsg=null,cutOpenLines=new Set();
+function cutQueue(){return lsGet(LS_CUT_QUEUE)||[];}
+async function cutGet(path){
+  if(!cfg.url)throw new Error('No server configured — set a Receiver URL in Settings first.');
+  const r=await fetch(cfg.url+path+(path.includes('?')?'&':'?')+'device_id='+encodeURIComponent(deviceId),{signal:AbortSignal.timeout(8000)});
+  if(r.status===403)throw new Error('This phone is not approved on the server yet — ask an admin to approve it (Operations → Devices).');
+  if(r.status===404&&!path.startsWith('/cutting/batch/'))throw new Error('The server has not been updated for the Cutting Log yet - ask the office to restart the Matrex Server.');
+  if(!r.ok)throw new Error('Server error (HTTP '+r.status+')');
+  return r.json();
+}
+// Returns {ok:true,data} | {ok:false,permanent:true,error} (server said no -
+// don't retry) | {ok:false,permanent:false,error} (couldn't reach it - keep).
+async function cutPost(payload){
+  try{
+    const r=await fetch(cfg.url+'/cutting/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,device_id:deviceId,device:cfg.dev}),signal:AbortSignal.timeout(10000)});
+    const j=await r.json().catch(()=>({}));
+    if(r.ok)return{ok:true,data:j};
+    // A 404 with no reason means the server doesn't have the Cutting Log yet (not restarted
+    // since the update) - keep the save on the phone rather than throwing it away.
+    if(r.status===404&&!j.error)return{ok:false,permanent:false,error:'Server not updated yet'};
+    if(r.status>=400&&r.status<500)return{ok:false,permanent:true,error:j.error||('HTTP '+r.status)};
+    return{ok:false,permanent:false,error:'Server error (HTTP '+r.status+')'};
+  }catch(e){return{ok:false,permanent:false,error:'No connection'};}
+}
+let cutFlushing=false;
+async function flushCutQueue(){
+  if(cutFlushing||!cfg.url)return;
+  cutFlushing=true;
+  try{
+    let q=cutQueue();
+    while(q.length){
+      const r=await cutPost(q[0]);
+      if(!r.ok&&!r.permanent)break;           // still offline - try again later
+      if(!r.ok)cutMsg={kind:'err',text:'A saved cutting entry for '+q[0].batch+' was rejected: '+r.error};
+      q=q.slice(1);lsSet(LS_CUT_QUEUE,q);
+    }
+  }finally{cutFlushing=false;}
+  if($('scrCutting').classList.contains('on'))cutView==='list'?renderCutList():loadCutBatch(cutCurrent&&cutCurrent.batch,true);
+}
+window.addEventListener('online',flushCutQueue);
+setInterval(()=>{if(cutQueue().length&&navigator.onLine)flushCutQueue();},60000);
+
+function openCuttingScreen(){
+  stopScanner();
+  cutView='list';cutCurrent=null;cutMsg=null;
+  $('cutTitle').textContent='Cutting Log';$('cutSub').textContent='Pick a batch';
+  $('cutSearchWrap').style.display='';$('cutSearchInp').value='';
+  show('scrCutting');
+  $('cutContent').innerHTML='<div class="empty-box"><div class="es">Loading batches…</div></div>';
+  flushCutQueue();
+  loadCutBatches();
+}
+async function loadCutBatches(){
+  try{
+    const d=await cutGet('/cutting/batches'+(cutShowAll?'?all=1':''));
+    cutBatches=d.batches||[];
+    if(cutView==='list')renderCutList();
+  }catch(e){
+    if(cutView==='list')$('cutContent').innerHTML='<div class="cut-msg err">'+esc(e.message)+'</div>';
+  }
+}
+function cutStatusTag(s){return s==='done'?'<span class="cut-tag done">Cut</span>':s==='in_progress'?'<span class="cut-tag prog">In progress</span>':'<span class="cut-tag new">Not started</span>';}
+function cutQty(v){return v==null?'—':v;}
+function renderCutList(){
+  const q=($('cutSearchInp').value||'').trim().toLowerCase();
+  const list=cutBatches.filter(b=>!q||[b.batch,b.job_name,b.floor_or_work_order,...b.lines.map(l=>l.material+' '+l.finish)].some(v=>String(v||'').toLowerCase().includes(q)));
+  const pending=cutQueue().length;
+  let h='';
+  if(cutMsg){h+='<div class="cut-msg '+cutMsg.kind+'">'+esc(cutMsg.text)+'</div>';}
+  if(pending)h+='<div class="cut-msg warn">'+pending+' cutting entr'+(pending===1?'y is':'ies are')+' saved on this phone and will send automatically when the server is reachable.</div>';
+  h+='<label class="cut-check" style="border-top:none;padding-top:0"><input type="checkbox" '+(cutShowAll?'checked':'')+' onchange="cutShowAll=this.checked;loadCutBatches()"> Show finished batches too</label>';
+  if(!list.length){
+    h+='<div class="empty-box"><div class="et">'+(q?'No matching batches':'Nothing waiting to be cut')+'</div><div class="es">'+(q?'Try a different search.':'Batches appear here once they have material and sheet quantities in the Production Schedule.')+'</div></div>';
+  }else{
+    h+=list.map(b=>'<div class="cut-card tap" onclick="openCutBatch(\''+esc(b.batch).replace(/'/g,"\\'")+'\')">'
+      +'<div class="cut-head"><div><div class="cut-batch">'+esc(b.batch)+'</div><div class="cut-meta">'+esc([b.job_name,b.floor_or_work_order].filter(Boolean).join(' · '))+(b.target_finish?' · Due '+esc(String(b.target_finish).slice(0,10)):'')+(b.priority?' · <b style="color:var(--red-600)">'+esc(b.priority)+'</b>':'')+'</div></div>'+cutStatusTag(b.cut_status)+'</div>'
+      +b.lines.map(l=>'<div class="cut-line"><span>'+esc(l.material)+(l.finish?' · '+esc(l.finish):'')+'</span><span>'+(l.done?'✓ ':'')+l.cut+' / '+cutQty(l.programmed)+' sheets</span></div>').join('')
+      +'</div>').join('');
+  }
+  $('cutContent').innerHTML=h;
+}
+function openCutBatch(batch){
+  cutView='detail';cutMsg=null;cutOpenLines=new Set();
+  $('cutSearchWrap').style.display='none';
+  $('cutTitle').textContent=batch;$('cutSub').textContent='Loading…';
+  $('cutContent').innerHTML='<div class="empty-box"><div class="es">Loading…</div></div>';
+  loadCutBatch(batch);
+}
+async function loadCutBatch(batch,keepInputs){
+  if(!batch)return;
+  try{
+    const d=await cutGet('/cutting/batch/'+encodeURIComponent(batch));
+    cutCurrent=d.batch;cutRecent=d.recent||[];
+    if(cutView==='detail')renderCutBatch(keepInputs);
+  }catch(e){
+    if(cutView==='detail')$('cutContent').innerHTML='<div class="cut-msg err">'+esc(e.message)+'</div>';
+  }
+}
+function cutStepper(id,label,hint){
+  return '<div class="cut-row"><div class="cut-lbl">'+label+(hint?'<small>'+hint+'</small>':'')+'</div>'
+    +'<div class="stepper"><button type="button" onclick="cutStep(\''+id+'\',-1)" aria-label="Less">−</button>'
+    +'<input id="'+id+'" type="number" inputmode="numeric" min="0" max="999" step="1" value="0" onfocus="this.select()">'
+    +'<button type="button" onclick="cutStep(\''+id+'\',1)" aria-label="More">+</button></div></div>';
+}
+function cutStep(id,d){const el=$(id);el.value=Math.max(0,Math.min(999,(parseInt(el.value,10)||0)+d));}
+function renderCutBatch(keepInputs){
+  const b=cutCurrent;if(!b)return;
+  const saved={};
+  if(keepInputs)document.querySelectorAll('#cutContent input').forEach(i=>{saved[i.id]=i.type==='checkbox'?i.checked:i.value;});
+  $('cutTitle').textContent=b.batch;
+  $('cutSub').textContent=[b.job_name,b.floor_or_work_order].filter(Boolean).join(' · ')||'Cutting Log';
+  let h='';
+  if(cutMsg)h+='<div class="cut-msg '+cutMsg.kind+'">'+esc(cutMsg.text)+'</div>';
+  const pending=cutQueue().filter(x=>x.batch===b.batch).length;
+  if(pending)h+='<div class="cut-msg warn">'+pending+' save'+(pending===1?'':'s')+' for this batch '+(pending===1?'is':'are')+' waiting on this phone for a connection - not in the totals below yet.</div>';
+  h+='<div class="cut-card"><div class="fg" style="margin-bottom:0"><label class="fg-label" for="cutOperator">Your name <span class="fg-req">*</span></label>'
+    +'<input class="fg-input" id="cutOperator" autocapitalize="words" placeholder="Who is cutting?" value="'+esc(lsGet(LS_CUT_OPERATOR)||'')+'"></div></div>';
+  b.lines.forEach(l=>{
+    const pct=l.done?100:(l.programmed?Math.min(100,Math.round(l.cut/l.programmed*100)):0);
+    const open=!l.done||cutOpenLines.has(l.line_no);
+    h+='<div class="cut-card">'
+      +'<div class="cut-head"><div><div class="cut-mat">'+esc(l.material)+'</div><div class="cut-meta">'+(l.finish?'Finish: '+esc(l.finish):'No finish recorded')+'</div></div>'+(l.done?'<span class="cut-tag done">Finished</span>':l.entries?'<span class="cut-tag prog">In progress</span>':'<span class="cut-tag new">Not started</span>')+'</div>'
+      +'<div class="cut-stats"><span>Programmed <b>'+cutQty(l.programmed)+'</b></span><span>Cut <b>'+l.cut+'</b></span><span>Remaining <b>'+cutQty(l.remaining)+'</b></span>'
+      +(l.damaged?'<span style="color:var(--red-600)">Damaged <b style="color:inherit">'+l.damaged+'</b></span>':'')+(l.offcuts?'<span>Offcuts <b>'+l.offcuts+'</b></span>':'')+'</div>'
+      +'<div class="cut-bar'+(l.done?' done':'')+'"><div style="width:'+pct+'%"></div></div>';
+    if(open){
+      const rem=l.remaining;
+      h+=cutStepper('cutCut'+l.line_no,'Full sheets cut now',rem?'<button type="button" class="cut-quick" onclick="$(\'cutCut'+l.line_no+'\').value='+rem+'">Cut all remaining ('+rem+')</button>':'')
+        +cutStepper('cutDmg'+l.line_no,'Sheets damaged while cutting','Ruined full sheets - not counted as cut')
+        +cutStepper('cutOff'+l.line_no,'Offcuts used','Pieces used instead of a new sheet')
+        +'<label class="cut-check"><input type="checkbox" id="cutFin'+l.line_no+'"'+(l.finished?' checked disabled':'')+'> '+(l.finished?'Already marked finished':'This material is finished - nothing left to cut')+'</label>'
+        +'<input class="cut-note" id="cutNote'+l.line_no+'" maxlength="300" placeholder="Note (optional) - e.g. why a sheet was damaged">';
+    }else{
+      h+='<button type="button" class="cut-more" onclick="cutOpenLines.add('+l.line_no+');renderCutBatch(true)">Add more for this material (correction, damage, offcuts)</button>';
+    }
+    h+='</div>';
+  });
+  h+='<button class="btn btn-solid" id="bCutSave" type="button" onclick="saveCutting()" style="position:sticky;bottom:12px;margin-top:4px">Save Cutting Log</button>';
+  if(cutRecent.length){
+    h+='<div class="s-sec" style="margin-top:22px">Logged so far</div><div class="cut-card">'
+      +cutRecent.map(r=>'<div class="cut-hist"'+(r.voided_at?' style="text-decoration:line-through;opacity:.55"':'')+'><b>'+esc(r.material)+'</b> · '
+        +[r.sheets_cut?r.sheets_cut+' cut':'',r.sheets_damaged?r.sheets_damaged+' damaged':'',r.offcuts_used?r.offcuts_used+' offcut'+(r.offcuts_used===1?'':'s'):'',r.line_finished?'finished':''].filter(Boolean).join(', ')
+        +'<br><span>'+esc(fmtDT(r.cut_at))+' · '+esc(r.operator||'')+(r.note?' · '+esc(r.note):'')+(r.voided_at?' · voided by office':'')+'</span></div>').join('')
+      +'</div>';
+  }
+  $('cutContent').innerHTML=h;
+  if(keepInputs)Object.entries(saved).forEach(([id,v])=>{const el=$(id);if(!el||el.disabled)return;if(el.type==='checkbox')el.checked=v;else el.value=v;});
+}
+async function saveCutting(){
+  const b=cutCurrent;if(!b)return;
+  const operator=($('cutOperator').value||'').trim();
+  if(!operator){cutMsg={kind:'err',text:'Enter your name first.'};renderCutBatch(true);$('cutOperator').focus();return;}
+  lsSet(LS_CUT_OPERATOR,operator);
+  const entries=[],warn=[];
+  for(const l of b.lines){
+    const cutEl=$('cutCut'+l.line_no);if(!cutEl)continue;
+    const num=id=>{const v=($(id).value||'').trim();return v===''?0:Number(v);};
+    const cut=num('cutCut'+l.line_no),dmg=num('cutDmg'+l.line_no),off=num('cutOff'+l.line_no);
+    if([cut,dmg,off].some(n=>!Number.isInteger(n)||n<0||n>999)){cutMsg={kind:'err',text:'Use whole numbers (0-999) for '+l.material+'.'};renderCutBatch(true);return;}
+    const finEl=$('cutFin'+l.line_no),fin=!!(finEl&&finEl.checked&&!finEl.disabled);
+    if(!cut&&!dmg&&!off&&!fin)continue;
+    if(l.remaining!=null&&cut>l.remaining)warn.push(l.material+': '+cut+' sheets entered but only '+l.remaining+' remain.');
+    if(fin&&l.programmed!=null&&l.cut+cut<l.programmed&&!off)warn.push(l.material+': marking finished with '+(l.cut+cut)+' of '+l.programmed+' sheets cut and no offcuts.');
+    entries.push({entry_id:uuid(),line_no:l.line_no,sheets_cut:cut,sheets_damaged:dmg,offcuts_used:off,line_finished:fin,note:($('cutNote'+l.line_no).value||'').trim()});
+  }
+  if(!entries.length){cutMsg={kind:'err',text:'Nothing to save - enter sheets cut, damaged or offcuts, or tick "finished" on a material.'};renderCutBatch(true);return;}
+  if(warn.length&&!confirm(warn.join('\n')+'\n\nSave anyway?'))return;
+  const payload={operator,batch:b.batch,cut_at:new Date().toISOString(),entries};
+  const btn=$('bCutSave');btn.disabled=true;btn.textContent='Saving…';
+  const r=await cutPost(payload);
+  const total=k=>entries.reduce((s,e)=>s+e[k],0);
+  const summary=[total('sheets_cut')+' cut',total('sheets_damaged')?total('sheets_damaged')+' damaged':'',total('offcuts_used')?total('offcuts_used')+' offcut(s)':''].filter(Boolean).join(', ');
+  if(r.ok){
+    cutMsg={kind:'ok',text:'Saved - '+summary+'.'};
+    cutOpenLines=new Set();
+    loadCutBatch(b.batch);
+    flushCutQueue();
+  }else if(r.permanent){
+    cutMsg={kind:'err',text:'Not saved: '+r.error};
+    renderCutBatch(true);
+  }else{
+    lsSet(LS_CUT_QUEUE,[...cutQueue(),payload]);
+    cutMsg={kind:'warn',text:'No connection - '+summary+' saved on this phone and will send automatically when the server is reachable.'};
+    renderCutBatch(false);
+  }
+}
+$('bCutting').onclick=openCuttingScreen;
+$('bCuttingMain').onclick=openCuttingScreen;
+$('cutSearchInp').addEventListener('input',()=>{if(cutView==='list')renderCutList();});
+$('bBackCutting').onclick=()=>{
+  if(cutView==='detail'){
+    cutView='list';cutCurrent=null;cutMsg=null;
+    $('cutTitle').textContent='Cutting Log';$('cutSub').textContent='Pick a batch';
+    $('cutSearchWrap').style.display='';
+    renderCutList();loadCutBatches();
+  }else{
     show('scrScan');startScanner();
   }
 };
