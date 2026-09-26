@@ -761,7 +761,15 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       Back
     </button>
     <div><div class="tb-name" style="font-size:16px" id="cutTitle">Cutting Log</div><div class="tb-date" id="cutSub">Pick a batch</div></div>
-    <div style="width:70px"></div>
+    <div id="cutRightSpacer" style="width:70px"></div>
+    <div id="cutModeBtns" style="display:none;gap:6px">
+      <button class="tb-btn" type="button" aria-label="Settings" onclick="$('bSettings').click()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <button class="tb-btn" type="button" aria-label="Lock" onclick="$('bLock').click()">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </button>
+    </div>
   </div>
   <div class="search-wrap" id="cutSearchWrap">
     <input class="search-inp" id="cutSearchInp" placeholder="Search batch, job, material…" autocapitalize="characters">
@@ -969,7 +977,9 @@ async function loadStageOptions(){
     const data=await res.json();
     const stages=data.stages||[];
     stageOptionsCache=stages;
-    sel.innerHTML=classicOpt+stages.map(s=>`<option value="${s.stage_number}">Stage ${s.stage_number} — ${esc(s.stage_name)}</option>`).join('');
+    // "Stage N" is the display order (position), not stage_number - the number
+    // is a permanent id the server can reorder around (see db.js server-side).
+    sel.innerHTML=classicOpt+stages.map((s,i)=>`<option value="${s.stage_number}">Stage ${s.position||i+1} — ${esc(s.stage_name)}${s.stage_type==='cutting'?' (Cutting Log)':''}</option>`).join('');
   }catch(e){
     // Couldn't reach the server to confirm the current stage list - keep
     // the classic option plus whatever was already saved (as a bare
@@ -989,11 +999,29 @@ async function loadStageOptions(){
 // hidden entirely for a classic (no stage) phone.
 function refreshStagePill(){
   const pill=$('stagePill');
-  if(!cfg.stageNumber){pill.style.display='none';refreshCuttingButton();return;}
+  if(!cfg.stageNumber){pill.style.display='none';refreshCuttingButton();cfg.stageType=null;applyCutMode();return;}
   const match=stageOptionsCache.find(s=>s.stage_number===cfg.stageNumber);
   $('stageVal').textContent=match?match.stage_name:('Stage '+cfg.stageNumber);
   pill.style.display='';
   refreshCuttingButton();
+  if(match&&cfg.stageType!==match.stage_type){cfg.stageType=match.stage_type||'scan';lsSet(LS.cfg,cfg);}
+  applyCutMode();
+}
+// ── CUT-ONLY MODE — a phone set to the Cut stage (a 'cutting' stage: logged
+// per material/finish, never by scanning tags) only gets the Cutting Log:
+// no scan screen, no scan list, no Production Schedule. Its topbar carries
+// Settings (still password-gated) and Lock instead of Back.
+function isCuttingStage(){
+  if(!cfg.stageNumber)return false;
+  const s=stageOptionsCache.find(x=>x.stage_number===cfg.stageNumber);
+  return s?s.stage_type==='cutting':cfg.stageType==='cutting';
+}
+function applyCutMode(){
+  const cut=isCuttingStage();
+  $('cutModeBtns').style.display=cut?'flex':'none';
+  $('cutRightSpacer').style.display=cut?'none':'';
+  if(cut&&$('scrScan').classList.contains('on'))openCuttingScreen();
+  if(cutView==='list')$('bBackCutting').style.visibility=cut?'hidden':'visible';
 }
 // Cutting-stage phones get a big "Cutting Log" button right on the scan
 // screen; every phone can still reach it from the ⌄ menu (scissors).
@@ -2046,14 +2074,14 @@ $('setAuthEye').onclick=()=>{const i=$('setAuthPw');i.type=i.type==='password'?'
 $('setAuthOk').onclick=trySettingsAuth;
 $('setAuthPw').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();trySettingsAuth();}});
 $('setAuthCancel').onclick=()=>modal('mSettingsAuth',false);
-$('bBackSettings').onclick=()=>{show('scrScan');startScanner();};
+$('bBackSettings').onclick=()=>{if(isCuttingStage()){openCuttingScreen();return;}show('scrScan');startScanner();};
 function validUrl(u){return /^https?:\/\/[^\s]+$/i.test(u);}
 $('bSaveSet').onclick=async()=>{
   const u=$('setUrl').value.trim().replace(/\/+$/,'');
   if(u&&!validUrl(u)){showFlash('bad','Receiver URL must start with http:// or https://');return;}
   const prefix=$('setFilePrefix').value.trim().replace(/[\\/:*?"<>|]/g,'').replace(/\s+/g,'_');
   const stageVal=$('setStage').value;
-  cfg.url=u;cfg.dev=$('setDev').value.trim()||'MATREX-PHONE';cfg.filePrefix=prefix||'Matrex_Scans';cfg.stageNumber=stageVal?parseInt(stageVal,10):null;lsSet(LS.cfg,cfg);show('scrScan');refreshSettings();refreshStagePill();
+  cfg.url=u;cfg.dev=$('setDev').value.trim()||'MATREX-PHONE';cfg.filePrefix=prefix||'Matrex_Scans';cfg.stageNumber=stageVal?parseInt(stageVal,10):null;const st=stageOptionsCache.find(x=>x.stage_number===cfg.stageNumber);cfg.stageType=st?st.stage_type:null;lsSet(LS.cfg,cfg);show('scrScan');refreshSettings();refreshStagePill();
   if(cfg.url&&scans.length)scheduleAutoUpload(); // flush anything already queued instead of waiting for the next scan
   if(u){const st=await registerDevice();showFlash(st==='APPROVED'?'ok':'bad','Settings saved — device '+st.toLowerCase());}
   else showFlash('ok','Settings saved');
@@ -2948,6 +2976,7 @@ function openCuttingScreen(){
   cutView='list';cutCurrent=null;cutMsg=null;
   $('cutTitle').textContent='Cutting Log';$('cutSub').textContent='Pick a batch';
   $('cutSearchWrap').style.display='';$('cutSearchInp').value='';
+  $('bBackCutting').style.visibility=isCuttingStage()?'hidden':'visible';
   show('scrCutting');
   $('cutContent').innerHTML='<div class="empty-box"><div class="es">Loading batches…</div></div>';
   flushCutQueue();
@@ -2984,6 +3013,7 @@ function renderCutList(){
 }
 function openCutBatch(batch){
   cutView='detail';cutMsg=null;cutOpenLines=new Set();
+  $('bBackCutting').style.visibility='visible';
   $('cutSearchWrap').style.display='none';
   $('cutTitle').textContent=batch;$('cutSub').textContent='Loading…';
   $('cutContent').innerHTML='<div class="empty-box"><div class="es">Loading…</div></div>';
@@ -3016,6 +3046,13 @@ function renderCutBatch(keepInputs){
   if(cutMsg)h+='<div class="cut-msg '+cutMsg.kind+'">'+esc(cutMsg.text)+'</div>';
   const pending=cutQueue().filter(x=>x.batch===b.batch).length;
   if(pending)h+='<div class="cut-msg warn">'+pending+' save'+(pending===1?'':'s')+' for this batch '+(pending===1?'is':'are')+' waiting on this phone for a connection - not in the totals below yet.</div>';
+  const pdfs=b.pdfs||[];
+  if(pdfs.length){
+    h+='<div class="cut-card"><div class="cut-meta" style="margin:0 0 8px;font-weight:600;color:var(--gray-700)">Schedule PDF'+(pdfs.length>1?'s':'')+' - for review</div>'
+      +pdfs.map(f=>'<button type="button" class="btn btn-outline" style="margin-top:6px;font-size:15px;padding:11px 14px" onclick="openCutPdf('+f.id+')">'
+        +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+        +esc(f.filename||'Schedule PDF')+'</button>').join('')+'</div>';
+  }
   h+='<div class="cut-card"><div class="fg" style="margin-bottom:0"><label class="fg-label" for="cutOperator">Your name <span class="fg-req">*</span></label>'
     +'<input class="fg-input" id="cutOperator" autocapitalize="words" placeholder="Who is cutting?" value="'+esc(lsGet(LS_CUT_OPERATOR)||'')+'"></div></div>';
   b.lines.forEach(l=>{
@@ -3048,6 +3085,10 @@ function renderCutBatch(keepInputs){
   }
   $('cutContent').innerHTML=h;
   if(keepInputs)Object.entries(saved).forEach(([id,v])=>{const el=$(id);if(!el||el.disabled)return;if(el.type==='checkbox')el.checked=v;else el.value=v;});
+}
+function openCutPdf(id){
+  if(!cutCurrent||!cfg.url)return;
+  window.open(cfg.url+'/cutting/batch/'+encodeURIComponent(cutCurrent.batch)+'/pdf/'+id+'?device_id='+encodeURIComponent(deviceId),'_blank');
 }
 async function saveCutting(){
   const b=cutCurrent;if(!b)return;
@@ -3095,8 +3136,9 @@ $('bBackCutting').onclick=()=>{
     cutView='list';cutCurrent=null;cutMsg=null;
     $('cutTitle').textContent='Cutting Log';$('cutSub').textContent='Pick a batch';
     $('cutSearchWrap').style.display='';
+    $('bBackCutting').style.visibility=isCuttingStage()?'hidden':'visible';
     renderCutList();loadCutBatches();
-  }else{
+  }else if(!isCuttingStage()){
     show('scrScan');startScanner();
   }
 };
@@ -3137,6 +3179,7 @@ function enterScanScreen(){
   // the plain Scan screen. viewerKey is already persisted (see its own
   // comment above), so reopening Production Schedule here needs no
   // re-prompt; Settings is deliberately excluded (see RESTORABLE_SCREENS).
+  if(isCuttingStage()){openCuttingScreen();return;}
   const last=lsGet(LS.lastScreen);
   if(last==='scrBatch'){openBatchStatusScreen();return;}
   if(last==='scrList'){openListScreen(listFilterMode);return;}
