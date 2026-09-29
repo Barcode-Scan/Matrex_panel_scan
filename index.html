@@ -410,6 +410,12 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .cut-tag.prog{background:var(--amber-50);color:var(--amber-700)}
 .cut-tag.done{background:var(--green-50);color:var(--green-700)}
 .cut-tag.new{background:var(--gray-100);color:var(--gray-500)}
+.cut-pos{flex-shrink:0;min-width:34px;height:34px;border-radius:10px;background:var(--gray-100);color:var(--gray-900);font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.cut-card.first{box-shadow:0 0 0 2.5px var(--blue-600),var(--shadow-sm)}
+.cut-card.first .cut-pos{background:var(--blue-600);color:#fff}
+.cut-first-lbl{font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--blue-600);text-transform:uppercase;margin-bottom:6px}
+.cut-mat-warn{font-size:12px;font-weight:700;color:var(--red-600);margin-top:6px}
+.cut-order-note{font-size:12.5px;color:var(--gray-500);margin:0 2px 10px}
 .cut-mat{font-size:17px;font-weight:700;color:var(--gray-900)}
 .cut-stats{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px;color:var(--gray-500);margin:6px 0 8px}
 .cut-stats b{color:var(--gray-900);font-variant-numeric:tabular-nums}
@@ -2970,6 +2976,8 @@ async function flushCutQueue(){
 }
 window.addEventListener('online',flushCutQueue);
 setInterval(()=>{if(cutQueue().length&&navigator.onLine)flushCutQueue();},60000);
+// The office can reorder the cutting queue at any time: refresh the list while it's showing.
+setInterval(()=>{if(cutView==='list'&&$('scrCutting').classList.contains('on')&&document.visibilityState==='visible'&&!(($('cutSearchInp').value||'').trim()&&document.activeElement===$('cutSearchInp')))loadCutBatches();},30000);
 
 function openCuttingScreen(){
   stopScanner();
@@ -3001,12 +3009,15 @@ function renderCutList(){
   if(cutMsg){h+='<div class="cut-msg '+cutMsg.kind+'">'+esc(cutMsg.text)+'</div>';}
   if(pending)h+='<div class="cut-msg warn">'+pending+' cutting entr'+(pending===1?'y is':'ies are')+' saved on this phone and will send automatically when the server is reachable.</div>';
   h+='<label class="cut-check" style="border-top:none;padding-top:0"><input type="checkbox" '+(cutShowAll?'checked':'')+' onchange="cutShowAll=this.checked;loadCutBatches()"> Show finished batches too</label>';
+  if(list.some(b=>b.queue_position))h+='<div class="cut-order-note">Cut in this order - #1 first. The office sets the order; it updates by itself.</div>';
   if(!list.length){
     h+='<div class="empty-box"><div class="et">'+(q?'No matching batches':'Nothing waiting to be cut')+'</div><div class="es">'+(q?'Try a different search.':'Batches appear here once they have material and sheet quantities in the Production Schedule.')+'</div></div>';
   }else{
-    h+=list.map(b=>'<div class="cut-card tap" onclick="openCutBatch(\''+esc(b.batch).replace(/'/g,"\\'")+'\')">'
-      +'<div class="cut-head"><div><div class="cut-batch">'+esc(b.batch)+'</div><div class="cut-meta">'+esc([b.job_name,b.floor_or_work_order].filter(Boolean).join(' · '))+(b.target_finish?' · Due '+esc(String(b.target_finish).slice(0,10)):'')+(b.priority?' · <b style="color:var(--red-600)">'+esc(b.priority)+'</b>':'')+'</div></div>'+cutStatusTag(b.cut_status)+'</div>'
+    h+=list.map(b=>'<div class="cut-card tap'+(b.queue_position===1?' first':'')+'" onclick="openCutBatch(\''+esc(b.batch).replace(/'/g,"\\'")+'\')">'
+      +(b.queue_position===1?'<div class="cut-first-lbl">Cut first</div>':'')
+      +'<div class="cut-head" style="justify-content:flex-start">'+(b.queue_position?'<div class="cut-pos">'+b.queue_position+'</div>':'')+'<div style="flex:1;min-width:0"><div class="cut-batch">'+esc(b.batch)+'</div><div class="cut-meta">'+esc([b.job_name,b.floor_or_work_order].filter(Boolean).join(' · '))+(b.target_finish?' · Due '+esc(String(b.target_finish).slice(0,10)):'')+(b.priority?' · <b style="color:var(--red-600)">'+esc(b.priority)+'</b>':'')+'</div></div>'+cutStatusTag(b.cut_status)+'</div>'
       +b.lines.map(l=>'<div class="cut-line"><span>'+esc(l.material)+(l.finish?' · '+esc(l.finish):'')+'</span><span>'+(l.done?'✓ ':'')+l.cut+' / '+cutQty(l.programmed)+' sheets</span></div>').join('')
+      +(b.queue_position&&b.material_ok===false?'<div class="cut-mat-warn">Material not confirmed by the office yet</div>':'')
       +'</div>').join('');
   }
   $('cutContent').innerHTML=h;
