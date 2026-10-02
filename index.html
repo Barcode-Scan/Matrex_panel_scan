@@ -466,6 +466,21 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .https-alert{background:var(--blue-50);border:none;border-radius:var(--r);padding:14px 16px;margin-bottom:14px;font-size:15px;color:var(--blue-700);line-height:1.65;box-shadow:var(--shadow-xs)}
 .https-alert strong{display:block;font-size:16px;margin-bottom:4px;color:var(--gray-900)}
 .https-alert code{background:var(--blue-100);padding:2px 6px;border-radius:4px;font-family:monospace;font-size:13px}
+/* UI review #7 (2026-10-02): shop-floor touch targets. Gloved hands need
+   big targets (industrial guidance ~48-60 px); these were 20-42 px tall. */
+.mach-qbtn{min-height:52px;padding:10px 16px}
+.mach-qbtn-name{font-size:15px}
+.s-btn{min-height:44px;padding:10px 18px;font-size:15px}
+.sec-link{min-height:44px;display:inline-flex;align-items:center;padding:0 8px;margin-right:-8px}
+.camsize-slider{height:36px;margin:2px 0;background:transparent}
+.camsize-slider::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--gray-200)}
+.camsize-slider::-moz-range-track{height:6px;border-radius:3px;background:var(--gray-200)}
+.camsize-slider::-webkit-slider-thumb{width:30px;height:30px;margin-top:-12px}
+.camsize-slider::-moz-range-thumb{width:30px;height:30px}
+.cut-check{min-height:48px}
+.cut-check input{width:26px;height:26px}
+.cbox .l{font-size:12.5px}
+.cut-tag,.cut-first-lbl{font-size:12px}
 </style>
 </head>
 <body>
