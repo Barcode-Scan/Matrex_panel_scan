@@ -439,6 +439,40 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .cut-msg.ok{background:var(--green-50);color:var(--green-700)}
 .cut-msg.err{background:var(--red-50);color:var(--red-600)}
 .cut-msg.warn{background:var(--amber-50);color:var(--amber-700)}
+/* ── Delivery confirmation screen ── */
+.dlv-info{font-size:13px;color:var(--gray-500);margin:0 2px 10px;line-height:1.45}
+.dlv-tools{display:flex;gap:8px;margin-bottom:12px}
+.dlv-tools .btn{flex:1;margin:0;padding:11px;font-size:15px}
+.dlv-ok{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--green-50);color:var(--green-700);white-space:nowrap;text-transform:uppercase}
+.dlv-wait{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--amber-50);color:var(--amber-700);white-space:nowrap;text-transform:uppercase}
+.dlv-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px;margin-top:8px}
+.dlv-kv span{color:var(--gray-500)}
+.dlv-kv b{color:var(--gray-900);word-break:break-word}
+.dlv-parts summary{font-size:15px;font-weight:700;color:var(--blue-600);cursor:pointer;padding:4px 0}
+.dlv-part{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:7px 0;border-top:1px solid var(--gray-100)}
+.dlv-part b{color:var(--gray-900)}
+.dlv-part small{display:block;color:var(--gray-500);font-size:12px}
+.dlv-group{font-size:12px;font-weight:800;color:var(--gray-500);letter-spacing:.5px;padding:8px 0 2px;text-transform:uppercase}
+.dlv-lbl{display:block;font-size:13px;font-weight:700;color:var(--gray-700);margin:14px 0 6px}
+.dlv-lbl em{font-style:normal;color:var(--red-600)}
+.dlv-inp{width:100%;background:var(--gray-100);border:1.5px solid transparent;border-radius:12px;padding:12px;font-size:16px;font-family:inherit;color:var(--gray-900);outline:none}
+.dlv-inp:focus{background:var(--white);border-color:var(--blue-600)}
+.dlv-chips{display:flex;flex-wrap:wrap;gap:8px}
+.dlv-chip{flex:1 1 40%;padding:12px 8px;border-radius:12px;border:1.5px solid var(--gray-200);background:var(--white);font-size:15px;font-weight:600;color:var(--gray-700);font-family:inherit;cursor:pointer}
+.dlv-chip.on{border-color:var(--blue-600);background:var(--blue-600);color:#fff}
+.dlv-chip.on.bad{border-color:var(--red-600);background:var(--red-600)}
+.dlv-photos{display:flex;flex-wrap:wrap;gap:8px}
+.dlv-photo{position:relative;width:88px;height:88px;border-radius:10px;overflow:hidden;background:var(--gray-100)}
+.dlv-photo img{width:100%;height:100%;object-fit:cover}
+.dlv-photo button{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;border:none;background:rgba(0,0,0,.6);color:#fff;font-size:15px;line-height:26px;padding:0;cursor:pointer}
+.dlv-addphoto{width:88px;height:88px;border-radius:10px;border:1.5px dashed var(--gray-300);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--gray-700);cursor:pointer;background:var(--white)}
+.dlv-sig{position:relative;background:#fff;border:1.5px solid var(--gray-200);border-radius:12px;touch-action:none}
+.dlv-sig canvas{display:block;width:100%;height:180px;touch-action:none}
+.dlv-sig .dlv-sigline{position:absolute;left:16px;right:16px;bottom:36px;border-bottom:1.5px dashed var(--gray-300);pointer-events:none}
+.dlv-sig .dlv-sighint{position:absolute;left:16px;bottom:12px;font-size:12px;color:var(--gray-500);pointer-events:none}
+.dlv-sigclear{background:none;border:none;color:var(--blue-600);font-size:14px;font-weight:600;font-family:inherit;padding:6px 0;cursor:pointer}
+.dlv-done{text-align:center;padding:24px 8px}
+.dlv-done .big{font-size:22px;font-weight:800;color:var(--gray-900);margin:10px 0 6px}
 .cut-more{width:100%;margin-top:10px;padding:10px;border-radius:12px;border:1.5px dashed var(--gray-300);background:none;font-size:14px;font-weight:600;color:var(--gray-700);font-family:inherit;cursor:pointer}
 .cut-hist{font-size:13px;color:var(--gray-700);padding:8px 0;border-top:1px solid var(--gray-100);line-height:1.45}
 .cut-hist span{color:var(--gray-500)}
@@ -565,6 +599,11 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
           <button class="tb-btn" id="bCutting" aria-label="Cutting log">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>
+            </svg>
+          </button>
+          <button class="tb-btn" id="bDelivery" aria-label="Delivery confirmation">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
             </svg>
           </button>
           <button class="tb-btn" id="bSettings" aria-label="Settings">
@@ -796,6 +835,22 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
     <input class="search-inp" id="cutSearchInp" placeholder="Search batch, job, material…" autocapitalize="characters">
   </div>
   <div id="cutContent" class="page"></div>
+</div>
+
+<!-- DELIVERY CONFIRMATION -->
+<div class="screen" id="scrDelivery">
+  <div class="topbar">
+    <button class="tb-btn" id="bBackDelivery" aria-label="Back" type="button" style="width:auto;padding:0 10px;gap:6px;font-size:16px;font-weight:600">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Back
+    </button>
+    <div><div class="tb-name" style="font-size:16px" id="dlvTitle">Delivery</div><div class="tb-date" id="dlvSub">Scan the QR on the packing slip</div></div>
+    <div style="width:70px"></div>
+  </div>
+  <div class="search-wrap" id="dlvSearchWrap">
+    <input class="search-inp" id="dlvSearchInp" placeholder="Search slip, batch, ship to…" autocapitalize="characters">
+  </div>
+  <div id="dlvContent" class="page"></div>
 </div>
 
 <!-- SETTINGS -->
@@ -1770,6 +1825,9 @@ function logDecodeReject(raw){
 async function handleRaw(raw,method){
   raw=String(raw).trim();if(!raw)return;
   if(method!=='SCAN')return; // manual entry is handled entirely by its own modal/button, not here
+  // The delivery QR printed on a packing slip opens Delivery confirmation.
+  const dlvSlip=parseDeliveryQr(raw);
+  if(dlvSlip){beep('ok');openDeliveryScreen(dlvSlip);return;}
   // Hard requirement on a Bending phone - no scan gets processed (not
   // even saved locally) without a machine actively selected. Checked
   // here, before the barcode is even validated, so nothing about this
@@ -3169,6 +3227,225 @@ $('bBackCutting').onclick=()=>{
   }
 };
 
+// ── DELIVERY CONFIRMATION ─────────────────────────────────
+// The packing slip carries a QR (server delivery.js) = <this app>?deliver=<slip>.
+// At the delivery site the phone usually can't reach the shop server, so:
+//  - while on the shop network the app keeps a copy of the recent packing
+//    slips (summary + part list) on the phone (/delivery/slips);
+//  - scanning the QR (in this app's scanner, or with the phone camera, which
+//    opens this app) shows that slip from the copy and takes receiver name +
+//    signature, photos, condition / notes and driver + carrier;
+//  - the confirmation is queued on the phone and sent automatically once the
+//    server is reachable again (same idea as the Cutting Log queue).
+const LS_DLV_SLIPS='mx_dlv_slips',LS_DLV_QUEUE='mx_dlv_queue',LS_DLV_DRIVER='mx_dlv_driver';
+const DLV_CARRIERS=['Matrex truck','UPS','FedEx','Purolator','Other'];
+const DLV_CONDITIONS=[['OK','Received OK'],['DAMAGED','Damaged'],['SHORT','Short / missing'],['OTHER','Other']];
+let pendingDeliverySlip=null;
+let dlvView='list',dlvSlip=null,dlvForm=null,dlvMsg=null;
+function parseDeliveryQr(raw){
+  const m=/[?&]deliver=([A-Za-z0-9-]{1,40})/.exec(String(raw||''));
+  return m?decodeURIComponent(m[1]).toUpperCase():null;
+}
+(function(){ // opened from the QR link with the phone's own camera
+  const s=parseDeliveryQr(location.search);
+  if(s){pendingDeliverySlip=s;try{history.replaceState(null,'',location.pathname);}catch(e){}}
+})();
+const dlvCache=()=>lsGet(LS_DLV_SLIPS)||{fetched_at:null,slips:[]};
+const dlvQueue=()=>lsGet(LS_DLV_QUEUE)||[];
+const dlvQueuedFor=sn=>dlvQueue().find(q=>q.slip_number===sn);
+async function refreshDeliverySlips(quiet){
+  if(!cfg.url)return false;
+  try{
+    const r=await fetch(cfg.url+'/delivery/slips?device_id='+encodeURIComponent(deviceId),{signal:AbortSignal.timeout(10000)});
+    if(r.status===403){if(!quiet)dlvMsg={kind:'err',text:'This phone is not approved on the server yet - ask an admin to approve it (Operations → Devices).'};return false;}
+    if(!r.ok){if(!quiet)dlvMsg={kind:'err',text:r.status===404?'The server has not been updated for deliveries yet - ask the office to restart the Matrex Server.':'Server error (HTTP '+r.status+')'};return false;}
+    const j=await r.json();
+    try{lsSet(LS_DLV_SLIPS,{fetched_at:j.fetched_at,slips:j.slips||[]});}catch(e){
+      // Phone storage full - keep the newest slips only.
+      try{lsSet(LS_DLV_SLIPS,{fetched_at:j.fetched_at,slips:(j.slips||[]).slice(0,60)});}catch(e2){}
+    }
+    return true;
+  }catch(e){return false;}
+}
+function openDeliveryScreen(slipNumber){
+  stopScanner();
+  dlvMsg=null;
+  show('scrDelivery');
+  flushDeliveryQueue();
+  if(slipNumber){openDeliverySlip(slipNumber);refreshDeliverySlips(true);return;}
+  dlvView='list';dlvSlip=null;
+  renderDeliveryList();
+  refreshDeliverySlips(false).then(()=>{if(dlvView==='list'&&$('scrDelivery').classList.contains('on'))renderDeliveryList();});
+}
+function renderDeliveryList(){
+  $('dlvTitle').textContent='Delivery';$('dlvSub').textContent='Scan the QR on the packing slip';
+  $('dlvSearchWrap').style.display='';
+  const c=dlvCache(),q=dlvQueue();
+  const words=($('dlvSearchInp').value||'').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const list=c.slips.filter(s=>{const h=[s.slip_number,s.batch,s.ship_to,s.job_name,s.po_number].join(' ').toLowerCase();return words.every(w=>h.includes(w));});
+  let h='';
+  if(dlvMsg)h+='<div class="cut-msg '+dlvMsg.kind+'">'+esc(dlvMsg.text)+'</div>';
+  h+='<div class="dlv-tools"><button class="btn btn-solid" type="button" onclick="dlvScanQr()">Scan packing slip QR</button><button class="btn btn-outline" type="button" onclick="dlvRefresh()">Refresh</button></div>';
+  h+='<div class="dlv-info">'+(c.fetched_at?'Packing slips on this phone: '+c.slips.length+' · downloaded '+esc(fmtDT(c.fetched_at))+'. Open this screen on the shop Wi-Fi before leaving so the slips are on the phone at the delivery site.':'No packing slips on this phone yet - open this screen on the shop Wi-Fi to download them.')+(q.length?' <b style="color:var(--amber-700)">'+q.length+' confirmation'+(q.length===1?'':'s')+' waiting to send.</b>':'')+'</div>';
+  if(!list.length)h+='<div class="empty-box"><div class="es">'+(words.length?'No packing slip matches.':'No packing slips yet.')+'</div></div>';
+  h+=list.slice(0,80).map(s=>{
+    const queued=dlvQueuedFor(s.slip_number);
+    const tag=queued?'<span class="dlv-wait">Waiting to send</span>':s.delivered?'<span class="dlv-ok">Delivered</span>':'';
+    return '<div class="cut-card tap" onclick="openDeliverySlip(\''+esc(s.slip_number)+'\')"><div class="cut-head"><div style="min-width:0"><div class="cut-batch">'+esc(s.slip_number)+' · '+esc(s.batch)+'</div><div class="cut-meta">'+esc([s.ship_to,s.job_name,s.slip_date].filter(Boolean).join(' · '))+' · '+s.part_count+' part'+(s.part_count===1?'':'s')+(s.skid_count?' · '+s.skid_count+' skid'+(s.skid_count==1?'':'s'):'')+'</div></div>'+tag+'</div></div>';
+  }).join('');
+  $('dlvContent').innerHTML=h;
+}
+function dlvRefresh(){dlvMsg=null;$('dlvContent').querySelector('.dlv-info')&&($('dlvContent').querySelector('.dlv-info').textContent='Downloading…');refreshDeliverySlips(false).then(ok=>{if(!ok&&!dlvMsg)dlvMsg={kind:'warn',text:'Could not reach the server - showing the slips already on this phone.'};renderDeliveryList();});}
+function dlvScanQr(){show('scrScan');startScanner();showFlash('ok','Point the camera at the QR code on the packing slip');}
+async function openDeliverySlip(slipNumber){
+  slipNumber=String(slipNumber||'').toUpperCase();
+  let s=dlvCache().slips.find(x=>String(x.slip_number).toUpperCase()===slipNumber)||null;
+  if(!s&&cfg.url){ // not on the phone yet - try the server (works on the shop network)
+    try{const r=await fetch(cfg.url+'/delivery/slip/'+encodeURIComponent(slipNumber)+'?device_id='+encodeURIComponent(deviceId),{signal:AbortSignal.timeout(6000)});if(r.ok)s=(await r.json()).slip;}catch(e){}
+  }
+  dlvView='form';
+  dlvSlip=s||{slip_number:slipNumber,_unknown:true,parts:[]};
+  const drv=lsGet(LS_DLV_DRIVER)||{};
+  dlvForm={driver_name:drv.name||'',carrier:drv.carrier||'Matrex truck',received_by:'',condition:'OK',notes:'',photos:[],signed:false};
+  renderDeliveryForm();
+}
+function renderDeliveryForm(){
+  const s=dlvSlip,f=dlvForm;
+  $('dlvTitle').textContent=s.slip_number;$('dlvSub').textContent=s.batch||'Delivery confirmation';
+  $('dlvSearchWrap').style.display='none';
+  const queued=dlvQueuedFor(s.slip_number);
+  let h='';
+  if(dlvMsg)h+='<div class="cut-msg '+dlvMsg.kind+'">'+esc(dlvMsg.text)+'</div>';
+  if(queued)h+='<div class="cut-msg warn">A confirmation for this slip is already saved on this phone and waiting to send.</div>';
+  else if(s.delivered)h+='<div class="cut-msg ok">Already confirmed as delivered '+esc(fmtDT(s.delivered.delivered_at))+' - received by '+esc(s.delivered.received_by)+'. Sending another confirmation adds a new record.</div>';
+  if(s._unknown){
+    h+='<div class="cut-card"><div class="cut-batch">'+esc(s.slip_number)+'</div><div class="cut-meta">The details of this slip are not on this phone (open Delivery on the shop Wi-Fi before leaving to download them). You can still confirm the delivery - it is matched to the slip when it is sent.</div></div>';
+  }else{
+    const kv=[['Batch',s.batch],['Ship to',s.ship_to],['Job',s.job_name],['Floor / WO',s.floor_or_work_order],['PO',s.po_number?'PO-'+String(s.po_number).replace(/^PO-?/i,''):''],['Part name',s.part_name],['Skids',s.skid_count],['Parts',s.part_count]].filter(([,v])=>v!==''&&v!=null);
+    h+='<div class="cut-card"><div class="cut-batch">Packing slip '+esc(s.slip_number)+'</div><div class="dlv-kv">'+kv.map(([k,v])=>'<span>'+esc(k)+'</span><b>'+esc(v)+'</b>').join('')+'</div></div>';
+    let lastGroup=null;
+    const rows=(s.parts||[]).map(p=>{const g=p.group&&p.group!==lastGroup?'<div class="dlv-group">'+esc(p.group)+'</div>':'';lastGroup=p.group||lastGroup;return g+'<div class="dlv-part"><div><b>'+esc(p.tag)+'</b><small>'+esc([p.part_type,p.size,p.colour].filter(Boolean).join(' · '))+'</small></div><div>Qty <b>'+esc(p.qty||'-')+'</b></div></div>';}).join('');
+    h+='<div class="cut-card"><details class="dlv-parts"><summary>Part list ('+s.part_count+' part'+(s.part_count===1?'':'s')+')</summary>'+(rows||'<div class="cut-meta">No parts listed.</div>')+'</details></div>';
+  }
+  h+='<div class="cut-card">';
+  h+='<label class="dlv-lbl" for="dlvDriver">Driver name <em>*</em></label><input class="dlv-inp" id="dlvDriver" value="'+esc(f.driver_name)+'" autocomplete="name">';
+  h+='<label class="dlv-lbl">Carrier</label><div class="dlv-chips">'+DLV_CARRIERS.map(c=>'<button type="button" class="dlv-chip'+(f.carrier===c?' on':'')+'" onclick="dlvSet(\'carrier\',\''+c+'\')">'+esc(c)+'</button>').join('')+'</div>';
+  h+='<label class="dlv-lbl" for="dlvReceiver">Received by (name) <em>*</em></label><input class="dlv-inp" id="dlvReceiver" value="'+esc(f.received_by)+'">';
+  h+='<label class="dlv-lbl">Condition</label><div class="dlv-chips">'+DLV_CONDITIONS.map(([k,l])=>'<button type="button" class="dlv-chip'+(f.condition===k?' on'+(k==='OK'?'':' bad'):'')+'" onclick="dlvSet(\'condition\',\''+k+'\')">'+esc(l)+'</button>').join('')+'</div>';
+  h+='<label class="dlv-lbl" for="dlvNotes">Notes'+(f.condition!=='OK'?' <em>* describe the problem</em>':'')+'</label><textarea class="dlv-inp" id="dlvNotes" rows="3" placeholder="Damage, missing items, where it was left…">'+esc(f.notes)+'</textarea>';
+  h+='<label class="dlv-lbl">Photos of the delivered skids ('+f.photos.length+'/4)</label><div class="dlv-photos">'+f.photos.map((p,i)=>'<div class="dlv-photo"><img src="'+p+'" alt="Photo '+(i+1)+'"><button type="button" aria-label="Remove photo" onclick="dlvRemovePhoto('+i+')">×</button></div>').join('')+(f.photos.length<4?'<label class="dlv-addphoto"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Add photo<input type="file" accept="image/*" capture="environment" multiple style="display:none" onchange="dlvAddPhotos(this)"></label>':'')+'</div>';
+  h+='<label class="dlv-lbl">Receiver signature <em>*</em></label><div class="dlv-sig"><canvas id="dlvSigCanvas"></canvas><div class="dlv-sigline"></div><div class="dlv-sighint">Sign above the line</div></div><button type="button" class="dlv-sigclear" onclick="dlvClearSig()">Clear signature</button>';
+  h+='</div>';
+  h+='<button class="btn btn-solid" id="bDlvSave" type="button" onclick="saveDelivery()" style="margin-top:4px">Confirm Delivery</button>';
+  $('dlvContent').innerHTML=h;
+  dlvSetupSig();
+}
+function dlvReadInputs(){
+  if(!dlvForm)return;
+  const g=id=>$(id)?$(id).value:'';
+  dlvForm.driver_name=g('dlvDriver');dlvForm.received_by=g('dlvReceiver');dlvForm.notes=g('dlvNotes');
+}
+function dlvSet(k,v){dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm[k]=v;renderDeliveryForm();}
+function dlvRemovePhoto(i){dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm.photos.splice(i,1);renderDeliveryForm();}
+// Photos are shrunk on the phone (longest side 1280px, JPEG) so they fit in
+// the phone's offline queue and upload quickly.
+function dlvShrink(file){
+  return new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file);const img=new Image();
+    img.onload=()=>{const k=Math.min(1,1280/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);resolve(c.toDataURL('image/jpeg',0.7));};
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('not an image'));};
+    img.src=url;
+  });
+}
+async function dlvAddPhotos(input){
+  dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();
+  for(const file of Array.from(input.files||[])){
+    if(dlvForm.photos.length>=4)break;
+    try{dlvForm.photos.push(await dlvShrink(file));}catch(e){}
+  }
+  renderDeliveryForm();
+}
+// Signature pad: pointer events cover finger, pen and mouse.
+let dlvSigCtx=null;
+function dlvSetupSig(){
+  const c=$('dlvSigCanvas');if(!c)return;
+  const r=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
+  c.width=Math.round(r.width*dpr);c.height=Math.round(r.height*dpr);
+  const ctx=c.getContext('2d');ctx.scale(dpr,dpr);
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,r.width,r.height);
+  ctx.lineWidth=2.5;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#111';
+  dlvSigCtx=ctx;
+  if(dlvForm.sigData){const img=new Image();img.onload=()=>ctx.drawImage(img,0,0,r.width,r.height);img.src=dlvForm.sigData;}
+  let drawing=false;
+  const pt=e=>{const b=c.getBoundingClientRect();return[e.clientX-b.left,e.clientY-b.top];};
+  c.onpointerdown=e=>{drawing=true;c.setPointerCapture(e.pointerId);const[x,y]=pt(e);ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+0.1,y+0.1);ctx.stroke();dlvForm.signed=true;};
+  c.onpointermove=e=>{if(!drawing)return;const[x,y]=pt(e);ctx.lineTo(x,y);ctx.stroke();};
+  c.onpointerup=c.onpointercancel=()=>{drawing=false;};
+}
+function dlvSigDataUrl(){const c=$('dlvSigCanvas');return c&&dlvForm&&dlvForm.signed?c.toDataURL('image/png'):(dlvForm&&dlvForm.sigData)||null;}
+function dlvClearSig(){dlvForm.signed=false;dlvForm.sigData=null;dlvSetupSig();}
+// Returns {ok,data} | {ok:false,permanent:true,error} | {ok:false,permanent:false,error}
+async function dlvPost(rec){
+  try{
+    const r=await fetch(cfg.url+'/delivery/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...rec,device_id:deviceId,device:cfg.dev}),signal:AbortSignal.timeout(30000)});
+    const j=await r.json().catch(()=>({}));
+    if(r.ok)return{ok:true,data:j};
+    if(r.status===404&&!j.error)return{ok:false,permanent:false,error:'Server not updated yet'};
+    if(r.status===403)return{ok:false,permanent:false,error:'This phone is not approved on the server'};
+    if(r.status>=400&&r.status<500)return{ok:false,permanent:true,error:j.error||('HTTP '+r.status)};
+    return{ok:false,permanent:false,error:'Server error (HTTP '+r.status+')'};
+  }catch(e){return{ok:false,permanent:false,error:'No connection'};}
+}
+let dlvFlushing=false;
+async function flushDeliveryQueue(){
+  if(dlvFlushing||!cfg.url||!dlvQueue().length)return;
+  dlvFlushing=true;let sent=0;
+  try{
+    let q=dlvQueue();
+    while(q.length){
+      const r=await dlvPost(q[0]);
+      if(!r.ok&&!r.permanent)break;
+      if(r.ok)sent++;else dlvMsg={kind:'err',text:'The delivery confirmation for '+q[0].slip_number+' was rejected by the server: '+r.error};
+      q=q.slice(1);lsSet(LS_DLV_QUEUE,q);
+    }
+  }finally{dlvFlushing=false;}
+  if(sent){refreshDeliverySlips(true).then(()=>{if(dlvView==='list'&&$('scrDelivery').classList.contains('on'))renderDeliveryList();});if(dlvView==='list'&&$('scrDelivery').classList.contains('on')){dlvMsg={kind:'ok',text:sent+' delivery confirmation'+(sent===1?'':'s')+' sent to the office.'};renderDeliveryList();}}
+}
+window.addEventListener('online',flushDeliveryQueue);
+setInterval(()=>{if(dlvQueue().length)flushDeliveryQueue();},60000);
+// Keep the phone's copy of the packing slips fresh while it is on the shop network.
+setInterval(()=>{if(cfg.url&&document.visibilityState==='visible')refreshDeliverySlips(true);},10*60000);
+setTimeout(()=>{if(cfg.url)refreshDeliverySlips(true);},4000);
+async function saveDelivery(){
+  dlvReadInputs();
+  const f=dlvForm,s=dlvSlip;
+  const err=!f.driver_name.trim()?'Enter the driver name.':!f.received_by.trim()?'Enter the name of the person receiving the delivery.':(f.condition!=='OK'&&!f.notes.trim())?'Describe the problem in Notes.':!dlvSigDataUrl()?'The receiver needs to sign.':'';
+  if(err){beep('err');dlvMsg={kind:'err',text:err};f.sigData=dlvSigDataUrl();renderDeliveryForm();window.scrollTo({top:0,behavior:'smooth'});return;}
+  try{lsSet(LS_DLV_DRIVER,{name:f.driver_name.trim(),carrier:f.carrier});}catch(e){}
+  const rec={confirmation_id:uuid(),slip_number:s.slip_number,received_by:f.received_by.trim(),driver_name:f.driver_name.trim(),carrier:f.carrier,condition:f.condition,notes:f.notes.trim(),signature:dlvSigDataUrl(),photos:f.photos.slice(),delivered_at:new Date().toISOString()};
+  const btn=$('bDlvSave');btn.disabled=true;btn.textContent='Saving…';
+  const r=cfg.url?await dlvPost(rec):{ok:false,permanent:false,error:'No server configured'};
+  let msg;
+  if(r.ok){msg='Sent to the office.';refreshDeliverySlips(true);}
+  else if(r.permanent){btn.disabled=false;btn.textContent='Confirm Delivery';dlvMsg={kind:'err',text:'Not saved: '+r.error};f.sigData=dlvSigDataUrl();renderDeliveryForm();window.scrollTo({top:0,behavior:'smooth'});return;}
+  else{
+    try{lsSet(LS_DLV_QUEUE,[...dlvQueue(),rec]);}catch(e){
+      btn.disabled=false;btn.textContent='Confirm Delivery';beep('err');
+      dlvMsg={kind:'err',text:'Phone storage is full - remove a photo and try again, or go back on the shop Wi-Fi so the waiting confirmations can send.'};f.sigData=dlvSigDataUrl();renderDeliveryForm();return;
+    }
+    msg='No connection to the office - saved on this phone. It sends by itself when the phone is back on the shop network.';
+  }
+  beep('ok');
+  dlvView='done';
+  $('dlvContent').innerHTML='<div class="cut-card dlv-done"><svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="var(--green-700)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="7 12.5 10.5 16 17 9"/></svg><div class="big">Delivery confirmed</div><div class="cut-meta">'+esc(s.slip_number)+(s.batch?' · '+esc(s.batch):'')+' · received by '+esc(rec.received_by)+'</div><div class="cut-msg '+(r.ok?'ok':'warn')+'" style="margin-top:14px">'+esc(msg)+'</div><button class="btn btn-outline" type="button" onclick="openDeliveryScreen()">Done</button></div>';
+}
+$('bDelivery').onclick=()=>openDeliveryScreen();
+$('dlvSearchInp').addEventListener('input',()=>{if(dlvView==='list')renderDeliveryList();});
+$('bBackDelivery').onclick=()=>{
+  if(dlvView==='form'){dlvView='list';dlvMsg=null;renderDeliveryList();}
+  else{show('scrScan');startScanner();}
+};
+
 // ── LOGIN ──────────────────────────────────────────────────
 $('pwEye').onclick=()=>{const i=$('pwInput');i.type=i.type==='password'?'text':'password';};
 $('pwBtn').onclick=tryUnlock;
@@ -3197,6 +3474,7 @@ function checkAuth(){
 // current line statuses, not from anything that could've gone stale if
 // another device progressed the same batch while this one was reloading.
 function enterScanScreen(){
+  if(pendingDeliverySlip){const s=pendingDeliverySlip;pendingDeliverySlip=null;openDeliveryScreen(s);return;}
   const activeBatch=lsGet(LS.activeDirBatch);
   if(activeBatch){openDirectedScanScreen(activeBatch);return;}
   // No mid-job directed batch to rehydrate into — fall back to whichever
