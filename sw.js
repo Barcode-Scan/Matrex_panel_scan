@@ -21,8 +21,10 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  // 4 s limit (2026-10-30): with no network the saved copy opens quickly
+  // instead of waiting for the browser to give up on the network.
   e.respondWith(
-    fetch(req)
+    fetch(req, { signal: AbortSignal.timeout(4000) })
       .then(res => {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(req, copy));

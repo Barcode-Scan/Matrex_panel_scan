@@ -1042,6 +1042,11 @@ function registerDevice(url){
 // this fetches it fresh whenever Settings opens rather than hardcoding
 // options here. Ungated (GET /parts/stages needs no device approval or
 // key), same low-sensitivity category as /health.
+// The stage list is also kept on the phone (2026-10-30) so with no network
+// the Stage pill still shows its name and Bending still asks for a machine.
+const LS_STAGES='mx_stage_list';
+function cachedStages(){try{const s=lsGet(LS_STAGES);return Array.isArray(s)?s:[];}catch(e){return[];}}
+if(!stageOptionsCache.length)stageOptionsCache=cachedStages();
 async function loadStageOptions(){
   const sel=$('setStage');
   const prevValue=cfg.stageNumber?String(cfg.stageNumber):'';
@@ -1052,7 +1057,7 @@ async function loadStageOptions(){
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
     const stages=data.stages||[];
-    stageOptionsCache=stages;
+    stageOptionsCache=stages;lsSet(LS_STAGES,stages);
     // "Stage N" is the display order (position), not stage_number - the number
     // is a permanent id the server can reorder around (see db.js server-side).
     sel.innerHTML=classicOpt+stages.map((s,i)=>`<option value="${s.stage_number}">Stage ${s.position||i+1} — ${esc(s.stage_name)}${s.stage_type==='cutting'?' (Cutting Log)':''}</option>`).join('');
@@ -1061,7 +1066,11 @@ async function loadStageOptions(){
     // the classic option plus whatever was already saved (as a bare
     // number, name unknown) so opening Settings offline never silently
     // clears an existing stage assignment out from under someone.
-    sel.innerHTML=classicOpt+(prevValue?`<option value="${prevValue}">Stage ${prevValue} (offline — name unavailable)</option>`:'');
+    const cached=cachedStages();
+    if(cached.length){
+      stageOptionsCache=cached;
+      sel.innerHTML=classicOpt+cached.map((s,i)=>`<option value="${s.stage_number}">Stage ${s.position||i+1} — ${esc(s.stage_name)} (saved on phone)</option>`).join('');
+    }else sel.innerHTML=classicOpt+(prevValue?`<option value="${prevValue}">Stage ${prevValue} (offline — name unavailable)</option>`:'');
   }
   sel.value=prevValue;
   refreshStagePill();
@@ -1324,7 +1333,7 @@ async function uploadToServer(reason){
     // qty/colour/skid/method/flag/time) so the server doesn't need to
     // re-parse the CSV text, which has Excel-safety quoting applied that
     // would make it lossy to reverse.
-    const r=await fetch(cfg.url+'/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:csvName(),csv:buildCSV(),device:cfg.dev,device_id:deviceId,date:today,count:scans.length,reason,rows:scans})});
+    const r=await fetch(cfg.url+'/upload',{method:'POST',signal:AbortSignal.timeout(20000),headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:csvName(),csv:buildCSV(),device:cfg.dev,device_id:deviceId,date:today,count:scans.length,reason,rows:scans})});
     if(r.status===403){
       const j=await r.json().catch(()=>({}));
       deviceStatus=j.status||'UNKNOWN';
@@ -1852,7 +1861,8 @@ function blankPart(uniqueId){
     // reconcile that runs after the phone's stage setting has since
     // changed still submits under whatever stage was actually active
     // when this part was scanned.
-    stageNumber:cfg.stageNumber||null
+    stageNumber:cfg.stageNumber||null,
+    machine:cfg.machine||null
   };
 }
 // Applies a /parts/match response onto a part record. NOT_FOUND has no
@@ -1885,12 +1895,34 @@ function applyMatch(part,data){
   part.batch=data.batch||'';
   checkMachineNudgeOnBatchChange(part.batch);
 }
+// ── OFFLINE SCANNING (2026-10-30) ─────────────────────────────
+// The tag check waits at most 3 s (Break Press must not slow down). No
+// answer -> the scan is saved on the phone straight away (OK beep, amber
+// "saved offline") and the phone stops asking the server for a while:
+// every next scan saves instantly while a quiet check (every 15 s) waits
+// for the server. When it answers, every saved scan is sent with its real
+// scan time and the screen says how many went through.
+const MATCH_TIMEOUT_MS=3000;
+let serverDown=false,probeTimer=null;
+function markServerDown(){
+  if(!serverDown){serverDown=true;setSyncUI('fail','Server not reachable — scans are saved on this phone');}
+  clearTimeout(probeTimer);probeTimer=setTimeout(probeServer,15000);
+}
+async function probeServer(){
+  if(!cfg.url)return;
+  try{
+    const r=await fetch(cfg.url+'/health',{cache:'no-store',signal:AbortSignal.timeout(3000)});
+    if(r.ok){serverDown=false;setSyncUI('','Back online');reconcileUnverified();return;}
+  }catch(e){}
+  clearTimeout(probeTimer);probeTimer=setTimeout(probeServer,15000);
+}
+const unverifiedCount=()=>scans.filter(s=>s.matchStatus==='UNVERIFIED').length;
 async function handleScan(uniqueId){
   // Local guard against re-adding the identical ID twice in today's list
   // — only matters when we can't ask the server (phone-only mode or
   // offline); once online, the server's own MATCHED_ALREADY is the
   // authoritative answer and this never fires for a second device/day.
-  if((!cfg.url||!navigator.onLine)&&scans.some(s=>s.uniqueId===uniqueId)){
+  if((!cfg.url||!navigator.onLine||serverDown)&&scans.some(s=>s.uniqueId===uniqueId&&(s.stageNumber||null)===(cfg.stageNumber||null))){
     beep('err');showFlash('bad','Already scanned today.');return;
   }
 
@@ -1900,13 +1932,13 @@ async function handleScan(uniqueId){
     part.flag='UNVERIFIED';part.matchStatus='UNVERIFIED';
     commit(part);return;
   }
-  if(!navigator.onLine){
+  if(!navigator.onLine||serverDown){
     part.flag='UNVERIFIED';part.matchStatus='UNVERIFIED';
-    commit(part);showFlash('bad','Offline — saved, will verify when back online');return;
+    commit(part);if(!navigator.onLine)markServerDown();return;
   }
 
   try{
-    const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:cfg.machine||undefined})});
+    const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:cfg.machine||undefined}),signal:AbortSignal.timeout(MATCH_TIMEOUT_MS)});
     if(res.status===403){
       const j=await res.json().catch(()=>({}));
       deviceStatus=j.status||'UNKNOWN';
@@ -1917,7 +1949,9 @@ async function handleScan(uniqueId){
     const data=await res.json();
     applyMatch(part,data);
   }catch(e){
+    // no answer in 3 s, or no connection: keep it on the phone, send later
     part.flag='UNVERIFIED';part.matchStatus='UNVERIFIED';
+    if(!/^HTTP /.test(e&&e.message||''))markServerDown(); // an error reply is not "server down"
   }
   commit(part);
 }
@@ -1931,25 +1965,29 @@ async function reconcileUnverified(){
   const pending=scans.filter(s=>s.matchStatus==='UNVERIFIED');
   if(!pending.length)return;
   reconciling=true;
+  let sent=0;
   for(const part of pending){
     try{
-      const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:part.uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:cfg.machine||undefined})});
+      const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:part.uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:part.machine||cfg.machine||undefined,offline:true}),signal:AbortSignal.timeout(6000)});
       if(!res.ok)continue; // still unreachable/unapproved — leave UNVERIFIED, try again next time
       const data=await res.json();
-      applyMatch(part,data);
-    }catch(e){/* leave UNVERIFIED, will retry on the next reconnect */}
+      applyMatch(part,data);sent++;
+    }catch(e){markServerDown();break;/* leave the rest UNVERIFIED - tried again when the server answers */}
   }
   refreshBatchProgressFromScans();
   saveScans();updateCounters();renderRecent();
   if($('scrList').classList.contains('on'))renderFull($('searchInp').value);
   reconciling=false;
+  if(sent){showFlash('ok','Back online — '+sent+' saved scan'+(sent===1?'':'s')+' sent');uploadToServer('reconcile');}
 }
+// while scans are waiting on the phone, try to send them every 20 s
+setInterval(()=>{if(cfg.url&&!serverDown&&navigator.onLine&&unverifiedCount())reconcileUnverified();},20000);
 
-const FLAG_MSGS={DUPLICATE:'Already scanned',VOID:'VOIDED part',NOT_REGISTERED:'Not registered',UNVERIFIED:'Unverified — offline',HOLD:'QUALITY HOLD'};
+const FLAG_MSGS={DUPLICATE:'Already scanned',VOID:'VOIDED part',NOT_REGISTERED:'Not registered',UNVERIFIED:'Saved on phone — sends when back online',HOLD:'QUALITY HOLD'};
 function commit(part){
   scans.push(part);saveScans();
   if(part.batchTotal!=null){currentBatchScanned=part.batchScanned;currentBatchTotal=part.batchTotal;}
-  beep(part.flag?'err':'ok');updateCounters();renderRecent();
+  beep(part.flag&&part.flag!=='UNVERIFIED'?'err':'ok');updateCounters();renderRecent();
   const base=part.partName+(part.colour?' — '+part.colour:'');
   // A stage-scoped duplicate ("already scanned at Stage 2") reads very
   // differently from a classic one ("already scanned" full stop, the
