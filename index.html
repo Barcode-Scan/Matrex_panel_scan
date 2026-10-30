@@ -1007,7 +1007,37 @@ function uuid(){
 }
 const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const lsGet=k=>{try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}};
-const lsSet=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+// Phone storage (2026-10-30): an iPhone gives this page about 5 MB. Every day's
+// scans used to be kept forever, so a busy phone (PANEL_MATREX, 10,600 scans
+// since Aug 13) filled it up - then every save threw, which stopped each
+// scan right after the server answered: no beep, no message, nothing on the
+// phone. Now only the last KEEP_SCAN_DAYS days are kept (older days are on
+// the server), and a full storage frees the oldest day and tries again;
+// lsSet never throws.
+const KEEP_SCAN_DAYS=7;
+let phoneStorageFull=false;
+function pruneOldScanDays(force){
+  const td=todayStr();
+  const days=Object.keys(localStorage).filter(k=>k.startsWith('mx_scans_')).map(k=>k.slice(9)).filter(d=>d!==td).sort();
+  const c=new Date(td+'T12:00:00');c.setDate(c.getDate()-KEEP_SCAN_DAYS);
+  const cutoff=c.getFullYear()+'-'+String(c.getMonth()+1).padStart(2,'0')+'-'+String(c.getDate()).padStart(2,'0');
+  let removed=0;
+  for(const d of days){
+    if(!force&&d>=cutoff)continue;
+    if(!force){let l=[];try{l=JSON.parse(localStorage.getItem('mx_scans_'+d))||[];}catch(e){}if(l.some(s=>s&&s.matchStatus==='UNVERIFIED'))continue;}
+    localStorage.removeItem('mx_scans_'+d);localStorage.removeItem('mx_synced_'+d);removed++;
+    if(force)break; // under pressure: free one (the oldest) day at a time
+  }
+  return removed;
+}
+const lsSet=(k,v)=>{
+  const s=JSON.stringify(v);
+  for(let i=0;i<60;i++){
+    try{localStorage.setItem(k,s);phoneStorageFull=false;return true;}
+    catch(e){if(!pruneOldScanDays(true))break;}
+  }
+  phoneStorageFull=true;return false;
+};
 // Screens safe to silently rehydrate into after a hard refresh: no
 // password prompt they'd otherwise have to pass again (scrSettings is
 // gated by SETTINGS_PASSWORD but never persists the unlock, so it's
@@ -1037,7 +1067,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-10-30.2';
+const APP_VERSION='2026-10-30.3';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1281,6 +1311,7 @@ let scanMode='FREE'; // 'FREE' | 'DIRECTED'
 
 // ── DATA ──────────────────────────────────────────────────
 function loadScans(){
+  try{const n=pruneOldScanDays(false);if(n&&typeof diag==='function')diag('storage_pruned',n+' old day(s) removed from the phone');}catch(e){}
   scans=lsGet(LS.scans(today))||[];
   currentSkid=scans.length?(scans[scans.length-1].skid||null):null;
   refreshBatchProgressFromScans();
@@ -2023,7 +2054,9 @@ setInterval(()=>{if(cfg.url&&!serverDown&&navigator.onLine&&unverifiedCount())re
 
 const FLAG_MSGS={DUPLICATE:'Already scanned',VOID:'VOIDED part',NOT_REGISTERED:'Not registered',UNVERIFIED:'Saved on phone — sends when back online',HOLD:'QUALITY HOLD'};
 function commit(part){
-  scans.push(part);saveScans();
+  scans.push(part);
+  try{saveScans();}catch(e){phoneStorageFull=true;}
+  if(phoneStorageFull)diag('storage_full','could not keep '+part.uniqueId+' on the phone');
   if(part.batchTotal!=null){currentBatchScanned=part.batchScanned;currentBatchTotal=part.batchTotal;}
   beep(part.flag&&part.flag!=='UNVERIFIED'?'err':'ok');updateCounters();renderRecent();
   const base=part.partName+(part.colour?' — '+part.colour:'');
@@ -2036,7 +2069,7 @@ function commit(part){
   const flagMsg=part.flag==='DUPLICATE'&&part.stageName?'Already scanned at '+part.stageName
     :part.flag==='HOLD'&&part.holdReason?'QUALITY HOLD — '+part.holdReason
     :FLAG_MSGS[part.flag];
-  showFlash(part.flag?'bad':'ok',flagMsg?base+' ('+flagMsg+')':base);
+  showFlash(part.flag?'bad':'ok',(flagMsg?base+' ('+flagMsg+')':base)+(phoneStorageFull?' — phone storage full, scan sent to server':''));
   if(part.method==='SCAN')showScanToast(part.partName,part.batchScanned,part.batchTotal);
   updateBatchProgressBadge(part.batchScanned,part.batchTotal);
   if(!cfg.url)setSyncUI('','Saved on phone');else scheduleAutoUpload();
