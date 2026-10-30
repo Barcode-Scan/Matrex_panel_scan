@@ -140,6 +140,16 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
    the active one (solid, its own tinted color) stands out at a glance;
    tapping the active one again clears it back to neutral. */
 .mach-quickrow{display:flex;gap:8px;margin-bottom:12px}
+/* Complete stage: current skid + New Skid (see COMPLETE STAGE in the script) */
+.skid-row{display:flex;align-items:stretch;gap:8px;margin-bottom:12px}
+.skid-arrow{flex:0 0 52px;background:var(--white);border:1.5px solid var(--gray-200);border-radius:14px;font-size:26px;font-weight:800;color:var(--gray-900);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.skid-arrow:disabled{opacity:.3}
+.skid-cur{flex:1;text-align:center;background:var(--blue-50);border:1.5px solid var(--blue-600);border-radius:14px;padding:6px 4px;min-width:0}
+.skid-cur .l{font-size:11px;font-weight:800;letter-spacing:1.2px;color:var(--blue-700)}
+.skid-cur .n{font-size:30px;font-weight:800;line-height:1.1;color:var(--blue-700)}
+.skid-cur .b{font-size:11px;color:var(--gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.skid-new{flex:0 0 auto;background:var(--blue-600);color:#fff;border:0;border-radius:14px;padding:0 16px;font-size:15px;font-weight:800;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.skid-new:active,.skid-arrow:active{transform:scale(.96)}
 .mach-qbtn{display:flex;align-items:center;gap:8px;flex:1;background:var(--white);border:1.5px solid var(--gray-200);border-radius:var(--pill);padding:8px 14px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .1s var(--ease),background .1s,border-color .1s}
 .mach-qbtn:active{transform:scale(.96)}
 .mach-qbtn-icon{display:flex;flex-shrink:0}
@@ -649,6 +659,14 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
          first. See MACHINES/selectMachine() below. -->
     <div class="mach-quickrow" id="machQuickRow" style="display:none"></div>
 
+    <!-- Complete stage only: which skid the next scanned panels go on. -->
+    <div class="skid-row" id="skidRow" style="display:none">
+      <button type="button" class="skid-arrow" id="bSkidPrev" onclick="stepSkid(-1)" aria-label="Previous skid">&#8249;</button>
+      <div class="skid-cur"><div class="l">SKID</div><div class="n" id="skidCurNum">1</div><div class="b" id="skidCurBatch">Scan the first panel</div></div>
+      <button type="button" class="skid-arrow" id="bSkidNext" onclick="stepSkid(1)" aria-label="Next skid">&#8250;</button>
+      <button type="button" class="skid-new" id="bSkidNew" onclick="newSkid()">+ New Skid</button>
+    </div>
+
     <div class="counters">
       <div class="cbox c-scan" id="cScanned" onclick="openListScreen('all')"><div class="n" id="nTotal">0</div><div class="l">Scanned</div></div>
       <div class="cbox c-flag" id="cFlagged" onclick="openListScreen('flagged')"><div class="n" id="nFlag">0</div><div class="l">Flagged</div></div>
@@ -1067,7 +1085,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-10-30.3';
+const APP_VERSION='2026-10-30.4';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1167,6 +1185,7 @@ function applyCutMode(){
   $('cutRightSpacer').style.display=cut?'none':'';
   if(cut&&$('scrScan').classList.contains('on'))openCuttingScreen();
   if(cutView==='list')$('bBackCutting').style.visibility=cut?'hidden':'visible';
+  refreshSkidRow();
 }
 // Cutting-stage phones get a big "Cutting Log" button right on the scan
 // screen; every phone can still reach it from the ⌄ menu (scissors).
@@ -1225,7 +1244,7 @@ function refreshMachineButtons(){
   const row=$('machQuickRow');
   if(!row)return;
   renderMachineButtons();
-  row.style.display='';
+  row.style.display=isCompleteStage()?'none':''; // no Break Press at the Complete stage
 }
 // ── MACHINE SELECTION NUDGE — two trigger points, both because someone
 // forgetting to tap a machine button is exactly what silently produces
@@ -1280,6 +1299,44 @@ function checkMachineNudgeOnBatchChange(batch){
 function isMachineRequiredStage(){
   const s=stageOptionsCache.find(x=>x.stage_number===cfg.stageNumber);
   return!!(s&&/bending/i.test(s.stage_name));
+}
+// ── COMPLETE STAGE (2026-10-30) - the last stage, where panels are scanned
+// skid by skid before shipping. The phone shows the current SKID number
+// (‹ › to go back to an earlier skid for a missed panel) and "+ New Skid".
+// Skids are numbered per batch: cfg.cskid = {batch, n, max}. The server keeps
+// the skid with each scan (stage_scans.skid) and answers with the real skid
+// and the batch's highest skid, so phones sharing a batch stay in step; a
+// panel from a different batch continues that batch's skids (1 if new).
+// Like Bending, it is the stage NAMED "Complete".
+function isCompleteStage(){
+  if(!cfg.stageNumber)return false;
+  const s=stageOptionsCache.find(x=>x.stage_number===cfg.stageNumber);
+  return!!(s&&s.stage_type!=='cutting'&&/^complete/i.test(String(s.stage_name||'').trim()));
+}
+function refreshSkidRow(){
+  const row=$('skidRow');if(!row)return;
+  const on=isCompleteStage();
+  row.style.display=on?'':'none';
+  const mr=$('machQuickRow');if(mr&&mr.innerHTML)mr.style.display=on?'none':'';
+  if(!on)return;
+  const c=cfg.cskid;
+  $('skidCurNum').textContent=c&&c.n?c.n:'1';
+  $('skidCurBatch').textContent=c&&c.batch?c.batch+(c.max>1?' · '+c.max+' skids':''):'Scan the first panel';
+  $('bSkidPrev').disabled=!(c&&c.n>1);
+  $('bSkidNext').disabled=!(c&&c.n<(c.max||1));
+}
+function setSkid(c){cfg.cskid=c;lsSet(LS.cfg,cfg);refreshSkidRow();}
+function stepSkid(d){
+  const c=cfg.cskid;if(!c||!c.batch)return;
+  const n=Math.min(Math.max(1,c.n+d),Math.max(1,c.max||1));
+  if(n===c.n)return;
+  setSkid({...c,n});showFlash('ok','Now scanning onto SKID '+n);
+}
+function newSkid(){
+  const c=cfg.cskid;
+  if(!c||!c.batch){beep('err');showFlash('bad','Scan the first panel of the skid first');return;}
+  const n=Math.max(c.max||1,c.n||1)+1;
+  setSkid({...c,n,max:n});showFlash('ok','SKID '+n+' started - scan its panels');
 }
 let scans=[],currentSkid=null,today=todayStr(),viewDate=today,syncedCount=0;
 // "X/Y" progress for whatever batch was most recently scanned - not every
@@ -1927,14 +1984,18 @@ function blankPart(uniqueId){
     // changed still submits under whatever stage was actually active
     // when this part was scanned.
     stageNumber:cfg.stageNumber||null,
-    machine:cfg.machine||null
+    machine:cfg.machine||null,
+    // Complete stage: the skid this panel goes on, and the batch that skid
+    // number belongs to (the server decides for a panel from another batch).
+    cskid:isCompleteStage()&&cfg.cskid?cfg.cskid.n||null:null,
+    cskidBatch:isCompleteStage()&&cfg.cskid?cfg.cskid.batch||null:null
   };
 }
 // Applies a /parts/match response onto a part record. NOT_FOUND has no
 // fields to add; MATCHED_NEW/MATCHED_ALREADY/VOIDED all carry the real
 // registered data, so partName becomes the actual Tag instead of the
 // raw ID the moment a match succeeds.
-function applyMatch(part,data){
+function applyMatch(part,data,fromReconcile){
   part.matchStatus=data.status||'UNVERIFIED';
   part.noteCount=data.note_count||0;
   // batch_scanned/batch_total ride along on every /parts/match response
@@ -1954,6 +2015,18 @@ function applyMatch(part,data){
   // 2" instead of the flatly wrong-sounding classic "Already scanned"
   // (which would otherwise read like the WHOLE part was already done).
   if(data.stage_number!=null)part.stageName=stageOptionsCache.find(s=>s.stage_number===data.stage_number)?.stage_name||('Stage '+data.stage_number);
+  // Complete stage: the server's skid for this panel. It goes in part.skid
+  // (the scan list groups by it) and moves the phone's SKID display to this
+  // batch - except for saved offline scans being sent later, which only
+  // raise the batch's skid count, never move the operator off their skid.
+  if(data.skid!=null&&data.batch){
+    part.skid=String(data.skid);
+    if(part.flag==='DUPLICATE')part.stageName=(part.stageName||'Complete')+' (SKID '+data.skid+')';
+    const c=cfg.cskid,max=Math.max(data.skid_max||0,data.skid,c&&c.batch===data.batch?c.max||0:0);
+    if(fromReconcile){if(c&&c.batch===data.batch)setSkid({...c,max});}
+    else if(part.flag!=='DUPLICATE')setSkid({batch:data.batch,n:data.skid,max});
+    else if(c&&c.batch===data.batch)setSkid({...c,max});
+  }
   // Quality Hold (admin dashboard) - the reason travels with the part so
   // commit()'s flash can show WHY, not just that it's held.
   if(data.status==='QUALITY_HOLD')part.holdReason=data.hold_reason||'';
@@ -2005,7 +2078,7 @@ async function handleScan(uniqueId){
 
   const tMatch=Date.now();
   try{
-    const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:cfg.machine||undefined}),signal:AbortSignal.timeout(MATCH_TIMEOUT_MS)});
+    const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:cfg.machine||undefined,skid:part.cskid||undefined,skid_batch:part.cskidBatch||undefined}),signal:AbortSignal.timeout(MATCH_TIMEOUT_MS)});
     if(res.status===403){
       const j=await res.json().catch(()=>({}));
       deviceStatus=j.status||'UNKNOWN';
@@ -2037,10 +2110,10 @@ async function reconcileUnverified(){
   let sent=0;
   for(const part of pending){
     try{
-      const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:part.uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:part.machine||cfg.machine||undefined,offline:true}),signal:AbortSignal.timeout(6000)});
+      const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:part.uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:part.machine||cfg.machine||undefined,skid:part.cskid||undefined,skid_batch:part.cskidBatch||undefined,offline:true}),signal:AbortSignal.timeout(6000)});
       if(!res.ok)continue; // still unreachable/unapproved — leave UNVERIFIED, try again next time
       const data=await res.json();
-      applyMatch(part,data);sent++;
+      applyMatch(part,data,true);sent++;
     }catch(e){markServerDown();break;/* leave the rest UNVERIFIED - tried again when the server answers */}
   }
   refreshBatchProgressFromScans();
