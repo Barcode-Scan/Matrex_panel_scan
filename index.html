@@ -1085,7 +1085,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-10-30.4';
+const APP_VERSION='2026-11-02.1';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -3334,7 +3334,7 @@ function renderCutBatch(keepInputs){
       h+=cutStepper('cutCut'+l.line_no,'Full sheets cut now',rem?'<button type="button" class="cut-quick" onclick="$(\'cutCut'+l.line_no+'\').value='+rem+'">Cut all remaining ('+rem+')</button>':'')
         +cutStepper('cutDmg'+l.line_no,'Sheets damaged while cutting','Ruined full sheets - not counted as cut')
         +cutStepper('cutOff'+l.line_no,'Offcuts used','Pieces used instead of a new sheet')
-        +'<label class="cut-check"><input type="checkbox" id="cutFin'+l.line_no+'"'+(l.finished?' checked disabled':'')+'> '+(l.finished?'Already marked finished':'This material is finished - nothing left to cut')+'</label>'
+        +'<label class="cut-check"><input type="checkbox" id="cutFin'+l.line_no+'"'+(l.finished?' checked disabled':'')+'> '+(l.finished?'Already marked complete':'Batch cutting done - mark complete')+'</label>'
         +'<input class="cut-note" id="cutNote'+l.line_no+'" maxlength="300" placeholder="Note (optional) - e.g. why a sheet was damaged">';
     }else{
       h+='<button type="button" class="cut-more" onclick="cutOpenLines.add('+l.line_no+');renderCutBatch(true)">Add more for this material (correction, damage, offcuts)</button>';
