@@ -102,6 +102,12 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 /* TOPBAR */
 .topbar{background:rgba(255,255,255,.72);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid rgba(0,0,0,.06);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:68px;position:sticky;top:0;z-index:20}
 .tb-left{display:flex;align-items:center;gap:12px}
+/* Every screen carries the scan screen's MATREX top bar (2026-11-03); the
+   screen's own Back + title bar sits under it as a slimmer "subbar". */
+.topbar.subbar{height:54px;top:68px;z-index:19}
+.subbar .hr-btn{visibility:hidden}
+.subbar #cutModeBtns{display:none!important}
+.subbar #cutRightSpacer{display:flex!important}
 .tb-logo{width:42px;height:42px;background:linear-gradient(155deg,#FFFFFF,var(--blue-50));border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(0,113,227,.08)}
 .tb-name{font-size:20px;font-weight:700;letter-spacing:2px;color:var(--gray-900);text-transform:uppercase;line-height:1}
 .tb-date{font-size:12px;color:var(--gray-500);margin-top:3px}
@@ -1098,7 +1104,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-03.3';
+const APP_VERSION='2026-11-03.4';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -3772,7 +3778,7 @@ document.addEventListener('click',e=>{
 });
 
 // ── CLOCK ──────────────────────────────────────────────────
-function tick(){$('topDate').textContent=today+'  '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+function tick(){const s=today+'  '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});$('topDate').textContent=s;document.querySelectorAll('.tb-clock').forEach(e=>e.textContent=s);}
 setInterval(tick,1000);tick();
 refreshStagePill(); // show the Stage pill immediately at boot if one was already saved from a previous session
 refreshMachineButtons(); // same - the two machine buttons render and show right from boot
@@ -3815,6 +3821,32 @@ function beep(k){
 // ── BOOT ───────────────────────────────────────────────────
 loadScans();renderAll();scheduleMidnightUpload();checkAuth();maybeFlushDirQueue();
 try{$('appVer').textContent='v '+APP_VERSION;}catch(e){}
+// Same MATREX top bar (logo, date/time, refresh, menu) on every screen, as
+// on the Bending scan screen. Copies of the original: each menu item taps
+// the original button, so they always behave the same.
+(function addMainBars(){
+  const src=document.querySelector('#scrScan > .topbar');if(!src)return;
+  const origBtns=[...$('tbDropdown').querySelectorAll('button')];
+  const ASK=new Set(['scrDirected','scrDelivery']); // half-done work there: confirm before refresh
+  ['scrList','scrBatch','scrDirected','scrCutting','scrDelivery','scrSettings'].forEach(id=>{
+    const scr=$(id);if(!scr)return;
+    const own=scr.querySelector(':scope > .topbar');
+    const bar=src.cloneNode(true);
+    bar.querySelectorAll('[id]').forEach(x=>{
+      if(x.id==='topDate')x.classList.add('tb-clock');
+      if(x.id==='bHardRefresh')x.classList.add('hr-btn');
+      x.removeAttribute('id');
+    });
+    bar.querySelector('.hr-btn').onclick=()=>hardRefresh(ASK.has(id));
+    const dd=bar.querySelector('.tb-dropdown');
+    bar.querySelector('.tb-menu-wrap > .tb-btn').onclick=e=>{e.stopPropagation();document.querySelectorAll('.tb-dropdown.open').forEach(d=>{if(d!==dd)d.classList.remove('open');});dd.classList.toggle('open');};
+    [...dd.querySelectorAll('button')].forEach((b,i)=>{b.onclick=()=>{dd.classList.remove('open');origBtns[i]&&origBtns[i].click();};});
+    if(own)own.classList.add('subbar');
+    scr.insertBefore(bar,scr.firstChild);
+  });
+  document.addEventListener('click',e=>{if(!e.target.closest('.tb-menu-wrap'))document.querySelectorAll('.tb-dropdown.open').forEach(d=>d.classList.remove('open'));});
+  tick();
+})();
 diag('app_start',APP_VERSION+' · '+(navigator.onLine?'online':'offline')+' · '+scans.length+' scans today, '+unverifiedCount()+' waiting · '+navigator.userAgent.slice(0,120));
 setTimeout(flushDiag,2000);
 if('serviceWorker' in navigator && isSecure())navigator.serviceWorker.register('sw.js').catch(()=>{});
