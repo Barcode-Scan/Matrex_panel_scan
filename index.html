@@ -351,6 +351,12 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 /* FULL LIST */
 .search-wrap{padding:12px 16px;background:rgba(255,255,255,.72);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid rgba(0,0,0,.06)}
 .search-inp{width:100%;background:var(--gray-100);border:1.5px solid transparent;color:var(--gray-900);font-size:17px;padding:10px 16px 10px 40px;border-radius:var(--pill);font-family:inherit;outline:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7' stroke='%2386868B' stroke-width='2'/%3E%3Cpath d='m20 20-3-3' stroke='%2386868B' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:14px center;transition:all .2s var(--ease)}
+.cut-filters{display:flex;gap:8px;margin-top:10px;align-items:center}
+.cut-sel{flex:1;min-width:0;height:44px;background:var(--gray-100);border:1.5px solid transparent;color:var(--gray-900);font-size:16px;font-weight:600;padding:0 10px;border-radius:12px;font-family:inherit;outline:none}
+.cut-sel.on{border-color:var(--blue-600);color:var(--blue-600)}
+.cut-sel:focus{border-color:var(--blue-600)}
+.cut-clear{height:44px;padding:0 14px;border:none;border-radius:12px;background:var(--gray-100);color:var(--blue-600);font-size:15px;font-weight:600;font-family:inherit;flex-shrink:0}
+.cut-clear[hidden]{display:none}
 .search-inp:focus{background-color:var(--white);border-color:var(--blue-600);box-shadow:0 0 0 4px var(--blue-50)}
 
 /* ── Production Schedule table (matches the printed-label look) ── */
@@ -852,7 +858,12 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
     </div>
   </div>
   <div class="search-wrap" id="cutSearchWrap">
-    <input class="search-inp" id="cutSearchInp" placeholder="Search batch, job, material…" autocapitalize="characters">
+    <input class="search-inp" id="cutSearchInp" placeholder="Search batch, job, floor, material…" autocapitalize="characters">
+    <div class="cut-filters">
+      <select class="cut-sel" id="cutJobSel" aria-label="Job" onchange="setCutFilter('job',this.value)"><option value="">All jobs</option></select>
+      <select class="cut-sel" id="cutFloorSel" aria-label="Floor or work order" onchange="setCutFilter('floor',this.value)"><option value="">All floors / WO</option></select>
+      <button class="cut-clear" id="cutFilterClear" type="button" onclick="clearCutFilters()">Clear</button>
+    </div>
   </div>
   <div id="cutContent" class="page"></div>
 </div>
@@ -1085,7 +1096,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-02.2';
+const APP_VERSION='2026-11-03.1';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -3254,19 +3265,44 @@ async function loadCutBatches(){
     if(cutView==='list')$('cutContent').innerHTML='<div class="cut-msg err">'+esc(e.message)+'</div>';
   }
 }
+// Job + Floor / Work Order filters under the search (2026-11-03). Kept on
+// this device, so a tablet at the saw stays on its job between visits.
+const LS_CUT_FILTERS='mx_cut_filters';
+let cutF=Object.assign({job:'',floor:''},lsGet(LS_CUT_FILTERS)||{});
+const cutKey=v=>String(v||'').trim().toUpperCase();
+function setCutFilter(k,v){cutF[k]=v;if(k==='job')cutF.floor='';lsSet(LS_CUT_FILTERS,cutF);renderCutList();}
+function clearCutFilters(){cutF={job:'',floor:''};lsSet(LS_CUT_FILTERS,cutF);$('cutSearchInp').value='';renderCutList();}
+function fillCutFilters(){
+  const opts=(sel,all,items,cur)=>{
+    const m=new Map();items.forEach(v=>{const k=cutKey(v);if(k&&!m.has(k))m.set(k,{label:String(v).trim(),n:0});if(k)m.get(k).n++;});
+    if(cur&&!m.has(cur))m.set(cur,{label:cur,n:0});
+    const list=[...m.entries()].sort((a,b)=>a[1].label.localeCompare(b[1].label,undefined,{numeric:true}));
+    $(sel).innerHTML='<option value="">'+all+'</option>'+list.map(([k,o])=>'<option value="'+esc(k)+'"'+(k===cur?' selected':'')+'>'+esc(o.label)+' ('+o.n+')</option>').join('');
+    $(sel).classList.toggle('on',!!cur);
+  };
+  opts('cutJobSel','All jobs',cutBatches.map(b=>b.job_name),cutF.job);
+  opts('cutFloorSel','All floors / WO',cutBatches.filter(b=>!cutF.job||cutKey(b.job_name)===cutF.job).map(b=>b.floor_or_work_order),cutF.floor);
+  $('cutFilterClear').hidden=!(cutF.job||cutF.floor||($('cutSearchInp').value||'').trim());
+}
 function cutStatusTag(s){return s==='done'?'<span class="cut-tag done">Cut</span>':s==='in_progress'?'<span class="cut-tag prog">In progress</span>':'<span class="cut-tag new">Not started</span>';}
 function cutQty(v){return v==null?'—':v;}
 function renderCutList(){
   const q=($('cutSearchInp').value||'').trim().toLowerCase();
-  const list=cutBatches.filter(b=>!q||[b.batch,b.job_name,b.floor_or_work_order,...b.lines.map(l=>l.material+' '+l.finish)].some(v=>String(v||'').toLowerCase().includes(q)));
+  fillCutFilters();
+  // Every word must match somewhere: "robinson 9", "re1", "0.080 galv".
+  const words=q.split(/\s+/).filter(Boolean);
+  const list=cutBatches.filter(b=>(!cutF.job||cutKey(b.job_name)===cutF.job)&&(!cutF.floor||cutKey(b.floor_or_work_order)===cutF.floor)
+    &&(!words.length||(hay=>words.every(w=>hay.includes(w)))([b.batch,b.job_name,b.floor_or_work_order,...b.lines.map(l=>l.material+' '+l.finish)].join(' ').toLowerCase())));
+  const filtered=!!(q||cutF.job||cutF.floor);
   const pending=cutQueue().length;
   let h='';
   if(cutMsg){h+='<div class="cut-msg '+cutMsg.kind+'">'+esc(cutMsg.text)+'</div>';}
   if(pending)h+='<div class="cut-msg warn">'+pending+' cutting entr'+(pending===1?'y is':'ies are')+' saved on this phone and will send automatically when the server is reachable.</div>';
   h+='<label class="cut-check" style="border-top:none;padding-top:0"><input type="checkbox" '+(cutShowAll?'checked':'')+' onchange="cutShowAll=this.checked;loadCutBatches()"> Show finished batches too</label>';
+  if(filtered)h+='<div class="cut-order-note"><b>Showing '+list.length+' of '+cutBatches.length+' batches</b></div>';
   if(list.some(b=>b.queue_position))h+='<div class="cut-order-note">Cut in this order - #1 first. The office sets the order; it updates by itself.</div>';
   if(!list.length){
-    h+='<div class="empty-box"><div class="et">'+(q?'No matching batches':'Nothing waiting to be cut')+'</div><div class="es">'+(q?'Try a different search.':'Batches appear here once they have material and sheet quantities in the Production Schedule.')+'</div></div>';
+    h+='<div class="empty-box"><div class="et">'+(filtered?'No matching batches':'Nothing waiting to be cut')+'</div><div class="es">'+(filtered?'Try a different search or tap Clear.':'Batches appear here once they have material and sheet quantities in the Production Schedule.')+'</div></div>';
   }else{
     h+=list.map(b=>'<div class="cut-card tap'+(b.queue_position===1?' first':'')+'" onclick="openCutBatch(\''+esc(b.batch).replace(/'/g,"\\'")+'\')">'
       +(b.queue_position===1?'<div class="cut-first-lbl">Cut first</div>':'')
