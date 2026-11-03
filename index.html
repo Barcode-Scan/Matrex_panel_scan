@@ -114,8 +114,8 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .tb-dropdown.open{display:flex}
 /* Red dot on Hard Refresh when checkAppUpdate() finds this page's own
    URL now serves a newer Last-Modified than what loaded it. */
-#bHardRefresh{position:relative}
-#bHardRefresh.has-update::after{content:'';position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#FF3B30;border:2px solid var(--white)}
+#bHardRefresh,.hr-btn{position:relative}
+#bHardRefresh.has-update::after,.hr-btn.has-update::after{content:'';position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#FF3B30;border:2px solid var(--white)}
 
 /* ENGINE / STATUS PILL */
 .eng-pill{display:inline-flex;align-items:center;gap:6px;background:var(--white);border:none;border-radius:var(--pill);padding:6px 13px;font-size:13px;font-weight:600;color:var(--gray-500);margin-bottom:12px;box-shadow:var(--shadow-sm)}
@@ -772,7 +772,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       Back
     </button>
     <div><div class="tb-name" style="font-size:16px">All Scans</div><div class="tb-date" id="listSub"></div></div>
-    <div style="width:70px"></div>
+    <div style="width:70px;display:flex;justify-content:flex-end"><button class="tb-btn hr-btn" type="button" aria-label="Refresh - get the latest app and data" title="Refresh" onclick="hardRefresh()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div>
   </div>
   <div class="search-wrap">
     <div style="display:flex;gap:8px;margin-bottom:10px">
@@ -794,7 +794,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       Back
     </button>
     <div><div class="tb-name" style="font-size:16px" id="batchTitle">Production Schedule</div><div class="tb-date" id="batchSub"></div></div>
-    <div style="width:70px"></div>
+    <div style="width:70px;display:flex;justify-content:flex-end"><button class="tb-btn hr-btn" type="button" aria-label="Refresh - get the latest app and data" title="Refresh" onclick="hardRefresh()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div>
   </div>
   <div class="search-wrap">
     <div style="display:flex;gap:8px">
@@ -817,7 +817,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       Back
     </button>
     <div><div class="tb-name" style="font-size:16px" id="dirBatchTitle">Directed Scan</div><div class="tb-date" id="dirBatchSub"></div></div>
-    <div style="width:70px"></div>
+    <div style="width:70px;display:flex;justify-content:flex-end"><button class="tb-btn hr-btn" type="button" aria-label="Refresh - get the latest app and data" title="Refresh" onclick="hardRefresh(true)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div>
   </div>
   <div class="page">
     <div class="dir-progress-wrap">
@@ -847,14 +847,16 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       Back
     </button>
     <div><div class="tb-name" style="font-size:16px" id="cutTitle">Cutting Log</div><div class="tb-date" id="cutSub">Pick a batch</div></div>
-    <div id="cutRightSpacer" style="width:70px"></div>
-    <div id="cutModeBtns" style="display:none;gap:6px">
-      <button class="tb-btn" type="button" aria-label="Settings" onclick="$('bSettings').click()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      </button>
-      <button class="tb-btn" type="button" aria-label="Lock" onclick="$('bLock').click()">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      </button>
+    <div id="cutRightSpacer" style="width:70px;display:flex;justify-content:flex-end"><button class="tb-btn hr-btn" type="button" aria-label="Refresh - get the latest app and data" title="Refresh" onclick="hardRefresh()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div>
+    <!-- Cut-stage tablet: same top bar as the Bending scan screen (refresh + menu), 2026-11-03 -->
+    <div id="cutModeBtns" class="tb-right" style="display:none">
+      <button class="tb-btn hr-btn" type="button" aria-label="Refresh - get the latest app and data" title="Refresh" onclick="hardRefresh()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
+      <div class="tb-menu-wrap">
+        <button class="tb-btn" id="bCutTbMenu" type="button" aria-label="More" onclick="event.stopPropagation();$('cutTbDropdown').classList.toggle('open')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="tb-dropdown" id="cutTbDropdown"></div>
+      </div>
     </div>
   </div>
   <div class="search-wrap" id="cutSearchWrap">
@@ -876,7 +878,7 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       Back
     </button>
     <div><div class="tb-name" style="font-size:16px" id="dlvTitle">Delivery</div><div class="tb-date" id="dlvSub">Scan the QR on the packing slip</div></div>
-    <div style="width:70px"></div>
+    <div style="width:70px;display:flex;justify-content:flex-end"><button class="tb-btn hr-btn" type="button" aria-label="Refresh - get the latest app and data" title="Refresh" onclick="hardRefresh(true)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div>
   </div>
   <div class="search-wrap" id="dlvSearchWrap">
     <input class="search-inp" id="dlvSearchInp" placeholder="Search slip, batch, ship to…" autocapitalize="characters">
@@ -1096,7 +1098,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-03.1';
+const APP_VERSION='2026-11-03.3';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -2597,7 +2599,9 @@ function openListScreen(mode){
 function clearListFilter(){listFilterMode='all';renderFull($('searchInp').value);}
 $('bList').onclick=()=>openListScreen('all');
 $('bExpandList').onclick=()=>openListScreen('all');
-$('bBackList').onclick=()=>{show('scrScan');startScanner();};
+// Home screen for Back: the Cutting Log on a Cut-stage tablet, else the scan screen.
+function goHomeScreen(){if(isCuttingStage()){openCuttingScreen();return;}show('scrScan');startScanner();}
+$('bBackList').onclick=goHomeScreen;
 
 // ── BATCH STATUS ─────────────────────────────────────────────
 // Read-only, live view of every registered label in a batch — separate
@@ -3188,7 +3192,7 @@ $('bBackBatch').onclick=()=>{
     renderBatchCards('');
   }else{
     clearInterval(batchRefreshTimer);
-    show('scrScan');startScanner();
+    goHomeScreen();
   }
 };
 
@@ -3662,7 +3666,7 @@ $('bDelivery').onclick=()=>openDeliveryScreen();
 $('dlvSearchInp').addEventListener('input',()=>{if(dlvView==='list')renderDeliveryList();});
 $('bBackDelivery').onclick=()=>{
   if(dlvView==='form'){dlvView='list';dlvMsg=null;renderDeliveryList();}
-  else{show('scrScan');startScanner();}
+  else goHomeScreen();
 };
 
 // ── LOGIN ──────────────────────────────────────────────────
@@ -3717,7 +3721,8 @@ $('bLock').onclick=()=>{
 // Unregisters the service worker before reloading (cache-busted) so a
 // stuck scanner/camera screen can't just be re-served the same stale
 // cached app - same fix as the admin dashboards' hard-refresh button.
-function hardRefresh(){
+function hardRefresh(ask){
+  if(ask===true&&!confirm('Refresh the app now? Anything not yet saved on this screen will be cleared.'))return;
   const goFresh=()=>{location.href=location.pathname+'?_hr='+Date.now();};
   if('serviceWorker' in navigator&&navigator.serviceWorker.getRegistrations){
     navigator.serviceWorker.getRegistrations().then(regs=>Promise.all(regs.map(r=>r.unregister()))).catch(()=>{}).then(goFresh);
@@ -3741,13 +3746,24 @@ async function checkAppUpdate(){
     const lm=r.headers.get('last-modified');
     if(!lm)return;
     if(pageBuildBaseline===null){pageBuildBaseline=lm;return;}
-    if(lm!==pageBuildBaseline)$('bHardRefresh').classList.add('has-update');
+    if(lm!==pageBuildBaseline)document.querySelectorAll('#bHardRefresh,.hr-btn').forEach(b=>b.classList.add('has-update'));
   }catch(e){}
 }
 checkAppUpdate();
 setInterval(checkAppUpdate,120000);
 
 $('bTbMenu').onclick=e=>{e.stopPropagation();$('tbDropdown').classList.toggle('open');};
+// The Cutting Log's menu is a copy of the scan screen's: each item just taps
+// the original, so both always do the same thing.
+(function(){
+  const dd=$('cutTbDropdown');if(!dd)return;
+  [...$('tbDropdown').children].forEach(el=>{
+    const c=el.cloneNode(true);c.removeAttribute('id');c.querySelectorAll('[id]').forEach(x=>x.removeAttribute('id'));
+    if(el.matches('button'))c.onclick=()=>{dd.classList.remove('open');el.click();};
+    dd.appendChild(c);
+  });
+})();
+document.addEventListener('click',e=>{if(!e.target.closest('#cutTbDropdown,#bCutTbMenu'))$('cutTbDropdown').classList.remove('open');});
 $('tbDropdown').addEventListener('click',e=>{
   if(e.target.closest('.tb-btn'))$('tbDropdown').classList.remove('open');
 });
