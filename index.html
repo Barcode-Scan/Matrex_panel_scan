@@ -107,7 +107,21 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
 .topbar.subbar{height:54px;top:68px;z-index:19}
 .subbar .hr-btn{visibility:hidden}
 .subbar #cutModeBtns{display:none!important}
-.subbar #cutRightSpacer{display:flex!important}
+.subbar #cutRightSpacer{display:none!important}
+/* Cutting Log / Delivery: title on the left, tabs on the right (2026-11-03) */
+#scrCutting .subbar,#scrDelivery .subbar{justify-content:flex-start;gap:10px}
+.subbar .sb-title{flex:1;min-width:0;text-align:left}
+.subbar .sb-title .tb-name,.subbar .sb-title .tb-date{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#bBackCutting[style*="hidden"]{display:none}
+.stage-tabs{display:none;flex-shrink:0;background:var(--gray-100);border-radius:12px;padding:3px;gap:3px}
+#scrCutting .stage-tabs,body.cut-stage #scrDelivery .stage-tabs{display:flex}
+body.cut-stage #scrDelivery .sb-spacer{display:none!important}
+.stage-tabs button{border:none;background:transparent;color:var(--gray-700);font:600 15px/1 inherit;font-family:inherit;padding:10px 14px;border-radius:9px;min-height:40px;cursor:pointer}
+.stage-tabs button.on{background:var(--blue-600);color:#fff}
+.dlv-email-sugg{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 10px}
+.dlv-email-sugg button{border:1px solid var(--gray-200);background:var(--gray-100);color:var(--blue-600);font:600 14px/1.2 inherit;font-family:inherit;padding:8px 12px;border-radius:999px;cursor:pointer}
+.dlv-email-hint{font-size:13.5px;color:#C2410C;margin:-4px 0 10px}
+.dlv-email-hint button{border:none;background:none;color:var(--blue-600);font:700 13.5px inherit;font-family:inherit;text-decoration:underline;padding:0;cursor:pointer}
 .tb-logo{width:42px;height:42px;background:linear-gradient(155deg,#FFFFFF,var(--blue-50));border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(0,113,227,.08)}
 .tb-name{font-size:20px;font-weight:700;letter-spacing:2px;color:var(--gray-900);text-transform:uppercase;line-height:1}
 .tb-date{font-size:12px;color:var(--gray-500);margin-top:3px}
@@ -852,7 +866,8 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       Back
     </button>
-    <div><div class="tb-name" style="font-size:16px" id="cutTitle">Cutting Log</div><div class="tb-date" id="cutSub">Pick a batch</div></div>
+    <div class="sb-title"><div class="tb-name" style="font-size:16px" id="cutTitle">Cutting Log</div><div class="tb-date" id="cutSub">Pick a batch</div></div>
+    <div class="stage-tabs"><button type="button" class="on" onclick="openCuttingScreen()">&#9986; Cutting</button><button type="button" onclick="openDeliveryScreen()">&#128666; Delivery</button></div>
     <div id="cutRightSpacer" style="width:70px;display:flex;justify-content:flex-end"><button class="tb-btn hr-btn" type="button" aria-label="Refresh - get the latest app and data" title="Refresh" onclick="hardRefresh()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div>
     <!-- Cut-stage tablet: same top bar as the Bending scan screen (refresh + menu), 2026-11-03 -->
     <div id="cutModeBtns" class="tb-right" style="display:none">
@@ -883,8 +898,9 @@ html,body{height:100%;background:var(--bg);color:var(--gray-900);
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       Back
     </button>
-    <div><div class="tb-name" style="font-size:16px" id="dlvTitle">Delivery</div><div class="tb-date" id="dlvSub">Scan the QR on the packing slip</div></div>
-    <div style="width:70px;display:flex;justify-content:flex-end"><button class="tb-btn hr-btn" type="button" aria-label="Refresh - get the latest app and data" title="Refresh" onclick="hardRefresh(true)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div>
+    <div class="sb-title"><div class="tb-name" style="font-size:16px" id="dlvTitle">Delivery</div><div class="tb-date" id="dlvSub">Scan the QR on the packing slip</div></div>
+    <div class="stage-tabs"><button type="button" onclick="openCuttingScreen()">&#9986; Cutting</button><button type="button" class="on" onclick="openDeliveryScreen()">&#128666; Delivery</button></div>
+    <div class="sb-spacer" style="width:70px;display:flex;justify-content:flex-end"><button class="tb-btn hr-btn" type="button" aria-label="Refresh - get the latest app and data" title="Refresh" onclick="hardRefresh(true)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div>
   </div>
   <div class="search-wrap" id="dlvSearchWrap">
     <input class="search-inp" id="dlvSearchInp" placeholder="Search slip, batch, ship to…" autocapitalize="characters">
@@ -1104,7 +1120,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-03.4';
+const APP_VERSION='2026-11-03.5';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1200,6 +1216,7 @@ function isCuttingStage(){
 }
 function applyCutMode(){
   const cut=isCuttingStage();
+  document.body.classList.toggle('cut-stage',cut);
   $('cutModeBtns').style.display=cut?'flex':'none';
   $('cutRightSpacer').style.display=cut?'none':'';
   if(cut&&$('scrScan').classList.contains('on'))openCuttingScreen();
@@ -3488,9 +3505,9 @@ async function refreshDeliverySlips(quiet){
     if(r.status===403){if(!quiet)dlvMsg={kind:'err',text:'This phone is not approved on the server yet - ask an admin to approve it (Operations → Devices).'};return false;}
     if(!r.ok){if(!quiet)dlvMsg={kind:'err',text:r.status===404?'The server has not been updated for deliveries yet - ask the office to restart the Matrex Server.':'Server error (HTTP '+r.status+')'};return false;}
     const j=await r.json();
-    try{lsSet(LS_DLV_SLIPS,{fetched_at:j.fetched_at,slips:j.slips||[]});}catch(e){
+    try{lsSet(LS_DLV_SLIPS,{fetched_at:j.fetched_at,slips:j.slips||[],emails:j.emails||[]});}catch(e){
       // Phone storage full - keep the newest slips only.
-      try{lsSet(LS_DLV_SLIPS,{fetched_at:j.fetched_at,slips:(j.slips||[]).slice(0,60)});}catch(e2){}
+      try{lsSet(LS_DLV_SLIPS,{fetched_at:j.fetched_at,slips:(j.slips||[]).slice(0,60),emails:(j.emails||[]).slice(0,100)});}catch(e2){}
     }
     return true;
   }catch(e){return false;}
@@ -3513,7 +3530,8 @@ function renderDeliveryList(){
   const list=c.slips.filter(s=>{const h=[s.slip_number,s.batch,s.ship_to,s.job_name,s.po_number].join(' ').toLowerCase();return words.every(w=>h.includes(w));});
   let h='';
   if(dlvMsg)h+='<div class="cut-msg '+dlvMsg.kind+'">'+esc(dlvMsg.text)+'</div>';
-  h+='<div class="dlv-tools"><button class="btn btn-solid" type="button" onclick="dlvScanQr()">Scan packing slip QR</button><button class="btn btn-outline" type="button" onclick="dlvRefresh()">Refresh</button></div>';
+  h+='<div class="dlv-info" style="font-weight:600">Hand scanner: just scan the QR on the packing slip - the sign-off form opens by itself.</div>';
+  h+='<div class="dlv-tools"><button class="btn btn-solid" type="button" onclick="dlvScanQr()">Scan with camera</button><button class="btn btn-outline" type="button" onclick="dlvRefresh()">Refresh</button></div>';
   h+='<div class="dlv-info">'+(c.fetched_at?'Packing slips on this phone: '+c.slips.length+' · downloaded '+esc(fmtDT(c.fetched_at))+'. Open this screen on the shop Wi-Fi before leaving so the slips are on the phone at the delivery site.':'No packing slips on this phone yet - open this screen on the shop Wi-Fi to download them.')+(q.length?' <b style="color:var(--amber-700)">'+q.length+' confirmation'+(q.length===1?'':'s')+' waiting to send.</b>':'')+'</div>';
   if(!list.length)h+='<div class="empty-box"><div class="es">'+(words.length?'No packing slip matches.':'No packing slips yet.')+'</div></div>';
   h+=list.slice(0,80).map(s=>{
@@ -3559,7 +3577,8 @@ function renderDeliveryForm(){
   h+='<label class="dlv-lbl" for="dlvDriver">Driver name <em>*</em></label><input class="dlv-inp" id="dlvDriver" value="'+esc(f.driver_name)+'" autocomplete="name">';
   h+='<label class="dlv-lbl">Carrier</label><div class="dlv-chips">'+DLV_CARRIERS.map(c=>'<button type="button" class="dlv-chip'+(f.carrier===c?' on':'')+'" onclick="dlvSet(\'carrier\',\''+c+'\')">'+esc(c)+'</button>').join('')+'</div>';
   h+='<label class="dlv-lbl" for="dlvReceiver">Received by (name) <em>*</em></label><input class="dlv-inp" id="dlvReceiver" value="'+esc(f.received_by)+'">';
-h+='<label class="dlv-lbl" for="dlvRcvEmail">Receiver email <span style="font-weight:400">(optional - emails them a copy)</span></label><input class="dlv-inp" id="dlvRcvEmail" type="email" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="name@company.com" value="'+esc(f.receiver_email||'')+'">';
+h+='<label class="dlv-lbl" for="dlvRcvEmail">Receiver email <span style="font-weight:400">(optional - emails them a copy)</span></label><input class="dlv-inp" id="dlvRcvEmail" type="email" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" list="dlvEmailList" onblur="dlvCheckEmail()" placeholder="name@company.com" value="'+esc(f.receiver_email||'')+'">';
+  h+=dlvEmailSuggestHtml(s);
   h+='<label class="dlv-lbl">Condition</label><div class="dlv-chips">'+DLV_CONDITIONS.map(([k,l])=>'<button type="button" class="dlv-chip'+(f.condition===k?' on'+(k==='OK'?'':' bad'):'')+'" onclick="dlvSet(\'condition\',\''+k+'\')">'+esc(l)+'</button>').join('')+'</div>';
   h+='<label class="dlv-lbl" for="dlvNotes">Notes'+(f.condition!=='OK'?' <em>* describe the problem</em>':'')+'</label><textarea class="dlv-inp" id="dlvNotes" rows="3" placeholder="Damage, missing items, where it was left…">'+esc(f.notes)+'</textarea>';
   h+='<label class="dlv-lbl">Photos of the delivered skids ('+f.photos.length+'/4)</label><div class="dlv-photos">'+f.photos.map((p,i)=>'<div class="dlv-photo"><img src="'+p+'" alt="Photo '+(i+1)+'"><button type="button" aria-label="Remove photo" onclick="dlvRemovePhoto('+i+')">×</button></div>').join('')+(f.photos.length<4?'<label class="dlv-addphoto"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Add photo<input type="file" accept="image/*" capture="environment" multiple style="display:none" onchange="dlvAddPhotos(this)"></label>':'')+'</div>';
@@ -3651,6 +3670,7 @@ async function saveDelivery(){
   const err=!f.driver_name.trim()?'Enter the driver name.':!f.received_by.trim()?'Enter the name of the person receiving the delivery.':(f.condition!=='OK'&&!f.notes.trim())?'Describe the problem in Notes.':((f.receiver_email||'').trim()&&!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test((f.receiver_email||'').trim()))?'Check the receiver email - or leave it empty.':!dlvSigDataUrl()?'The receiver needs to sign.':'';
   if(err){beep('err');dlvMsg={kind:'err',text:err};f.sigData=dlvSigDataUrl();renderDeliveryForm();window.scrollTo({top:0,behavior:'smooth'});return;}
   try{lsSet(LS_DLV_DRIVER,{name:f.driver_name.trim(),carrier:f.carrier});}catch(e){}
+  if((f.receiver_email||'').trim())try{const em=String(f.receiver_email).trim().toLowerCase(),L=(lsGet(LS_DLV_EMAILS)||[]).filter(x=>!(x.email===em&&x.job_name===(s.job_name||'')&&x.ship_to===(s.ship_to||'')));L.unshift({email:em,job_name:s.job_name||'',ship_to:s.ship_to||'',last_used:new Date().toISOString(),uses:1});lsSet(LS_DLV_EMAILS,L.slice(0,200));}catch(e){}
   const rec={confirmation_id:uuid(),slip_number:s.slip_number,received_by:f.received_by.trim(),receiver_email:(f.receiver_email||'').trim(),driver_name:f.driver_name.trim(),carrier:f.carrier,condition:f.condition,notes:f.notes.trim(),signature:dlvSigDataUrl(),photos:f.photos.slice(),delivered_at:new Date().toISOString()};
   const btn=$('bDlvSave');btn.disabled=true;btn.textContent='Saving…';
   const r=cfg.url?await dlvPost(rec):{ok:false,permanent:false,error:'No server configured'};
@@ -3669,6 +3689,72 @@ async function saveDelivery(){
   $('dlvContent').innerHTML='<div class="cut-card dlv-done"><svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="var(--green-700)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="7 12.5 10.5 16 17 9"/></svg><div class="big">Delivery confirmed</div><div class="cut-meta">'+esc(s.slip_number)+(s.batch?' · '+esc(s.batch):'')+' · received by '+esc(rec.received_by)+'</div><div class="cut-msg '+(r.ok?'ok':'warn')+'" style="margin-top:14px">'+esc(msg)+'</div><button class="btn btn-outline" type="button" onclick="openDeliveryScreen()">Done</button></div>';
 }
 $('bDelivery').onclick=()=>openDeliveryScreen();
+
+// ── Receiver email suggestions (2026-11-03) ──
+// Emails already in the system (server, with the slip copy) plus ones used on
+// this device: the ones used before for this job / ship-to come first as
+// tap-to-fill buttons, every known one is in the field's drop-down, and a
+// near-miss typo gets a "Did you mean ...?".
+const LS_DLV_EMAILS='mx_dlv_emails';
+function dlvKnownEmails(){
+  const m=new Map();
+  [...(lsGet(LS_DLV_EMAILS)||[]),...(dlvCache().emails||[])].forEach(x=>{
+    const e=String(x.email||'').trim().toLowerCase();if(!e)return;
+    const k=e+'|'+(x.job_name||'')+'|'+(x.ship_to||'');
+    if(!m.has(k))m.set(k,{email:e,job_name:x.job_name||'',ship_to:x.ship_to||'',last_used:x.last_used||''});
+  });
+  return [...m.values()].sort((a,b)=>String(b.last_used).localeCompare(String(a.last_used)));
+}
+function dlvEmailSuggestHtml(s){
+  const all=dlvKnownEmails(),norm=v=>String(v||'').trim().toUpperCase();
+  const mine=[...new Set(all.filter(x=>(s.job_name&&norm(x.job_name)===norm(s.job_name))||(s.ship_to&&norm(x.ship_to)===norm(s.ship_to))).map(x=>x.email))].slice(0,6);
+  const every=[...new Set(all.map(x=>x.email))];
+  let h='<datalist id="dlvEmailList">'+every.map(e=>'<option value="'+esc(e)+'">').join('')+'</datalist>';
+  if(mine.length)h+='<div class="dlv-email-sugg">'+mine.map(e=>'<button type="button" onclick="dlvPickEmail(\''+esc(e).replace(/'/g,"\\'")+'\')">'+esc(e)+'</button>').join('')+'</div>';
+  h+='<div class="dlv-email-hint" id="dlvEmailHint" style="display:none"></div>';
+  return h;
+}
+function dlvPickEmail(e){const i=$('dlvRcvEmail');if(i){i.value=e;}if(dlvForm)dlvForm.receiver_email=e;const hn=$('dlvEmailHint');if(hn)hn.style.display='none';}
+function dlvEditDist(a,b){
+  if(Math.abs(a.length-b.length)>2)return 9;
+  let p=[...Array(b.length+1).keys()];
+  for(let i=1;i<=a.length;i++){const c=[i];for(let j=1;j<=b.length;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c;}
+  return p[b.length];
+}
+function dlvCheckEmail(){
+  const i=$('dlvRcvEmail'),hn=$('dlvEmailHint');if(!i||!hn)return;
+  const v=i.value.trim().toLowerCase();hn.style.display='none';
+  if(!v)return;
+  const known=[...new Set(dlvKnownEmails().map(x=>x.email))];
+  if(known.includes(v))return;
+  const near=known.map(e=>[e,dlvEditDist(v,e)]).filter(([,d])=>d>0&&d<=2).sort((a,b)=>a[1]-b[1])[0];
+  if(near){hn.innerHTML='Did you mean <button type="button" onclick="dlvPickEmail(\''+esc(near[0]).replace(/'/g,"\\'")+'\')">'+esc(near[0])+'</button>?';hn.style.display='';}
+}
+
+// ── Hand (Bluetooth / USB) scanner on the Cutting Log and Delivery screens ──
+// The scanner types the packing slip QR (…?deliver=SLIP) and Enter. Caught
+// with nothing selected, or in either search box; it opens that slip's
+// delivery form. The slip number typed + Enter in the Delivery search works too.
+let hsBuf='',hsAt=0;
+function hsOpen(raw){
+  let slip=parseDeliveryQr(raw);
+  if(!slip&&$('scrDelivery').classList.contains('on')){const v=String(raw||'').trim().toUpperCase();if(v&&dlvCache().slips.some(x=>String(x.slip_number).toUpperCase()===v))slip=v;}
+  if(!slip)return false;
+  beep('ok');openDeliveryScreen(slip);return true;
+}
+document.addEventListener('keydown',e=>{
+  const onCut=$('scrCutting').classList.contains('on'),onDlv=$('scrDelivery').classList.contains('on')&&dlvView!=='form';
+  if(!onCut&&!onDlv)return;
+  const el=document.activeElement;
+  if(el&&(el.id==='cutSearchInp'||el.id==='dlvSearchInp')){
+    if(e.key==='Enter'&&hsOpen(el.value)){e.preventDefault();el.value='';el.blur();}
+    return;
+  }
+  if(el&&(el.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)))return;
+  const now=Date.now();if(now-hsAt>300)hsBuf='';hsAt=now;
+  if(e.key==='Enter'){if(hsBuf&&hsOpen(hsBuf))e.preventDefault();hsBuf='';return;}
+  if(e.key.length===1)hsBuf+=e.key;
+});
 $('dlvSearchInp').addEventListener('input',()=>{if(dlvView==='list')renderDeliveryList();});
 $('bBackDelivery').onclick=()=>{
   if(dlvView==='form'){dlvView='list';dlvMsg=null;renderDeliveryList();}
