@@ -262,6 +262,19 @@ body.cut-stage #scrDelivery .sb-spacer{display:none!important}
 
 /* CAMERA PICKER — only shown when more than one camera is found */
 #camPickWrap{display:none;margin-bottom:14px}
+/* Delivery scan (2026-11-04): the camera opened from Delivery shows only what
+   a packing-slip QR needs - no machines, counters, upload bar or scan list. */
+#dlvScanHead{display:none}
+body.dlv-scan #dlvScanHead{display:block;margin-bottom:12px}
+body.dlv-scan #scrScan .page>*:not(#dlvScanHead):not(#camSlotFree):not(.camsize-row):not(#camPickWrap):not(#flash):not(#httpsWarn):not(#dlvScanFoot){display:none!important}
+.dsh-row{display:flex;align-items:center;gap:10px}
+.dsh-back{flex:0 0 auto!important;width:auto!important;padding:9px 14px}
+.dsh-row>div{flex:1;min-width:0}
+.dsh-t{font-size:18px;font-weight:800}
+.dsh-s{font-size:13px;color:var(--gray-500);margin-top:2px}
+.dsh-foot{display:none}
+body.dlv-scan .dsh-foot{display:flex;gap:10px;margin-top:4px}
+.dsh-foot .btn{flex:1}
 #camPickWrap.on{display:block}
 #camPick{width:100%;background:var(--white);border:none;border-radius:var(--pill);padding:10px 14px;font-size:15px;font-weight:600;color:var(--gray-700);font-family:inherit;box-shadow:var(--shadow-sm)}
 
@@ -661,6 +674,12 @@ body.cut-stage #scrDelivery .sb-spacer{display:none!important}
   </div>
 
   <div class="page">
+    <div id="dlvScanHead">
+      <div class="dsh-row">
+        <button class="btn btn-outline dsh-back" type="button" onclick="dlvScanCancel()">&#8249; Back</button>
+        <div><div class="dsh-t">&#128666; Delivery scan</div><div class="dsh-s">Point the camera at the QR code on the packing slip</div></div>
+      </div>
+    </div>
     <div class="https-alert" id="httpsWarn" style="display:none">
       <strong>Camera requires HTTPS</strong>
       Open via <code>https://</code> or serve from localhost. Camera will not start on plain HTTP.
@@ -734,6 +753,7 @@ body.cut-stage #scrDelivery .sb-spacer{display:none!important}
       <span id="flashTxt"></span>
     </div>
 
+    <div class="dsh-foot" id="dlvScanFoot"><button class="btn btn-outline" type="button" onclick="dlvScanCancel()">Cancel</button><button class="btn btn-outline" type="button" onclick="dlvScanCancel(true)">Type slip number</button></div>
     <div id="syncbar" role="status">
       <div class="s-dot"></div>
       <div class="s-txt" id="syncTxt">Saved on this phone</div>
@@ -1100,6 +1120,7 @@ const lsSet=(k,v)=>{
 // checked first in enterScanScreen()) so it's excluded here too.
 const RESTORABLE_SCREENS=new Set(['scrScan','scrList','scrBatch']);
 function show(id){
+  if(id!=='scrScan')document.body.classList.remove('dlv-scan');
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));$(id).classList.add('on');
   if(RESTORABLE_SCREENS.has(id))lsSet(LS.lastScreen,id);
 }
@@ -1120,7 +1141,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-03.5';
+const APP_VERSION='2026-11-04.1';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1995,6 +2016,7 @@ async function handleRaw(raw,method){
   // The delivery QR printed on a packing slip opens Delivery confirmation.
   const dlvSlip=parseDeliveryQr(raw);
   if(dlvSlip){beep('ok');openDeliveryScreen(dlvSlip);return;}
+  if(document.body.classList.contains('dlv-scan')){beep('err');showFlash('err','Not a packing slip QR - scan the QR code on the packing slip');return;}
   // Hard requirement on a Bending phone - no scan gets processed (not
   // even saved locally) without a machine actively selected. Checked
   // here, before the barcode is even validated, so nothing about this
@@ -3542,7 +3564,12 @@ function renderDeliveryList(){
   $('dlvContent').innerHTML=h;
 }
 function dlvRefresh(){dlvMsg=null;$('dlvContent').querySelector('.dlv-info')&&($('dlvContent').querySelector('.dlv-info').textContent='Downloading…');refreshDeliverySlips(false).then(ok=>{if(!ok&&!dlvMsg)dlvMsg={kind:'warn',text:'Could not reach the server - showing the slips already on this phone.'};renderDeliveryList();});}
-function dlvScanQr(){show('scrScan');startScanner();showFlash('ok','Point the camera at the QR code on the packing slip');}
+function dlvScanQr(){document.body.classList.add('dlv-scan');show('scrScan');startScanner();}
+// Back to the Delivery list (focus the search box to type a slip number).
+function dlvScanCancel(typeIt){
+  openDeliveryScreen();
+  if(typeIt)setTimeout(()=>{const i=$('dlvSearchInp');if(i)i.focus();},60);
+}
 async function openDeliverySlip(slipNumber){
   slipNumber=String(slipNumber||'').toUpperCase();
   let s=dlvCache().slips.find(x=>String(x.slip_number).toUpperCase()===slipNumber)||null;
