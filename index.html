@@ -1149,7 +1149,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-05.2';
+const APP_VERSION='2026-11-05.3';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -3462,7 +3462,8 @@ async function saveCutting(){
     if([cut,dmg,off].some(n=>!Number.isInteger(n)||n<0||n>999)){cutMsg={kind:'err',text:'Use whole numbers (0-999) for '+l.material+'.'};renderCutBatch(true);return;}
     const finEl=$('cutFin'+l.line_no),fin=!!(finEl&&finEl.checked&&!finEl.disabled);
     if(!cut&&!dmg&&!off&&!fin)continue;
-    if(l.remaining!=null&&cut>l.remaining)warn.push(l.material+': '+cut+' sheets entered but only '+l.remaining+' remain.');
+    // Damaged sheets go in the Damaged box, not Sheets cut (user, 2026-11-05).
+    if(l.remaining!=null&&cut>l.remaining)warn.push(l.material+': '+cut+' sheets cut entered but only '+l.remaining+' remain'+(l.programmed?' of '+l.programmed:'')+'.\nIf some sheets were damaged, put those in the Damaged box - only good sheets go in Sheets cut.');
     // Can't mark finished when far short of the programmed sheets (same rule as the server's finishShortfall).
     if(fin&&l.programmed>0){
       const tc=(l.cut||0)+cut,to=(l.offcuts||0)+off,short=l.programmed-tc-to;
