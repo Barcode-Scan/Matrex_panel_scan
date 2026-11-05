@@ -1149,7 +1149,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-05.1';
+const APP_VERSION='2026-11-05.2';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -3463,7 +3463,17 @@ async function saveCutting(){
     const finEl=$('cutFin'+l.line_no),fin=!!(finEl&&finEl.checked&&!finEl.disabled);
     if(!cut&&!dmg&&!off&&!fin)continue;
     if(l.remaining!=null&&cut>l.remaining)warn.push(l.material+': '+cut+' sheets entered but only '+l.remaining+' remain.');
-    if(fin&&l.programmed!=null&&l.cut+cut<l.programmed&&!off)warn.push(l.material+': marking finished with '+(l.cut+cut)+' of '+l.programmed+' sheets cut and no offcuts.');
+    // Can't mark finished when far short of the programmed sheets (same rule as the server's finishShortfall).
+    if(fin&&l.programmed>0){
+      const tc=(l.cut||0)+cut,to=(l.offcuts||0)+off,short=l.programmed-tc-to;
+      if(short>Math.max(2,Math.ceil(l.programmed*0.1))){
+        cutMsg={kind:'err',text:'Can\'t mark '+l.material+' finished: only '+tc+' of '+l.programmed+' sheets cut'+(to?' (+'+to+' offcuts)':'')+' - '+short+' short. Enter the sheets still to cut or the offcuts used. If it really is finished, ask the office.'};
+        if(finEl)finEl.checked=false;
+        renderCutBatch(true);
+        alert(cutMsg.text);
+        return;
+      }
+    }
     entries.push({entry_id:uuid(),line_no:l.line_no,sheets_cut:cut,sheets_damaged:dmg,offcuts_used:off,line_finished:fin,note:($('cutNote'+l.line_no).value||'').trim()});
   }
   if(!entries.length){cutMsg={kind:'err',text:'Nothing to save - enter sheets cut, damaged or offcuts, or tick "finished" on a material.'};renderCutBatch(true);return;}
