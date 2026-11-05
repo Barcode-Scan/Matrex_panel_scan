@@ -512,6 +512,14 @@ body.dlv-scan .dsh-foot{display:flex;gap:10px;margin-top:4px}
 .dlv-chip.on{border-color:var(--blue-600);background:var(--blue-600);color:#fff}
 .dlv-chip.on.bad{border-color:var(--red-600);background:var(--red-600)}
 .dlv-photos{display:flex;flex-wrap:wrap;gap:8px}
+.dlv-photo .dlv-ph-lbl,.dlv-addphoto .dlv-ph-lbl{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;text-align:center;padding:2px 0}
+.dlv-addphoto{position:relative}
+.dlv-addphoto.next{border-color:var(--blue-600,#0071E3);color:var(--blue-600,#0071E3);border-width:2px}
+.dlv-addphoto.later{opacity:.45;cursor:default}
+.dlv-addphoto.busy{opacity:.6;pointer-events:none}
+.dlv-photo-count{font-size:13px;font-weight:700;margin:2px 0 8px}
+.dlv-photo-count.short{color:#c00}
+.dlv-photo-count.ok{color:var(--green-700,#15803d)}
 .dlv-photo{position:relative;width:88px;height:88px;border-radius:10px;overflow:hidden;background:var(--gray-100)}
 .dlv-photo img{width:100%;height:100%;object-fit:cover}
 .dlv-photo button{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;border:none;background:rgba(0,0,0,.6);color:#fff;font-size:15px;line-height:26px;padding:0;cursor:pointer}
@@ -1141,7 +1149,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-04.1';
+const APP_VERSION='2026-11-05.1';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -3580,6 +3588,8 @@ async function openDeliverySlip(slipNumber){
   dlvSlip=s||{slip_number:slipNumber,_unknown:true,parts:[]};
   const drv=lsGet(LS_DLV_DRIVER)||{};
   dlvForm={driver_name:drv.name||'',carrier:drv.carrier||'Matrex truck',received_by:'',receiver_email:'',condition:'OK',notes:'',photos:[],signed:false};
+  const dr=dlvDraft();
+  if(dr&&dr.slip_number===dlvSlip.slip_number){Object.assign(dlvForm,dr.form,{signed:false});const n=(dr.form.photos||[]).length;dlvMsg={kind:'ok',text:'Picked up where you left off'+(n?' - '+n+' photo'+(n===1?'':'s')+' kept':'')+'.'};}
   renderDeliveryForm();
 }
 function renderDeliveryForm(){
@@ -3608,23 +3618,36 @@ h+='<label class="dlv-lbl" for="dlvRcvEmail">Receiver email <span style="font-we
   h+=dlvEmailSuggestHtml(s);
   h+='<label class="dlv-lbl">Condition</label><div class="dlv-chips">'+DLV_CONDITIONS.map(([k,l])=>'<button type="button" class="dlv-chip'+(f.condition===k?' on'+(k==='OK'?'':' bad'):'')+'" onclick="dlvSet(\'condition\',\''+k+'\')">'+esc(l)+'</button>').join('')+'</div>';
   h+='<label class="dlv-lbl" for="dlvNotes">Notes'+(f.condition!=='OK'?' <em>* describe the problem</em>':'')+'</label><textarea class="dlv-inp" id="dlvNotes" rows="3" placeholder="Damage, missing items, where it was left…">'+esc(f.notes)+'</textarea>';
-  h+='<label class="dlv-lbl">Photos of the delivered skids ('+f.photos.length+'/4)</label><div class="dlv-photos">'+f.photos.map((p,i)=>'<div class="dlv-photo"><img src="'+p+'" alt="Photo '+(i+1)+'"><button type="button" aria-label="Remove photo" onclick="dlvRemovePhoto('+i+')">×</button></div>').join('')+(f.photos.length<4?'<label class="dlv-addphoto"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Add photo<input type="file" accept="image/*" capture="environment" multiple style="display:none" onchange="dlvAddPhotos(this)"></label>':'')+'</div>';
+  h+=dlvPhotosHtml(s,f);
   h+='<label class="dlv-lbl">Receiver signature <em>*</em></label><div class="dlv-sig"><canvas id="dlvSigCanvas"></canvas><div class="dlv-sigline"></div><div class="dlv-sighint">Sign above the line</div></div><button type="button" class="dlv-sigclear" onclick="dlvClearSig()">Clear signature</button>';
   h+='</div>';
   h+='<button class="btn btn-solid" id="bDlvSave" type="button" onclick="saveDelivery()" style="margin-top:4px">Confirm Delivery</button>';
   $('dlvContent').innerHTML=h;
   dlvSetupSig();
 }
+let dlvDraftTimer=null;
+document.addEventListener('input',e=>{if(e.target&&e.target.closest&&e.target.closest('#dlvContent')&&dlvView==='form'){clearTimeout(dlvDraftTimer);dlvDraftTimer=setTimeout(dlvSaveDraft,800);}});
 function dlvReadInputs(){
   if(!dlvForm)return;
   const g=id=>$(id)?$(id).value:'';
   dlvForm.driver_name=g('dlvDriver');dlvForm.received_by=g('dlvReceiver');dlvForm.receiver_email=g('dlvRcvEmail');dlvForm.notes=g('dlvNotes');
 }
 function dlvSet(k,v){dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm[k]=v;renderDeliveryForm();}
-function dlvRemovePhoto(i){dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm.photos.splice(i,1);renderDeliveryForm();}
+function dlvRemovePhoto(i){dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm.photos.splice(i,1);dlvSaveDraft();renderDeliveryForm();}
 // Photos are shrunk on the phone (longest side 1280px, JPEG) so they fit in
 // the phone's offline queue and upload quickly.
-function dlvShrink(file){
+async function dlvShrink(file){
+  if(window.createImageBitmap){
+    try{
+      const bmp=await createImageBitmap(file,{imageOrientation:'from-image'});
+      const k=Math.min(1,1280/Math.max(bmp.width,bmp.height));const c=document.createElement('canvas');c.width=Math.round(bmp.width*k);c.height=Math.round(bmp.height*k);
+      c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);if(bmp.close)bmp.close();
+      const u=c.toDataURL('image/jpeg',0.65);if(u.length>1000)return u;
+    }catch(e){/* fall back to <img> below */}
+  }
+  return dlvShrinkImg(file);
+}
+function dlvShrinkImg(file){
   return new Promise((resolve,reject)=>{
     const url=URL.createObjectURL(file);const img=new Image();
     img.onload=()=>{const k=Math.min(1,1280/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);resolve(c.toDataURL('image/jpeg',0.7));};
@@ -3634,11 +3657,53 @@ function dlvShrink(file){
 }
 async function dlvAddPhotos(input){
   dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();
-  for(const file of Array.from(input.files||[])){
-    if(dlvForm.photos.length>=4)break;
-    try{dlvForm.photos.push(await dlvShrink(file));}catch(e){}
+  const files=Array.from(input.files||[]);
+  if(!files.length)return;
+  const tile=input.closest('.dlv-addphoto');if(tile){tile.classList.add('busy');const l=tile.querySelector('.dlv-add-txt');if(l)l.textContent='Adding…';}
+  let failed=0;
+  for(const file of files){
+    if(dlvForm.photos.length>=DLV_MAX_PHOTOS)break;
+    try{dlvForm.photos.push(await dlvShrink(file));}catch(e){failed++;}
   }
+  input.value='';
+  if(failed){beep('err');dlvMsg={kind:'err',text:failed===1?'That photo could not be added - please take it again.':failed+' photos could not be added - please take them again.'};}
+  else if(dlvMsg&&dlvMsg.kind==='err')dlvMsg=null;
+  dlvSaveDraft();
   renderDeliveryForm();
+}
+// ── Skid photos + unfinished-form draft (2026-11-05) ──
+// One photo per skid on the packing slip (at least one when the count is not
+// known). The form is saved on the phone after each photo and before the
+// camera opens, so if the phone closes the app while the camera is up, the
+// details and photos come back when it reopens.
+const DLV_MAX_PHOTOS=20,LS_DLV_DRAFT='mx_dlv_draft',DLV_DRAFT_MAX_MS=12*3600e3;
+function dlvSkidsNeeded(s){const n=parseInt(s&&s.skid_count,10);return Math.min(DLV_MAX_PHOTOS,n>0?n:1);}
+function dlvPhotosHtml(s,f){
+  const need=dlvSkidsNeeded(s),known=parseInt(s&&s.skid_count,10)>0,n=f.photos.length;
+  let h='<label class="dlv-lbl">Skid photos <em>*</em></label>';
+  h+='<div class="dlv-photo-count '+(n>=need?'ok':'short')+'">'+(known?(n>=need?'✓ All '+need+' skid'+(need===1?'':'s')+' photographed':n+' of '+need+' skid photos taken - one photo of each skid'):(n?'✓ '+n+' photo'+(n===1?'':'s')+' taken':'Take at least one photo of the delivered skid(s)'))+'</div>';
+  const lbl=i=>i<need?(known?'Skid '+(i+1)+' of '+need:'Photo '+(i+1)):'Extra';
+  const cam='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>';
+  h+='<div class="dlv-photos">';
+  h+=f.photos.map((p,i)=>'<div class="dlv-photo"><img src="'+p+'" alt="'+esc(lbl(i))+'"><button type="button" aria-label="Remove photo" onclick="dlvRemovePhoto('+i+')">×</button><div class="dlv-ph-lbl">'+esc(lbl(i))+'</div></div>').join('');
+  if(n<DLV_MAX_PHOTOS)h+='<label class="dlv-addphoto'+(n<need?' next':'')+'" onclick="dlvSaveDraft()">'+cam+'<span class="dlv-add-txt">'+(n<need?'Take photo':'Extra photo')+'</span><div class="dlv-ph-lbl">'+esc(lbl(n))+'</div><input type="file" accept="image/*" capture="environment" style="display:none" onchange="dlvAddPhotos(this)"></label>';
+  for(let i=n+1;i<need;i++)h+='<div class="dlv-addphoto later">'+cam+'<div class="dlv-ph-lbl">'+esc(lbl(i))+'</div></div>';
+  return h+'</div>';
+}
+function dlvDraft(){const d=lsGet(LS_DLV_DRAFT);return d&&d.slip_number&&d.form&&Date.now()-d.saved_at<DLV_DRAFT_MAX_MS?d:null;}
+function dlvSaveDraft(){
+  if(!dlvForm||!dlvSlip||dlvView!=='form')return;
+  dlvReadInputs();
+  const form={driver_name:dlvForm.driver_name,carrier:dlvForm.carrier,received_by:dlvForm.received_by,receiver_email:dlvForm.receiver_email,condition:dlvForm.condition,notes:dlvForm.notes,photos:dlvForm.photos.slice(),sigData:dlvSigDataUrl()};
+  const rec={slip_number:dlvSlip.slip_number,saved_at:Date.now(),form};
+  try{lsSet(LS_DLV_DRAFT,rec);}catch(e){try{form.photos=[];lsSet(LS_DLV_DRAFT,rec);}catch(_){}}
+}
+function dlvClearDraft(){try{localStorage.removeItem(LS_DLV_DRAFT);}catch(e){}}
+// App reopened (e.g. the phone closed it while the camera was open): go back
+// to the unfinished delivery form.
+function dlvResumeDraft(){
+  const d=dlvDraft();if(!d||Date.now()-d.saved_at>30*60000)return false;
+  openDeliveryScreen(d.slip_number);return true;
 }
 // Signature pad: pointer events cover finger, pen and mouse.
 let dlvSigCtx=null;
@@ -3694,7 +3759,7 @@ setTimeout(()=>{if(cfg.url)refreshDeliverySlips(true);},4000);
 async function saveDelivery(){
   dlvReadInputs();
   const f=dlvForm,s=dlvSlip;
-  const err=!f.driver_name.trim()?'Enter the driver name.':!f.received_by.trim()?'Enter the name of the person receiving the delivery.':(f.condition!=='OK'&&!f.notes.trim())?'Describe the problem in Notes.':((f.receiver_email||'').trim()&&!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test((f.receiver_email||'').trim()))?'Check the receiver email - or leave it empty.':!dlvSigDataUrl()?'The receiver needs to sign.':'';
+  const err=!f.driver_name.trim()?'Enter the driver name.':!f.received_by.trim()?'Enter the name of the person receiving the delivery.':(f.condition!=='OK'&&!f.notes.trim())?'Describe the problem in Notes.':f.photos.length<dlvSkidsNeeded(s)?'Take a photo of every skid - '+f.photos.length+' of '+dlvSkidsNeeded(s)+' taken.':((f.receiver_email||'').trim()&&!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test((f.receiver_email||'').trim()))?'Check the receiver email - or leave it empty.':!dlvSigDataUrl()?'The receiver needs to sign.':'';
   if(err){beep('err');dlvMsg={kind:'err',text:err};f.sigData=dlvSigDataUrl();renderDeliveryForm();window.scrollTo({top:0,behavior:'smooth'});return;}
   try{lsSet(LS_DLV_DRIVER,{name:f.driver_name.trim(),carrier:f.carrier});}catch(e){}
   if((f.receiver_email||'').trim())try{const em=String(f.receiver_email).trim().toLowerCase(),L=(lsGet(LS_DLV_EMAILS)||[]).filter(x=>!(x.email===em&&x.job_name===(s.job_name||'')&&x.ship_to===(s.ship_to||'')));L.unshift({email:em,job_name:s.job_name||'',ship_to:s.ship_to||'',last_used:new Date().toISOString(),uses:1});lsSet(LS_DLV_EMAILS,L.slice(0,200));}catch(e){}
@@ -3711,6 +3776,7 @@ async function saveDelivery(){
     }
     msg='No connection to the office - saved on this phone. It sends by itself when the phone is back on the shop network.';
   }
+  dlvClearDraft();
   beep('ok');
   dlvView='done';
   $('dlvContent').innerHTML='<div class="cut-card dlv-done"><svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="var(--green-700)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="7 12.5 10.5 16 17 9"/></svg><div class="big">Delivery confirmed</div><div class="cut-meta">'+esc(s.slip_number)+(s.batch?' · '+esc(s.batch):'')+' · received by '+esc(rec.received_by)+'</div><div class="cut-msg '+(r.ok?'ok':'warn')+'" style="margin-top:14px">'+esc(msg)+'</div><button class="btn btn-outline" type="button" onclick="openDeliveryScreen()">Done</button></div>';
@@ -3825,6 +3891,7 @@ function enterScanScreen(){
   // the plain Scan screen. viewerKey is already persisted (see its own
   // comment above), so reopening Production Schedule here needs no
   // re-prompt; Settings is deliberately excluded (see RESTORABLE_SCREENS).
+  if(dlvResumeDraft())return;
   if(isCuttingStage()){openCuttingScreen();return;}
   const last=lsGet(LS.lastScreen);
   if(last==='scrBatch'){openBatchStatusScreen();return;}
