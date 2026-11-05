@@ -3466,8 +3466,8 @@ async function saveCutting(){
     // Can't mark finished when far short of the programmed sheets (same rule as the server's finishShortfall).
     if(fin&&l.programmed>0){
       const tc=(l.cut||0)+cut,to=(l.offcuts||0)+off,short=l.programmed-tc-to;
-      if(short>Math.max(2,Math.ceil(l.programmed*0.1))){
-        cutMsg={kind:'err',text:'Can\'t mark '+l.material+' finished: only '+tc+' of '+l.programmed+' sheets cut'+(to?' (+'+to+' offcuts)':'')+' - '+short+' short. Enter the sheets still to cut or the offcuts used. If it really is finished, ask the office.'};
+      if(short>0){
+        cutMsg={kind:'err',text:'Can\'t mark '+l.material+' finished: only '+tc+' of '+l.programmed+' sheets cut'+(to?' (+'+to+' offcuts)':'')+' - '+short+' short. Sheets cut + offcuts used must add up to '+l.programmed+' before it can be marked finished.'};
         if(finEl)finEl.checked=false;
         renderCutBatch(true);
         alert(cutMsg.text);
