@@ -1179,7 +1179,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-05.6';
+const APP_VERSION='2026-11-05.7';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -3666,7 +3666,7 @@ function renderDeliveryForm(){
   }
   h+='<div class="ps-recv">';
   h+='<label class="ps-rl" for="dlvReceiver">Receiver name <em>*</em></label><input class="ps-line" id="dlvReceiver" placeholder="Tap to write the receiver\'s name" autocomplete="off" value="'+esc(f.received_by)+'">';
-  h+='<label class="ps-rl" for="dlvRcvEmail">Email <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#666">(optional - emails them a copy)</span></label><input class="ps-line" id="dlvRcvEmail" type="email" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" list="dlvEmailList" onblur="dlvCheckEmail()" placeholder="Tap to add email" value="'+esc(f.receiver_email||'')+'">';
+  h+='<label class="ps-rl" for="dlvRcvEmail">Email <em>*</em> <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#666">(the signed slip is emailed to them)</span></label><input class="ps-line" id="dlvRcvEmail" type="email" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" list="dlvEmailList" onblur="dlvCheckEmail()" placeholder="Tap to add email" value="'+esc(f.receiver_email||'')+'">';
   h+=dlvEmailSuggestHtml(s);
   h+='<div class="ps-rl">Date received</div><div class="ps-fixed">'+esc(new Date().toLocaleString('en-US',{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))+'</div>';
   h+='<div class="ps-rl">Receiver signature <em>*</em></div><div class="dlv-sig"><canvas id="dlvSigCanvas"></canvas><div class="dlv-sigline"></div><div class="dlv-sighint">Receiver signs here</div></div><button type="button" class="dlv-sigclear" onclick="dlvClearSig()">Clear signature</button>';
@@ -3827,11 +3827,11 @@ setTimeout(()=>{if(cfg.url)refreshDeliverySlips(true);},4000);
 async function saveDelivery(){
   dlvReadInputs();
   const f=dlvForm,s=dlvSlip;
-  const err=!f.received_by.trim()?'Enter the name of the person receiving the delivery.':(f.condition!=='OK'&&!f.notes.trim())?'Describe the problem in Notes.':f.photos.length<dlvSkidsNeeded(s)?'Take a photo of every skid - '+f.photos.length+' of '+dlvSkidsNeeded(s)+' taken.':((f.receiver_email||'').trim()&&!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test((f.receiver_email||'').trim()))?'Check the receiver email - or leave it empty.':!dlvSigDataUrl()?'The receiver needs to sign.':'';
+  const err=!f.received_by.trim()?'Enter the name of the person receiving the delivery.':!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test(String(f.receiver_email||'').trim())?'Enter the receiver\'s email address - the signed packing slip is emailed to them.':(f.condition!=='OK'&&!f.notes.trim())?'Describe the problem in Notes.':f.photos.length<dlvSkidsNeeded(s)?'Take a photo of every skid - '+f.photos.length+' of '+dlvSkidsNeeded(s)+' taken.':((f.receiver_email||'').trim()&&!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test((f.receiver_email||'').trim()))?'Check the receiver email - or leave it empty.':!dlvSigDataUrl()?'The receiver needs to sign.':'';
   if(err){beep('err');dlvMsg={kind:'err',text:err};f.sigData=dlvSigDataUrl();f.drvSigData=dlvDrvSigDataUrl();renderDeliveryForm();window.scrollTo({top:0,behavior:'smooth'});return;}
   try{lsSet(LS_DLV_DRIVER,{name:f.driver_name.trim(),carrier:f.carrier});}catch(e){}
   if((f.receiver_email||'').trim())try{const em=String(f.receiver_email).trim().toLowerCase(),L=(lsGet(LS_DLV_EMAILS)||[]).filter(x=>!(x.email===em&&x.job_name===(s.job_name||'')&&x.ship_to===(s.ship_to||'')));L.unshift({email:em,job_name:s.job_name||'',ship_to:s.ship_to||'',last_used:new Date().toISOString(),uses:1});lsSet(LS_DLV_EMAILS,L.slice(0,200));}catch(e){}
-  const rec={confirmation_id:uuid(),slip_number:s.slip_number,received_by:f.received_by.trim(),receiver_email:(f.receiver_email||'').trim(),driver_name:f.driver_name.trim(),carrier:f.carrier,condition:'OK',notes:f.notes.trim(),signature:dlvSigDataUrl(),driver_signature:dlvDrvSigDataUrl(),photos:f.photos.slice(),delivered_at:new Date().toISOString()};
+  const rec={confirmation_id:uuid(),slip_number:s.slip_number,received_by:f.received_by.trim(),receiver_email:(f.receiver_email||'').trim(),driver_name:f.driver_name.trim(),carrier:f.carrier,condition:'OK',email_required:true,notes:f.notes.trim(),signature:dlvSigDataUrl(),driver_signature:dlvDrvSigDataUrl(),photos:f.photos.slice(),delivered_at:new Date().toISOString()};
   const btn=$('bDlvSave');btn.disabled=true;btn.textContent='Saving…';
   const r=cfg.url?await dlvPost(rec):{ok:false,permanent:false,error:'No server configured'};
   let msg;
