@@ -555,6 +555,8 @@ body.dlv-scan .dsh-foot{display:flex;gap:10px;margin-top:4px}
 .ps-line:focus{border-bottom-style:solid;background:#eaf2ff}
 .ps-line::placeholder{color:#7a8aa5;font-size:15px}
 .ps-fixed{font-size:15px;padding:6px 0;border-bottom:1px solid #ccc}
+.ps-sec{border-top:1.5px solid #333;margin-top:16px;padding-top:2px}
+textarea.ps-line{resize:vertical;min-height:44px}
 .ps-paper .dlv-sig{border-radius:4px;border-color:#999}
 .dlv-sigclear{background:none;border:none;color:var(--blue-600);font-size:14px;font-weight:600;font-family:inherit;padding:6px 0;cursor:pointer}
 .dlv-done{text-align:center;padding:24px 8px}
@@ -1177,7 +1179,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-05.4';
+const APP_VERSION='2026-11-05.5';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -3628,7 +3630,7 @@ async function openDeliverySlip(slipNumber){
   const drv=lsGet(LS_DLV_DRIVER)||{};
   dlvForm={driver_name:drv.name||'',carrier:drv.carrier||'Matrex truck',received_by:'',receiver_email:'',condition:'OK',notes:'',photos:[],signed:false};
   const dr=dlvDraft();
-  if(dr&&dr.slip_number===dlvSlip.slip_number){Object.assign(dlvForm,dr.form,{signed:false});const n=(dr.form.photos||[]).length;dlvMsg={kind:'ok',text:'Picked up where you left off'+(n?' - '+n+' photo'+(n===1?'':'s')+' kept':'')+'.'};}
+  if(dr&&dr.slip_number===dlvSlip.slip_number){Object.assign(dlvForm,dr.form,{signed:false,drvSigned:false});const n=(dr.form.photos||[]).length;dlvMsg={kind:'ok',text:'Picked up where you left off'+(n?' - '+n+' photo'+(n===1?'':'s')+' kept':'')+'.'};}
   renderDeliveryForm();
 }
 function renderDeliveryForm(){
@@ -3668,18 +3670,15 @@ function renderDeliveryForm(){
   h+=dlvEmailSuggestHtml(s);
   h+='<div class="ps-rl">Date received</div><div class="ps-fixed">'+esc(new Date().toLocaleString('en-US',{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))+'</div>';
   h+='<div class="ps-rl">Receiver signature <em>*</em></div><div class="dlv-sig"><canvas id="dlvSigCanvas"></canvas><div class="dlv-sigline"></div><div class="dlv-sighint">Receiver signs here</div></div><button type="button" class="dlv-sigclear" onclick="dlvClearSig()">Clear signature</button>';
+  // Delivered by: the driver is a different person - own name and signature.
+  h+='<div class="ps-sec"><label class="ps-rl" for="dlvDriver">Delivered by (driver name) <em>*</em></label><input class="ps-line" id="dlvDriver" placeholder="Tap to write the driver\'s name" autocomplete="name" value="'+esc(f.driver_name)+'">';
+  h+='<div class="ps-rl">Driver signature <em>*</em></div><div class="dlv-sig"><canvas id="dlvDrvCanvas" style="height:130px"></canvas><div class="dlv-sigline"></div><div class="dlv-sighint">Driver signs here</div></div><button type="button" class="dlv-sigclear" onclick="dlvClearDrvSig()">Clear signature</button></div>';
+  h+='<div class="ps-sec"><label class="ps-rl" for="dlvNotes">Notes</label><textarea class="ps-line" id="dlvNotes" rows="2" placeholder="Tap to add a note (optional)">'+esc(f.notes)+'</textarea></div>';
   h+='</div></div>';
-  // Driver's part: who delivered, condition, skid photos.
-  h+='<div class="cut-card"><div class="cut-batch" style="font-size:15px">Delivery details</div>';
-  h+='<label class="dlv-lbl" for="dlvDriver">Driver name <em>*</em></label><input class="dlv-inp" id="dlvDriver" value="'+esc(f.driver_name)+'" autocomplete="name">';
-  h+='<label class="dlv-lbl">Carrier</label><div class="dlv-chips">'+DLV_CARRIERS.map(c=>'<button type="button" class="dlv-chip'+(f.carrier===c?' on':'')+'" onclick="dlvSet(\'carrier\',\''+c+'\')">'+esc(c)+'</button>').join('')+'</div>';
-  h+='<label class="dlv-lbl">Condition</label><div class="dlv-chips">'+DLV_CONDITIONS.map(([k,l])=>'<button type="button" class="dlv-chip'+(f.condition===k?' on'+(k==='OK'?'':' bad'):'')+'" onclick="dlvSet(\'condition\',\''+k+'\')">'+esc(l)+'</button>').join('')+'</div>';
-  h+='<label class="dlv-lbl" for="dlvNotes">Notes'+(f.condition!=='OK'?' <em>* describe the problem</em>':'')+'</label><textarea class="dlv-inp" id="dlvNotes" rows="3" placeholder="Damage, missing items, where it was left…">'+esc(f.notes)+'</textarea>';
-  h+=dlvPhotosHtml(s,f);
-  h+='</div>';
+  h+='<div class="cut-card">'+dlvPhotosHtml(s,f)+'</div>';
   h+='<button class="btn btn-solid" id="bDlvSave" type="button" onclick="saveDelivery()" style="margin-top:4px">Confirm Delivery</button>';
   $('dlvContent').innerHTML=h;
-  dlvSetupSig();
+  dlvSetupSig();dlvSetupDrvSig();
 }
 let dlvDraftTimer=null;
 document.addEventListener('input',e=>{if(e.target&&e.target.closest&&e.target.closest('#dlvContent')&&dlvView==='form'){clearTimeout(dlvDraftTimer);dlvDraftTimer=setTimeout(dlvSaveDraft,800);}});
@@ -3688,8 +3687,8 @@ function dlvReadInputs(){
   const g=id=>$(id)?$(id).value:'';
   dlvForm.driver_name=g('dlvDriver');dlvForm.received_by=g('dlvReceiver');dlvForm.receiver_email=g('dlvRcvEmail');dlvForm.notes=g('dlvNotes');
 }
-function dlvSet(k,v){dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm[k]=v;renderDeliveryForm();}
-function dlvRemovePhoto(i){dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm.photos.splice(i,1);dlvSaveDraft();renderDeliveryForm();}
+function dlvSet(k,v){dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm.drvSigData=dlvDrvSigDataUrl();dlvForm[k]=v;renderDeliveryForm();}
+function dlvRemovePhoto(i){dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm.drvSigData=dlvDrvSigDataUrl();dlvForm.photos.splice(i,1);dlvSaveDraft();renderDeliveryForm();}
 // Photos are shrunk on the phone (longest side 1280px, JPEG) so they fit in
 // the phone's offline queue and upload quickly.
 async function dlvShrink(file){
@@ -3712,7 +3711,7 @@ function dlvShrinkImg(file){
   });
 }
 async function dlvAddPhotos(input){
-  dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();
+  dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm.drvSigData=dlvDrvSigDataUrl();
   const files=Array.from(input.files||[]);
   if(!files.length)return;
   const tile=input.closest('.dlv-addphoto');if(tile){tile.classList.add('busy');const l=tile.querySelector('.dlv-add-txt');if(l)l.textContent='Adding…';}
@@ -3779,6 +3778,22 @@ function dlvSetupSig(){
   c.onpointerup=c.onpointercancel=()=>{drawing=false;};
 }
 function dlvSigDataUrl(){const c=$('dlvSigCanvas');return c&&dlvForm&&dlvForm.signed?c.toDataURL('image/png'):(dlvForm&&dlvForm.sigData)||null;}
+function dlvSetupDrvSig(){
+  const c=$('dlvDrvCanvas');if(!c)return;
+  const r=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
+  c.width=Math.round(r.width*dpr);c.height=Math.round(r.height*dpr);
+  const ctx=c.getContext('2d');ctx.scale(dpr,dpr);
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,r.width,r.height);
+  ctx.lineWidth=2.5;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#111';
+  if(dlvForm.drvSigData){const img=new Image();img.onload=()=>ctx.drawImage(img,0,0,r.width,r.height);img.src=dlvForm.drvSigData;}
+  let drawing=false;
+  const pt=e=>{const b=c.getBoundingClientRect();return[e.clientX-b.left,e.clientY-b.top];};
+  c.onpointerdown=e=>{drawing=true;c.setPointerCapture(e.pointerId);const[x,y]=pt(e);ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+0.1,y+0.1);ctx.stroke();dlvForm.drvSigned=true;};
+  c.onpointermove=e=>{if(!drawing)return;const[x,y]=pt(e);ctx.lineTo(x,y);ctx.stroke();};
+  c.onpointerup=c.onpointercancel=()=>{drawing=false;};
+}
+function dlvDrvSigDataUrl(){const c=$('dlvDrvCanvas');return c&&dlvForm&&dlvForm.drvSigned?c.toDataURL('image/png'):(dlvForm&&dlvForm.drvSigData)||null;}
+function dlvClearDrvSig(){dlvForm.drvSigned=false;dlvForm.drvSigData=null;dlvSetupDrvSig();}
 function dlvClearSig(){dlvForm.signed=false;dlvForm.sigData=null;dlvSetupSig();}
 // Returns {ok,data} | {ok:false,permanent:true,error} | {ok:false,permanent:false,error}
 async function dlvPost(rec){
@@ -3816,19 +3831,20 @@ async function saveDelivery(){
   dlvReadInputs();
   const f=dlvForm,s=dlvSlip;
   const err=!f.driver_name.trim()?'Enter the driver name.':!f.received_by.trim()?'Enter the name of the person receiving the delivery.':(f.condition!=='OK'&&!f.notes.trim())?'Describe the problem in Notes.':f.photos.length<dlvSkidsNeeded(s)?'Take a photo of every skid - '+f.photos.length+' of '+dlvSkidsNeeded(s)+' taken.':((f.receiver_email||'').trim()&&!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test((f.receiver_email||'').trim()))?'Check the receiver email - or leave it empty.':!dlvSigDataUrl()?'The receiver needs to sign.':'';
-  if(err){beep('err');dlvMsg={kind:'err',text:err};f.sigData=dlvSigDataUrl();renderDeliveryForm();window.scrollTo({top:0,behavior:'smooth'});return;}
+  if(!err&&!dlvDrvSigDataUrl()){beep('err');dlvMsg={kind:'err',text:'The driver signs in the "Driver signature" box.'};f.sigData=dlvSigDataUrl();renderDeliveryForm();window.scrollTo({top:0,behavior:'smooth'});return;}
+  if(err){beep('err');dlvMsg={kind:'err',text:err};f.sigData=dlvSigDataUrl();f.drvSigData=dlvDrvSigDataUrl();renderDeliveryForm();window.scrollTo({top:0,behavior:'smooth'});return;}
   try{lsSet(LS_DLV_DRIVER,{name:f.driver_name.trim(),carrier:f.carrier});}catch(e){}
   if((f.receiver_email||'').trim())try{const em=String(f.receiver_email).trim().toLowerCase(),L=(lsGet(LS_DLV_EMAILS)||[]).filter(x=>!(x.email===em&&x.job_name===(s.job_name||'')&&x.ship_to===(s.ship_to||'')));L.unshift({email:em,job_name:s.job_name||'',ship_to:s.ship_to||'',last_used:new Date().toISOString(),uses:1});lsSet(LS_DLV_EMAILS,L.slice(0,200));}catch(e){}
-  const rec={confirmation_id:uuid(),slip_number:s.slip_number,received_by:f.received_by.trim(),receiver_email:(f.receiver_email||'').trim(),driver_name:f.driver_name.trim(),carrier:f.carrier,condition:f.condition,notes:f.notes.trim(),signature:dlvSigDataUrl(),photos:f.photos.slice(),delivered_at:new Date().toISOString()};
+  const rec={confirmation_id:uuid(),slip_number:s.slip_number,received_by:f.received_by.trim(),receiver_email:(f.receiver_email||'').trim(),driver_name:f.driver_name.trim(),carrier:f.carrier,condition:'OK',notes:f.notes.trim(),signature:dlvSigDataUrl(),driver_signature:dlvDrvSigDataUrl(),photos:f.photos.slice(),delivered_at:new Date().toISOString()};
   const btn=$('bDlvSave');btn.disabled=true;btn.textContent='Saving…';
   const r=cfg.url?await dlvPost(rec):{ok:false,permanent:false,error:'No server configured'};
   let msg;
   if(r.ok){msg='Sent to the office.';refreshDeliverySlips(true);}
-  else if(r.permanent){btn.disabled=false;btn.textContent='Confirm Delivery';dlvMsg={kind:'err',text:'Not saved: '+r.error};f.sigData=dlvSigDataUrl();renderDeliveryForm();window.scrollTo({top:0,behavior:'smooth'});return;}
+  else if(r.permanent){btn.disabled=false;btn.textContent='Confirm Delivery';dlvMsg={kind:'err',text:'Not saved: '+r.error};f.sigData=dlvSigDataUrl();f.drvSigData=dlvDrvSigDataUrl();renderDeliveryForm();window.scrollTo({top:0,behavior:'smooth'});return;}
   else{
     try{lsSet(LS_DLV_QUEUE,[...dlvQueue(),rec]);}catch(e){
       btn.disabled=false;btn.textContent='Confirm Delivery';beep('err');
-      dlvMsg={kind:'err',text:'Phone storage is full - remove a photo and try again, or go back on the shop Wi-Fi so the waiting confirmations can send.'};f.sigData=dlvSigDataUrl();renderDeliveryForm();return;
+      dlvMsg={kind:'err',text:'Phone storage is full - remove a photo and try again, or go back on the shop Wi-Fi so the waiting confirmations can send.'};f.sigData=dlvSigDataUrl();f.drvSigData=dlvDrvSigDataUrl();renderDeliveryForm();return;
     }
     msg='No connection to the office - saved on this phone. It sends by itself when the phone is back on the shop network.';
   }
