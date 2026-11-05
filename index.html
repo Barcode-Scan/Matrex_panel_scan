@@ -528,6 +528,34 @@ body.dlv-scan .dsh-foot{display:flex;gap:10px;margin-top:4px}
 .dlv-sig canvas{display:block;width:100%;height:180px;touch-action:none}
 .dlv-sig .dlv-sigline{position:absolute;left:16px;right:16px;bottom:36px;border-bottom:1.5px dashed var(--gray-300);pointer-events:none}
 .dlv-sig .dlv-sighint{position:absolute;left:16px;bottom:12px;font-size:12px;color:var(--gray-500);pointer-events:none}
+/* Delivery screen drawn as the packing slip (2026-11-05) */
+.ps-paper{background:#fff;border:1px solid var(--gray-200);border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.08);padding:16px 14px;margin:10px 0 12px;color:#111}
+.ps-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
+.ps-title{font-size:20px;font-weight:400;color:#222}
+.ps-date{font-size:12.5px;color:#333;margin-top:2px}
+.ps-logo{text-align:center;line-height:1.1}
+.ps-logo b{display:block;font-size:15px;color:#1b4f7a;letter-spacing:.5px}
+.ps-logo small{font-size:8px;color:#28a8d8;letter-spacing:1px}
+.ps-parties{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-bottom:10px}
+.ps-k{display:block;font-size:10.5px;color:#666}
+.ps-v{display:block;font-size:14px;font-weight:700;word-break:break-word}
+.ps-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 10px;margin-bottom:10px}
+.ps-grid .ps-k{font-weight:700;color:#000;font-size:10px}
+.ps-grid .ps-v{font-weight:400;font-size:13px}
+.ps-grid .ps-big{font-weight:700;font-size:17px}
+.ps-tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 10px}
+.ps-tbl th{text-align:left;font-size:10px;border-bottom:1px solid #333;padding:3px 2px}
+.ps-tbl td{padding:6px 2px;border-bottom:1px solid #ddd;vertical-align:top}
+.ps-note{border:1px solid #bbb;padding:7px 8px;font-size:13px;margin:2px 0 10px;white-space:pre-wrap}
+.ps-attached summary{text-align:center;color:var(--blue-600);font-weight:700;font-size:13px;cursor:pointer;padding:6px 0}
+.ps-recv{border-top:1.5px solid #333;margin-top:12px;padding-top:10px}
+.ps-rl{display:block;font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#000;margin:10px 0 2px}
+.ps-rl em{font-style:normal;color:var(--red-600)}
+.ps-line{width:100%;border:none;border-bottom:1.5px dashed var(--blue-600);background:#f4f8ff;border-radius:4px 4px 0 0;padding:9px 6px;font-size:17px;font-family:inherit;color:#111;outline:none}
+.ps-line:focus{border-bottom-style:solid;background:#eaf2ff}
+.ps-line::placeholder{color:#7a8aa5;font-size:15px}
+.ps-fixed{font-size:15px;padding:6px 0;border-bottom:1px solid #ccc}
+.ps-paper .dlv-sig{border-radius:4px;border-color:#999}
 .dlv-sigclear{background:none;border:none;color:var(--blue-600);font-size:14px;font-weight:600;font-family:inherit;padding:6px 0;cursor:pointer}
 .dlv-done{text-align:center;padding:24px 8px}
 .dlv-done .big{font-size:22px;font-weight:800;color:var(--gray-900);margin:10px 0 6px}
@@ -1149,7 +1177,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-05.3';
+const APP_VERSION='2026-11-05.4';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -3612,25 +3640,42 @@ function renderDeliveryForm(){
   if(dlvMsg)h+='<div class="cut-msg '+dlvMsg.kind+'">'+esc(dlvMsg.text)+'</div>';
   if(queued)h+='<div class="cut-msg warn">A confirmation for this slip is already saved on this phone and waiting to send.</div>';
   else if(s.delivered)h+='<div class="cut-msg ok">Already confirmed as delivered '+esc(fmtDT(s.delivered.delivered_at))+' - received by '+esc(s.delivered.received_by)+'. Sending another confirmation adds a new record.</div>';
+  // The screen IS the packing slip: same layout as the printed page, with the
+  // Receiver section (name, email, date, signature) filled in right on it.
+  const longDate=v=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(v||''));const d=m?new Date(+m[1],m[2]-1,+m[3]):new Date(v||Date.now());return isNaN(d)?String(v||''):d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});};
+  const kv=(k,v,cls)=>'<div><span class="ps-k">'+esc(k)+'</span><span class="ps-v'+(cls?' '+cls:'')+'">'+esc(v==null||String(v).trim()===''?'-':v)+'</span></div>';
+  h+='<div class="ps-paper">';
+  h+='<div class="ps-head"><div><div class="ps-title">Packing Slip '+esc(s.slip_number)+'</div><div class="ps-date">'+esc(s.slip_date?longDate(s.slip_date):'')+'</div></div><div class="ps-logo"><b>MATREX</b><small>WINDOW SYSTEM</small></div></div>';
   if(s._unknown){
-    h+='<div class="cut-card"><div class="cut-batch">'+esc(s.slip_number)+'</div><div class="cut-meta">The details of this slip are not on this phone (open Delivery on the shop Wi-Fi before leaving to download them). You can still confirm the delivery - it is matched to the slip when it is sent.</div></div>';
+    h+='<div class="cut-meta" style="margin-bottom:8px">The details of this slip are not on this phone (open Delivery on the shop Wi-Fi before leaving to download them). You can still confirm the delivery - it is matched to the slip when it is sent.</div>';
   }else{
-    const kv=[['Batch',s.batch],['Ship to',s.ship_to],['Job',s.job_name],['Floor / WO',s.floor_or_work_order],['PO',s.po_number?'PO-'+String(s.po_number).replace(/^PO-?/i,''):''],['Part name',s.part_name],['Skids',s.skid_count],['Parts',s.part_count]].filter(([,v])=>v!==''&&v!=null);
-    h+='<div class="cut-card"><div class="cut-batch">Packing slip '+esc(s.slip_number)+'</div><div class="dlv-kv">'+kv.map(([k,v])=>'<span>'+esc(k)+'</span><b>'+esc(v)+'</b>').join('')+'</div></div>';
+    const po=s.po_number?'PO-'+String(s.po_number).replace(/^PO-?/i,''):'';
+    h+='<div class="ps-parties">'+kv('Ship to',s.ship_to)+kv('Department',s.department)+'</div>';
+    h+='<div class="ps-grid">'+kv('Job Name',s.job_name)+kv('Floor / Work Order',s.floor_or_work_order)+kv('Batch',s.batch)+kv('PO Number',po)+kv('Skids',s.skid_count)+kv('Part Qty',s.part_count,'ps-big')+'</div>';
+    h+='<div class="ps-grid" style="grid-template-columns:1fr">'+kv('Part Name',s.part_name)+'</div>';
+    const split=v=>String(v||'').split('|').map(x=>x.trim());
+    const mats=split(s.material),fins=split(s.finish),dura=/durapaint/i.test(s.ship_to||'');
+    const mrows=mats.map((m,i)=>[m,dura?'PAINT AS PER ATTACHED '+(po||'PO NUMBER'):(fins[i]||fins[0]||'')]).filter(r=>r[0]||r[1]);
+    if(mrows.length)h+='<table class="ps-tbl"><tr><th>Material</th><th>Finish</th></tr>'+mrows.map(r=>'<tr><td>'+esc(r[0])+'</td><td>'+esc(r[1])+'</td></tr>').join('')+'</table>';
+    if(String(s.comments||'').trim())h+='<span class="ps-k" style="font-weight:700;color:#000">Comment</span><div class="ps-note">'+esc(s.comments)+'</div>';
     let lastGroup=null;
     const rows=(s.parts||[]).map(p=>{const g=p.group&&p.group!==lastGroup?'<div class="dlv-group">'+esc(p.group)+'</div>':'';lastGroup=p.group||lastGroup;return g+'<div class="dlv-part"><div><b>'+esc(p.tag)+'</b><small>'+esc([p.part_type,p.size,p.colour].filter(Boolean).join(' · '))+'</small></div><div>Qty <b>'+esc(p.qty||'-')+'</b></div></div>';}).join('');
-    h+='<div class="cut-card"><details class="dlv-parts"><summary>Part list ('+s.part_count+' part'+(s.part_count===1?'':'s')+')</summary>'+(rows||'<div class="cut-meta">No parts listed.</div>')+'</details></div>';
+    h+='<details class="ps-attached"><summary>Part list attached · '+esc(s.part_count)+' PART'+(s.part_count===1?'':'S')+' (tap to view)</summary>'+(rows||'<div class="cut-meta">No parts listed.</div>')+'</details>';
   }
-  h+='<div class="cut-card">';
+  h+='<div class="ps-recv">';
+  h+='<label class="ps-rl" for="dlvReceiver">Receiver name <em>*</em></label><input class="ps-line" id="dlvReceiver" placeholder="Tap to write the receiver\'s name" autocomplete="off" value="'+esc(f.received_by)+'">';
+  h+='<label class="ps-rl" for="dlvRcvEmail">Email <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#666">(optional - emails them a copy)</span></label><input class="ps-line" id="dlvRcvEmail" type="email" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" list="dlvEmailList" onblur="dlvCheckEmail()" placeholder="Tap to add email" value="'+esc(f.receiver_email||'')+'">';
+  h+=dlvEmailSuggestHtml(s);
+  h+='<div class="ps-rl">Date received</div><div class="ps-fixed">'+esc(new Date().toLocaleString('en-US',{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))+'</div>';
+  h+='<div class="ps-rl">Receiver signature <em>*</em></div><div class="dlv-sig"><canvas id="dlvSigCanvas"></canvas><div class="dlv-sigline"></div><div class="dlv-sighint">Receiver signs here</div></div><button type="button" class="dlv-sigclear" onclick="dlvClearSig()">Clear signature</button>';
+  h+='</div></div>';
+  // Driver's part: who delivered, condition, skid photos.
+  h+='<div class="cut-card"><div class="cut-batch" style="font-size:15px">Delivery details</div>';
   h+='<label class="dlv-lbl" for="dlvDriver">Driver name <em>*</em></label><input class="dlv-inp" id="dlvDriver" value="'+esc(f.driver_name)+'" autocomplete="name">';
   h+='<label class="dlv-lbl">Carrier</label><div class="dlv-chips">'+DLV_CARRIERS.map(c=>'<button type="button" class="dlv-chip'+(f.carrier===c?' on':'')+'" onclick="dlvSet(\'carrier\',\''+c+'\')">'+esc(c)+'</button>').join('')+'</div>';
-  h+='<label class="dlv-lbl" for="dlvReceiver">Received by (name) <em>*</em></label><input class="dlv-inp" id="dlvReceiver" value="'+esc(f.received_by)+'">';
-h+='<label class="dlv-lbl" for="dlvRcvEmail">Receiver email <span style="font-weight:400">(optional - emails them a copy)</span></label><input class="dlv-inp" id="dlvRcvEmail" type="email" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" list="dlvEmailList" onblur="dlvCheckEmail()" placeholder="name@company.com" value="'+esc(f.receiver_email||'')+'">';
-  h+=dlvEmailSuggestHtml(s);
   h+='<label class="dlv-lbl">Condition</label><div class="dlv-chips">'+DLV_CONDITIONS.map(([k,l])=>'<button type="button" class="dlv-chip'+(f.condition===k?' on'+(k==='OK'?'':' bad'):'')+'" onclick="dlvSet(\'condition\',\''+k+'\')">'+esc(l)+'</button>').join('')+'</div>';
   h+='<label class="dlv-lbl" for="dlvNotes">Notes'+(f.condition!=='OK'?' <em>* describe the problem</em>':'')+'</label><textarea class="dlv-inp" id="dlvNotes" rows="3" placeholder="Damage, missing items, where it was left…">'+esc(f.notes)+'</textarea>';
   h+=dlvPhotosHtml(s,f);
-  h+='<label class="dlv-lbl">Receiver signature <em>*</em></label><div class="dlv-sig"><canvas id="dlvSigCanvas"></canvas><div class="dlv-sigline"></div><div class="dlv-sighint">Sign above the line</div></div><button type="button" class="dlv-sigclear" onclick="dlvClearSig()">Clear signature</button>';
   h+='</div>';
   h+='<button class="btn btn-solid" id="bDlvSave" type="button" onclick="saveDelivery()" style="margin-top:4px">Confirm Delivery</button>';
   $('dlvContent').innerHTML=h;
