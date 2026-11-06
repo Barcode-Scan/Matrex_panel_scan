@@ -603,6 +603,9 @@ textarea.ps-line{resize:vertical;min-height:44px}
 .cut-check input{width:26px;height:26px}
 .cbox .l{font-size:12.5px}
 .cut-tag,.cut-first-lbl{font-size:12px}
+.ps-bo{border:1px solid #F5C77E;background:#FFFAEB;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13px;color:#7a4a00}
+.ps-bo summary{cursor:pointer}
+.ps-bo-from{font-weight:700;font-size:13px;margin:6px 0}
 </style>
 </head>
 <body>
@@ -1179,7 +1182,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-06.2';
+const APP_VERSION='2026-11-06.3';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -3674,6 +3677,9 @@ function renderDeliveryForm(){
     let lastGroup=null;
     const rows=(s.parts||[]).map(p=>{const g=p.group&&p.group!==lastGroup?'<div class="dlv-group">'+esc(p.group)+'</div>':'';lastGroup=p.group||lastGroup;return g+'<div class="dlv-part"><div><b>'+esc(p.tag)+'</b><small>'+esc([p.part_type,p.size,p.colour].filter(Boolean).join(' · '))+'</small></div><div>Qty <b>'+esc(p.qty||'-')+'</b></div></div>';}).join('');
     h+='<details class="ps-attached"><summary>Part list attached · '+esc(s.count_text||(s.part_count+' PART'+(s.part_count===1?'':'S')))+' (tap to view)</summary>'+(rows||'<div class="cut-meta">No parts listed.</div>')+'</details>';
+    // Backorder (2026-11-06): parts not on this shipment, still to follow.
+    if(s.backorder&&s.backorder.rows&&s.backorder.rows.length)h+='<details class="ps-bo"><summary><b>Backordered</b> · '+esc(s.backorder.note||s.backorder.count_text)+'</summary>'+s.backorder.rows.map(p=>'<div class="dlv-part"><div><b>'+esc(p.tag)+'</b><small>'+esc([p.part_type,p.size].filter(Boolean).join(' · '))+'</small></div><div>To follow <b>'+esc(p.qty||'-')+'</b></div></div>').join('')+'</details>';
+    if(s.backorder_from&&s.backorder_from.length)h+='<div class="ps-bo-from">Ships backorder from '+esc(s.backorder_from.join(', '))+'</div>';
   }
   h+='<div class="ps-recv">';
   h+='<label class="ps-rl" for="dlvReceiver">Receiver name <em>*</em></label><input class="ps-line" id="dlvReceiver" placeholder="Tap to write the receiver\'s name" autocomplete="off" value="'+esc(f.received_by)+'">';
