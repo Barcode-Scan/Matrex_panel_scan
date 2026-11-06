@@ -1179,7 +1179,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-06.1';
+const APP_VERSION='2026-11-06.2';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -3663,16 +3663,17 @@ function renderDeliveryForm(){
   }else{
     const po=s.po_number?'PO-'+String(s.po_number).replace(/^PO-?/i,''):'';
     h+='<div class="ps-parties">'+kv('Ship to',s.ship_to)+kv('Department',s.department)+'</div>';
-    h+='<div class="ps-grid">'+kv('Job Name',s.job_name)+kv('Floor / Work Order',s.floor_or_work_order)+kv('Batch',s.batch)+kv('PO Number',po)+kv('Skids',s.skid_count)+kv('Part Qty',s.part_count,'ps-big')+'</div>';
+    h+='<div class="ps-grid">'+kv('Job Name',s.job_name)+kv('Floor / Work Order',s.floor_or_work_order)+kv(s.batch_label||'Batch',s.batch_text||s.batch)+kv('PO Number',po)+kv('Skids',s.skid_count)+kv('Part Qty',s.part_count,'ps-big')+'</div>';
     h+='<div class="ps-grid" style="grid-template-columns:1fr">'+kv('Part Name',s.part_name)+'</div>';
     const split=v=>String(v||'').split('|').map(x=>x.trim());
     const mats=split(s.material),fins=split(s.finish),dura=/durapaint/i.test(s.ship_to||'');
-    const mrows=mats.map((m,i)=>[m,dura?'PAINT AS PER ATTACHED '+(po||'PO NUMBER'):(fins[i]||fins[0]||'')]).filter(r=>r[0]||r[1]);
+    // mat_rows / count_text / batch_text come from the server's SlipRules (same as the printed slip, 2026-11-06)
+    const mrows=s.mat_rows||mats.map((m,i)=>[m,dura?'PAINT AS PER ATTACHED '+(po||'PO NUMBER'):(fins[i]||fins[0]||'')]).filter(r=>r[0]||r[1]);
     if(mrows.length)h+='<table class="ps-tbl"><tr><th>Material</th><th>Finish</th></tr>'+mrows.map(r=>'<tr><td>'+esc(r[0])+'</td><td>'+esc(r[1])+'</td></tr>').join('')+'</table>';
     if(String(s.comments||'').trim())h+='<span class="ps-k" style="font-weight:700;color:#000">Comment</span><div class="ps-note">'+esc(s.comments)+'</div>';
     let lastGroup=null;
     const rows=(s.parts||[]).map(p=>{const g=p.group&&p.group!==lastGroup?'<div class="dlv-group">'+esc(p.group)+'</div>':'';lastGroup=p.group||lastGroup;return g+'<div class="dlv-part"><div><b>'+esc(p.tag)+'</b><small>'+esc([p.part_type,p.size,p.colour].filter(Boolean).join(' · '))+'</small></div><div>Qty <b>'+esc(p.qty||'-')+'</b></div></div>';}).join('');
-    h+='<details class="ps-attached"><summary>Part list attached · '+esc(s.part_count)+' PART'+(s.part_count===1?'':'S')+' (tap to view)</summary>'+(rows||'<div class="cut-meta">No parts listed.</div>')+'</details>';
+    h+='<details class="ps-attached"><summary>Part list attached · '+esc(s.count_text||(s.part_count+' PART'+(s.part_count===1?'':'S')))+' (tap to view)</summary>'+(rows||'<div class="cut-meta">No parts listed.</div>')+'</details>';
   }
   h+='<div class="ps-recv">';
   h+='<label class="ps-rl" for="dlvReceiver">Receiver name <em>*</em></label><input class="ps-line" id="dlvReceiver" placeholder="Tap to write the receiver\'s name" autocomplete="off" value="'+esc(f.received_by)+'">';
