@@ -1179,7 +1179,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-05.7';
+const APP_VERSION='2026-11-06.1';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -2136,20 +2136,30 @@ function applyMatch(part,data,fromReconcile){
 // every next scan saves instantly while a quiet check (every 15 s) waits
 // for the server. When it answers, every saved scan is sent with its real
 // scan time and the screen says how many went through.
+// QUICK RECONNECT (2026-11-06): most gaps are a few seconds (the phone
+// switching Wi-Fi access points, a server restart), so the quiet check runs
+// after 2, 4 and 8 s, then every 15 s. The bar shows amber "Reconnecting"
+// first and only turns red if the gap lasts over 20 s.
 const MATCH_TIMEOUT_MS=3000;
-let serverDown=false,probeTimer=null;
+const PROBE_STEPS_MS=[2000,4000,8000],PROBE_SLOW_MS=15000,DOWN_RED_AFTER_MS=20000;
+let serverDown=false,probeTimer=null,downSince=0,probeN=0;
+function nextProbe(){clearTimeout(probeTimer);probeTimer=setTimeout(probeServer,PROBE_STEPS_MS[probeN++]||PROBE_SLOW_MS);}
 function markServerDown(){
-  if(!serverDown){diag('server_down',navigator.onLine?'Wi-Fi on, server not answering':'phone says no network');}
-  if(!serverDown){serverDown=true;setSyncUI('fail','Server not reachable — scans are saved on this phone');}
-  clearTimeout(probeTimer);probeTimer=setTimeout(probeServer,15000);
+  if(!serverDown){
+    diag('server_down',navigator.onLine?'Wi-Fi on, server not answering':'phone says no network');
+    serverDown=true;downSince=Date.now();probeN=0;
+    setSyncUI('syncing','Reconnecting… scans are saved on this phone');
+  }
+  nextProbe();
 }
 async function probeServer(){
   if(!cfg.url)return;
   try{
     const r=await fetch(cfg.url+'/health',{cache:'no-store',signal:AbortSignal.timeout(3000)});
-    if(r.ok){serverDown=false;setSyncUI('','Back online');diag('back_online',unverifiedCount()+' scans waiting');reconcileUnverified();flushDiag();return;}
+    if(r.ok){serverDown=false;setSyncUI('','Back online');diag('back_online',unverifiedCount()+' scans waiting, offline '+Math.round((Date.now()-downSince)/1000)+' s');reconcileUnverified();flushDiag();return;}
   }catch(e){}
-  clearTimeout(probeTimer);probeTimer=setTimeout(probeServer,15000);
+  if(Date.now()-downSince>DOWN_RED_AFTER_MS)setSyncUI('fail','Server not reachable — scans are saved on this phone');
+  nextProbe();
 }
 const unverifiedCount=()=>scans.filter(s=>s.matchStatus==='UNVERIFIED').length;
 async function handleScan(uniqueId){
