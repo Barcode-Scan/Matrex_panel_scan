@@ -1182,7 +1182,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-06.3';
+const APP_VERSION='2026-11-09.1';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1204,11 +1204,53 @@ async function flushDiag(){
   if((lsGet(LS_DIAG)||[]).length&&!serverDown)setTimeout(flushDiag,1500); // notes added while sending
 }
 setInterval(flushDiag,60000);
+// ── AWAY FROM THE OFFICE (2026-11-09) ── an approved phone gets its own key
+// from the server while on the office Wi-Fi. When the office server can't be
+// reached, the view screens (batches, parts, notes, cutting list, delivery
+// slips) use the internet address with that key. View only: scans and saves
+// still go to the office address and wait on the phone until it is back.
+const LS_AWAY='mx_away';
+let away=lsGet(LS_AWAY); // {url,key} or null
+let awayOn=false,awayCheckedAt=0,awayToldAt=0;
+async function refreshAwayKey(){
+  if(!cfg.url)return;
+  try{
+    const r=await fetch(cfg.url+'/devices/away-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,key:(away&&away.key)||''}),signal:AbortSignal.timeout(5000)});
+    if(r.status===404)return; // server not updated yet
+    const j=await r.json();
+    if(r.status===403||(j.ok&&!j.url)){away=null;awayOn=false;try{localStorage.removeItem(LS_AWAY);}catch(e){}return;}
+    if(j.ok&&j.url&&(j.key||(away&&away.key))){away={url:j.url,key:j.key||away.key};lsSet(LS_AWAY,away);}
+  }catch(e){}
+}
+async function pickReadServer(force){
+  if(!cfg.url||!away||!away.url||!away.key){awayOn=false;return;}
+  if(!force&&Date.now()-awayCheckedAt<30000)return;
+  awayCheckedAt=Date.now();
+  try{const r=await fetch(cfg.url+'/health',{cache:'no-store',signal:AbortSignal.timeout(2500)});if(r.ok){awayOn=false;return;}}catch(e){}
+  try{const r=await fetch(away.url+'/health',{cache:'no-store',signal:AbortSignal.timeout(6000)});
+    if(r.ok){if(!awayOn){diag('away_on',away.url);if(Date.now()-awayToldAt>600000){awayToldAt=Date.now();showFlash('ok','Away from the office - view only');}}awayOn=true;return;}}catch(e){}
+  awayOn=false;
+}
+// fetch for the view screens: office address, or the internet one when away.
+async function readFetch(path,opts){
+  await pickReadServer();
+  const go=()=>{
+    const o=Object.assign({},opts||{});
+    if(o.signal&&o.signal.aborted)o.signal=AbortSignal.timeout(8000); // a retry after a timed-out try
+    if(awayOn)o.headers=Object.assign({},o.headers||{},{'X-Device-Id':deviceId,'X-Device-Key':away.key});
+    return fetch((awayOn?away.url:cfg.url)+path,o);
+  };
+  let r;
+  try{r=await go();}
+  catch(e){if(away&&away.key&&!awayOn){await pickReadServer(true);if(awayOn)r=await go();else throw e;}else throw e;}
+  if(awayOn&&r.status===401)throw new Error('Away access needs refreshing - open the app once on the office Wi-Fi.');
+  return r;
+}
 function registerDevice(url){
   const target=url||cfg.url;
   if(!target)return Promise.resolve('UNKNOWN');
   return fetch(target+'/devices/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device_name:cfg.dev,app_version:APP_VERSION})})
-    .then(r=>r.json()).then(j=>{deviceStatus=j.status||'UNKNOWN';return deviceStatus;})
+    .then(r=>r.json()).then(j=>{deviceStatus=j.status||'UNKNOWN';if(deviceStatus==='APPROVED'&&target===cfg.url)refreshAwayKey();return deviceStatus;})
     .catch(()=>{deviceStatus='UNKNOWN';return deviceStatus;});
 }
 // ── MULTI-STAGE SCANNING — a phone's stage is a local setting (same as
@@ -1228,7 +1270,7 @@ async function loadStageOptions(){
   const classicOpt='<option value="">No stage — single scan (classic)</option>';
   if(!cfg.url){sel.innerHTML=classicOpt;sel.value='';return;}
   try{
-    const res=await fetch(cfg.url+'/parts/stages');
+    const res=await readFetch('/parts/stages');
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
     const stages=data.stages||[];
@@ -2557,7 +2599,7 @@ window.openScanDetail=async i=>{
   $('bUnvoidPart').style.display=unvoidEligible(p)?'block':'none';
   $('notesList').innerHTML='<div style="font-size:13px;color:var(--gray-500)">Loading notes…</div>';
   try{
-    const res=await fetch(cfg.url+'/parts/'+encodeURIComponent(p.uniqueId)+'/notes?device_id='+encodeURIComponent(deviceId));
+    const res=await readFetch('/parts/'+encodeURIComponent(p.uniqueId)+'/notes?device_id='+encodeURIComponent(deviceId));
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
     if(noteTarget!==p)return; // modal moved on to a different part while this was in flight
@@ -2721,7 +2763,7 @@ let batchRefreshTimer=null;
 
 async function viewerFetch(path){
   if(!cfg.url)throw new Error('No server configured — set a Receiver URL in Settings first.');
-  const r=await fetch(cfg.url+path,{headers:{'X-Viewer-Key':viewerKey},signal:AbortSignal.timeout(8000)});
+  const r=await readFetch(path,{headers:{'X-Viewer-Key':viewerKey},signal:AbortSignal.timeout(8000)});
   if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json();
 }
@@ -3305,7 +3347,7 @@ let cutView='list',cutBatches=[],cutCurrent=null,cutRecent=[],cutShowAll=false,c
 function cutQueue(){return lsGet(LS_CUT_QUEUE)||[];}
 async function cutGet(path){
   if(!cfg.url)throw new Error('No server configured — set a Receiver URL in Settings first.');
-  const r=await fetch(cfg.url+path+(path.includes('?')?'&':'?')+'device_id='+encodeURIComponent(deviceId),{signal:AbortSignal.timeout(8000)});
+  const r=await readFetch(path+(path.includes('?')?'&':'?')+'device_id='+encodeURIComponent(deviceId),{signal:AbortSignal.timeout(8000)});
   if(r.status===403)throw new Error('This phone is not approved on the server yet — ask an admin to approve it (Operations → Devices).');
   if(r.status===404&&!path.startsWith('/cutting/batch/'))throw new Error('The server has not been updated for the Cutting Log yet - ask the office to restart the Matrex Server.');
   if(!r.ok)throw new Error('Server error (HTTP '+r.status+')');
@@ -3585,7 +3627,7 @@ const dlvQueuedFor=sn=>dlvQueue().find(q=>q.slip_number===sn);
 async function refreshDeliverySlips(quiet){
   if(!cfg.url)return false;
   try{
-    const r=await fetch(cfg.url+'/delivery/slips?device_id='+encodeURIComponent(deviceId),{signal:AbortSignal.timeout(10000)});
+    const r=await readFetch('/delivery/slips?device_id='+encodeURIComponent(deviceId),{signal:AbortSignal.timeout(10000)});
     if(r.status===403){if(!quiet)dlvMsg={kind:'err',text:'This phone is not approved on the server yet - ask an admin to approve it (Operations → Devices).'};return false;}
     if(!r.ok){if(!quiet)dlvMsg={kind:'err',text:r.status===404?'The server has not been updated for deliveries yet - ask the office to restart the Matrex Server.':'Server error (HTTP '+r.status+')'};return false;}
     const j=await r.json();
@@ -3636,7 +3678,7 @@ async function openDeliverySlip(slipNumber){
   slipNumber=String(slipNumber||'').toUpperCase();
   let s=dlvCache().slips.find(x=>String(x.slip_number).toUpperCase()===slipNumber)||null;
   if(!s&&cfg.url){ // not on the phone yet - try the server (works on the shop network)
-    try{const r=await fetch(cfg.url+'/delivery/slip/'+encodeURIComponent(slipNumber)+'?device_id='+encodeURIComponent(deviceId),{signal:AbortSignal.timeout(6000)});if(r.ok)s=(await r.json()).slip;}catch(e){}
+    try{const r=await readFetch('/delivery/slip/'+encodeURIComponent(slipNumber)+'?device_id='+encodeURIComponent(deviceId),{signal:AbortSignal.timeout(6000)});if(r.ok)s=(await r.json()).slip;}catch(e){}
   }
   dlvView='form';
   dlvSlip=s||{slip_number:slipNumber,_unknown:true,parts:[]};
