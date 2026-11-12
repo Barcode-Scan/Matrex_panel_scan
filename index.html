@@ -833,9 +833,23 @@ textarea.ps-line{resize:vertical;min-height:44px}
       Open via <code>https://</code> or serve from localhost. Camera will not start on plain HTTP.
     </div>
 
-    <!-- CAMERA AT THE TOP of the scan screen (Jay, 2026-11-12): the camera, its
-         size slider and the scan result line come first; pills, machines, DWG /
+    <!-- SCAN SCREEN ORDER (Jay, 2026-11-12): Scanner / Stage line, then the camera,
+         its size slider and the scan result line; machines (Break Press), DWG /
          Next in queue, skid row and counters sit under it. -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="eng-pill" id="engPill" style="margin-bottom:12px">
+        <div class="eng-dot"></div>
+        <span style="color:var(--gray-500)">Scanner</span>
+        <span class="eng-val" id="engVal">Starting…</span>
+      </div>
+      <div class="eng-pill stage" id="stagePill" style="margin-bottom:12px;display:none">
+        <div class="eng-dot"></div>
+        <span style="color:var(--gray-500)">Stage</span>
+        <span class="eng-val" id="stageVal"></span>
+      </div>
+      <div class="batch-progress-badge" id="batchProgressBadge" style="display:none"></div>
+    </div>
+
     <div id="camSlotFree">
     <div id="cambox">
       <video id="cam" muted playsinline autoplay></video>
@@ -870,19 +884,6 @@ textarea.ps-line{resize:vertical;min-height:44px}
       <span id="flashTxt"></span>
     </div>
 
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <div class="eng-pill" id="engPill" style="margin-bottom:12px">
-        <div class="eng-dot"></div>
-        <span style="color:var(--gray-500)">Scanner</span>
-        <span class="eng-val" id="engVal">Starting…</span>
-      </div>
-      <div class="eng-pill stage" id="stagePill" style="margin-bottom:12px;display:none">
-        <div class="eng-dot"></div>
-        <span style="color:var(--gray-500)">Stage</span>
-        <span class="eng-val" id="stageVal"></span>
-      </div>
-      <div class="batch-progress-badge" id="batchProgressBadge" style="display:none"></div>
-    </div>
 
     <!-- Machine quick-select: both machines sit here directly, always
          visible - one tap on either selects it, no pill/sheet to open
@@ -1300,7 +1301,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-12.5';
+const APP_VERSION='2026-11-12.6';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
