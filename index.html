@@ -643,6 +643,22 @@ textarea.ps-line{resize:vertical;min-height:44px}
 .ps-bo-from{font-weight:700;font-size:13px;margin:6px 0}
 /* Phone set to reduce motion (2026-11-10): no sliding or pulsing, changes just appear. */
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+/* ONE CONTENT WIDTH ON EVERY SCREEN (Jay, 2026-11-12): the top bar, the Back/title
+   bar, the search boxes and the content all line up, on any phone or tablet.
+   Bars keep their full-width background; what is inside them sits in the same
+   centred column as the page. */
+:root{--content-w:640px}
+.page,.s-page{max-width:var(--content-w)}
+.topbar,.search-wrap{padding-left:max(16px,calc((100% - var(--content-w)) / 2 + 16px));padding-right:max(16px,calc((100% - var(--content-w)) / 2 + 16px))}
+#fullList>*,#batchScheduleHeader>*{max-width:var(--content-w);margin-left:auto;margin-right:auto}
+/* small phones (320-360 px): filters stack, the skid row and page edges get a little room back */
+@media (max-width:360px){
+  .page,.s-page,.topbar,.search-wrap{padding-left:12px;padding-right:12px}
+  .cut-filters{flex-wrap:wrap}
+  .cut-filters>*{flex:1 1 100%;min-width:0}
+  .skid-new{padding:0 10px;font-size:14px}
+  .skid-arrow{min-width:40px}
+}
 </style>
 </head>
 <body>
@@ -1229,7 +1245,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-12.3';
+const APP_VERSION='2026-11-12.4';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
