@@ -171,7 +171,18 @@ body.cut-stage #scrDelivery .sb-spacer{display:none!important}
 .skid-new{flex:0 0 auto;background:var(--blue-600);color:#fff;border:0;border-radius:14px;padding:0 16px;font-size:15px;font-weight:800;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .skid-new:active,.skid-arrow:active{transform:scale(.96)}
 /* DWG at Bending + Complete the rest (2026-11-11) */
-.dwg-row{margin-bottom:12px}
+.dwg-row{margin-bottom:12px;display:flex;gap:10px}
+.dwg-row .dwg-btn{flex:1;min-width:0}
+/* Next in queue (2026-11-12) */
+.nq-list{display:flex;flex-direction:column;gap:8px;max-height:58vh;overflow:auto;margin:6px 0 4px;text-align:left}
+.nq-item{border:1.5px solid var(--gray-200);border-radius:12px;padding:10px 12px;background:var(--white)}
+.nq-item.first{border-color:var(--blue-600);background:var(--blue-50,#eff6ff)}
+.nq-top{display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px}
+.nq-n{min-width:26px;height:26px;border-radius:13px;background:var(--gray-100);display:inline-flex;align-items:center;justify-content:center;font-size:13px}
+.nq-item.first .nq-n{background:var(--blue-600);color:#fff}
+.nq-tag{font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;background:var(--amber-50,#fffbeb);color:var(--amber-700,#b45309)}
+.nq-tag.rush{background:#fee2e2;color:#b91c1c}
+.nq-meta{font-size:13px;color:var(--gray-600);margin-top:4px}
 .dwg-btn{width:100%;min-height:52px;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--white);border:1.5px solid var(--blue-600);color:var(--blue-700);border-radius:var(--pill);font-size:16px;font-weight:800;cursor:pointer;-webkit-tap-highlight-color:transparent;font-family:inherit}
 .dwg-btn.on{background:var(--blue-600);border-color:var(--blue-600);color:#fff}
 .dwg-btn:active,.crest-btn:active{transform:scale(.97)}
@@ -770,7 +781,9 @@ textarea.ps-line{resize:vertical;min-height:44px}
     <div class="mach-quickrow" id="machQuickRow" style="display:none"></div>
 
     <!-- Bending: tap DWG, then scan any label of a batch to open its drawing (2026-11-11). -->
-    <div class="dwg-row" id="dwgRow" style="display:none"><button type="button" class="dwg-btn" id="bDwg" onclick="toggleDwgMode()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg><span id="bDwgText">DWG</span></button></div>
+    <div class="dwg-row" id="dwgRow" style="display:none"><button type="button" class="dwg-btn" id="bDwg" onclick="toggleDwgMode()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg><span id="bDwgText">DWG</span></button><button type="button" class="dwg-btn" id="bNextQ" onclick="openNextQueue()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.5"/><circle cx="3.5" cy="12" r="1.5"/><circle cx="3.5" cy="18" r="1.5"/></svg>Next in queue</button></div>
+    <!-- Complete: what to pack next, from the Daily Planner's Complete queue (2026-11-12). -->
+    <div class="dwg-row" id="nqRowComplete" style="display:none"><button type="button" class="dwg-btn" onclick="openNextQueue()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.5"/><circle cx="3.5" cy="12" r="1.5"/><circle cx="3.5" cy="18" r="1.5"/></svg>Next in queue</button></div>
 
     <!-- Complete stage only: which skid the next scanned panels go on. -->
     <div class="skid-row" id="skidRow" style="display:none">
@@ -1098,6 +1111,7 @@ textarea.ps-line{resize:vertical;min-height:44px}
 
 <div class="mbg" id="mBatchLabel"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="m-title">Label details</div><div class="data-card" id="mBatchLabelData"></div><div class="sec-hdr" style="margin-top:4px"><span class="sec-title">Notes</span></div><div id="batchLabelNotes" style="margin-bottom:10px"></div><div class="mbtns"><button class="m-ok" id="mBatchLabelClose" type="button">Close</button></div></div></div>
 
+<div class="mbg" id="mNextQ"><div class="msheet"><div class="mhandle"></div><div class="m-title" id="mNextQTitle">Next in queue</div><div class="m-desc" id="mNextQDesc"></div><div class="nq-list" id="mNextQList"></div><div class="mbtns"><button class="m-cancel" type="button" onclick="modal('mNextQ',false)">Close</button></div></div></div>
 <div class="mbg" id="mDwg"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info" style="color:var(--blue-600)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></div><div class="m-title" id="mDwgTitle">Drawings</div><div class="m-desc" id="mDwgDesc"></div><div class="dwg-list" id="mDwgList"></div><div class="mbtns"><button class="m-cancel" type="button" onclick="modal('mDwg',false)">Close</button></div></div></div>
 <div class="mbg" id="mRest"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div><div class="m-title">Put the rest on this skid?</div><div class="m-desc" id="mRestDesc"></div><div class="mbtns"><button class="m-ok" id="mRestYes" type="button">Yes, they are all on this skid</button><button class="m-cancel" type="button" onclick="modal('mRest',false)">Cancel</button></div></div></div>
 <div class="mbg" id="mDirConfirm"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="m-title">Scan out of order?</div><div class="m-desc" id="mDirConfirmBody"></div><div class="mbtns"><button class="m-ok" id="mDirConfirmYes" type="button">Yes, Scan It</button><button class="m-cancel" id="mDirConfirmNo" type="button">Cancel</button></div></div></div>
@@ -1213,7 +1227,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-12.1';
+const APP_VERSION='2026-11-12.2';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1543,6 +1557,7 @@ function setSkid(c){cfg.cskid=c;lsSet(LS.cfg,cfg);refreshSkidRow();}
 // the PDF. That scan is NOT recorded. One lookup per tap.
 let dwgMode=false;
 function refreshDwgRow(){
+  const nq=$('nqRowComplete');if(nq){let c=false;try{c=isCompleteStage();}catch(e){}nq.style.display=c?'':'none';}
   const r=$('dwgRow');if(!r)return;
   let on=false;try{on=isMachineRequiredStage();}catch(e){}
   r.style.display=on?'':'none';
@@ -1556,6 +1571,26 @@ function toggleDwgMode(){
   if(!dwgMode&&(!cfg.url||!navigator.onLine||serverDown)){beep('err');showFlash('bad','Drawings need the server - it is not reachable right now');return;}
   setDwgMode(!dwgMode);
   if(dwgMode)showFlash('ok','Scan any label of the batch to see its drawing');
+}
+// ── NEXT IN QUEUE (Jay, 2026-11-12) - Bending (beside DWG) and Complete: the
+// stage's queue from the Daily Planner, top = start next. Read only; the office
+// sets the order on the dashboard.
+async function openNextQueue(){
+  if(!cfg.url||!cfg.stageNumber){beep('err');showFlash('bad','Pick your stage first');return;}
+  $('mNextQTitle').textContent='Next in queue';$('mNextQDesc').textContent='Loading…';$('mNextQList').innerHTML='';
+  modal('mNextQ',true);
+  try{
+    const r=await fetch(cfg.url+'/stage-queue/'+encodeURIComponent(cfg.stageNumber)+'?device_id='+encodeURIComponent(deviceId),{signal:AbortSignal.timeout(8000)});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){$('mNextQDesc').textContent=r.status===403?'This phone is not approved yet.':(j.error||'Could not load the queue.');return;}
+    $('mNextQTitle').textContent=j.stage+' - next in queue';
+    $('mNextQDesc').textContent=j.count?('Top = start next. '+j.count+' batch'+(j.count===1?'':'es')+' waiting'+(j.count>j.queue.length?' (first '+j.queue.length+' shown)':'')+'. The office sets this order on the Daily Planner.'):'Nothing waiting at '+j.stage+' right now.';
+    const day=v=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(v||'');return m?new Date(+m[1],m[2]-1,+m[3]).toLocaleDateString([],{month:'short',day:'numeric'}):'';};
+    $('mNextQList').innerHTML=j.queue.map((v,i)=>'<div class="nq-item'+(i===0?' first':'')+'"><div class="nq-top"><span class="nq-n">'+(i+1)+'</span><span style="flex:1;min-width:0;overflow-wrap:anywhere">'+esc(v.batch)+'</span>'
+      +(v.in_progress?'<span class="nq-tag">Working</span>':'')+(v.priority?'<span class="nq-tag'+(v.priority==='Rush'?' rush':'')+'">'+esc(v.priority)+'</span>':'')+'</div>'
+      +'<div class="nq-meta">'+esc([v.job_name,v.floor_or_work_order,v.part_name].filter(Boolean).join(' · '))+'</div>'
+      +'<div class="nq-meta"><b>'+v.left+'</b> of '+v.total+' parts left'+(j.prev?' · '+esc(j.prev)+' '+(v.before>=v.total?'done':v.before+'/'+v.total):'')+(v.target_finish?' · target '+esc(day(v.target_finish)):'')+'</div></div>').join('');
+  }catch(e){$('mNextQDesc').textContent='Could not reach the server - check the Wi-Fi and try again.';}
 }
 async function lookupDrawings(uid){
   setDwgMode(false);
