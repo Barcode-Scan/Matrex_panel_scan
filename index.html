@@ -170,6 +170,16 @@ body.cut-stage #scrDelivery .sb-spacer{display:none!important}
 .skid-cur .b{font-size:11px;color:var(--gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .skid-new{flex:0 0 auto;background:var(--blue-600);color:#fff;border:0;border-radius:14px;padding:0 16px;font-size:15px;font-weight:800;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .skid-new:active,.skid-arrow:active{transform:scale(.96)}
+/* DWG at Bending + Complete the rest (2026-11-11) */
+.dwg-row{margin-bottom:12px}
+.dwg-btn{width:100%;min-height:52px;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--white);border:1.5px solid var(--blue-600);color:var(--blue-700);border-radius:var(--pill);font-size:16px;font-weight:800;cursor:pointer;-webkit-tap-highlight-color:transparent;font-family:inherit}
+.dwg-btn.on{background:var(--blue-600);border-color:var(--blue-600);color:#fff}
+.dwg-btn:active,.crest-btn:active{transform:scale(.97)}
+.dwg-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.dwg-link{display:block;text-decoration:none;text-align:left;background:var(--blue-50);border:1.5px solid var(--blue-100);border-radius:16px;padding:12px 14px;color:var(--gray-900);min-height:44px}
+.dwg-link b{display:block;font-size:16px;word-break:break-word}
+.dwg-link span{display:block;font-size:13px;color:var(--gray-500);margin-top:2px}
+.crest-btn{width:100%;min-height:52px;margin:0 0 12px;background:var(--green-50);border:1.5px solid var(--green-700);color:var(--green-700);border-radius:14px;font-size:15px;font-weight:800;cursor:pointer;padding:10px 14px;font-family:inherit;-webkit-tap-highlight-color:transparent}
 .mach-qbtn{display:flex;align-items:center;gap:8px;flex:1;background:var(--white);border:1.5px solid var(--gray-200);border-radius:var(--pill);padding:8px 14px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .1s var(--ease),background .1s,border-color .1s}
 .mach-qbtn:active{transform:scale(.96)}
 .mach-qbtn-icon{display:flex;flex-shrink:0}
@@ -274,6 +284,12 @@ body.dlv-scan #scrScan .page>*:not(#dlvScanHead):not(#camSlotFree):not(.camsize-
 .dsh-s{font-size:13px;color:var(--gray-500);margin-top:2px}
 .dsh-foot{display:none}
 body.dlv-scan .dsh-foot{display:flex;gap:10px;margin-top:4px}
+body.ho-scan #dlvScanFoot button+button{display:none}
+/* Phase 5 (2026-11-12): skids delivered + condition, picked by tapping (nothing pre-ticked) */
+.dlv-pick{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px}
+.dlv-chip{min-height:44px;min-width:56px;padding:8px 14px;border:1.5px solid #c7ccd4;border-radius:10px;background:#fff;font-size:15px;font-weight:600;color:#111;cursor:pointer}
+.dlv-chip.on{background:#0071E3;border-color:#0071E3;color:#fff}
+.dlv-chip.warn.on{background:#B45309;border-color:#B45309}
 .dsh-foot .btn{flex:1}
 #camPickWrap.on{display:block}
 #camPick{width:100%;background:var(--white);border:none;border-radius:var(--pill);padding:10px 14px;font-size:15px;font-weight:600;color:var(--gray-700);font-family:inherit;box-shadow:var(--shadow-sm)}
@@ -285,6 +301,12 @@ body.dlv-scan .dsh-foot{display:flex;gap:10px;margin-top:4px}
 #flash.err{display:flex;background:var(--red-50);color:var(--red-600);border:1.5px solid var(--red-300)}
 .flash-icon{flex-shrink:0}
 
+/* NEWER APP NOTICE (2026-11-11) */
+#updBar{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:900;display:none;align-items:center;gap:10px;background:var(--blue-600,#2563EB);color:#fff;border:none;border-radius:var(--r);padding:12px 14px;box-shadow:0 8px 24px rgba(16,24,40,.25);font:inherit;font-size:15px;font-weight:700;text-align:left;width:auto;cursor:pointer}
+#updBar.on{display:flex}
+#updBar span{font-weight:400;font-size:13px;opacity:.9}
+#updBar>div{flex:1}
+#updBar .upd-x{flex:0 0 auto;font-size:20px;line-height:1;opacity:1;padding:6px 4px 6px 10px;border-left:1px solid rgba(255,255,255,.35)}
 /* SYNC BAR */
 #syncbar{display:flex;align-items:center;gap:8px;background:var(--white);border:none;border-radius:var(--r);padding:10px 12px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
 .s-dot{width:8px;height:8px;border-radius:50%;background:var(--gray-300);flex-shrink:0}
@@ -747,6 +769,9 @@ textarea.ps-line{resize:vertical;min-height:44px}
          first. See MACHINES/selectMachine() below. -->
     <div class="mach-quickrow" id="machQuickRow" style="display:none"></div>
 
+    <!-- Bending: tap DWG, then scan any label of a batch to open its drawing (2026-11-11). -->
+    <div class="dwg-row" id="dwgRow" style="display:none"><button type="button" class="dwg-btn" id="bDwg" onclick="toggleDwgMode()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg><span id="bDwgText">DWG</span></button></div>
+
     <!-- Complete stage only: which skid the next scanned panels go on. -->
     <div class="skid-row" id="skidRow" style="display:none">
       <button type="button" class="skid-arrow" id="bSkidPrev" onclick="stepSkid(-1)" aria-label="Previous skid">&#8249;</button>
@@ -754,6 +779,8 @@ textarea.ps-line{resize:vertical;min-height:44px}
       <button type="button" class="skid-arrow" id="bSkidNext" onclick="stepSkid(1)" aria-label="Next skid">&#8250;</button>
       <button type="button" class="skid-new" id="bSkidNew" onclick="newSkid()">+ New Skid</button>
     </div>
+    <!-- Complete stage: the other panels of the batch onto this skid in one go (2026-11-11). -->
+    <button type="button" class="crest-btn" id="bCompleteRest" style="display:none" onclick="askCompleteRest()"></button>
 
     <div class="counters">
       <div class="cbox c-scan" id="cScanned" onclick="openListScreen('all')"><div class="n" id="nTotal">0</div><div class="l">Scanned</div></div>
@@ -1071,6 +1098,8 @@ textarea.ps-line{resize:vertical;min-height:44px}
 
 <div class="mbg" id="mBatchLabel"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="m-title">Label details</div><div class="data-card" id="mBatchLabelData"></div><div class="sec-hdr" style="margin-top:4px"><span class="sec-title">Notes</span></div><div id="batchLabelNotes" style="margin-bottom:10px"></div><div class="mbtns"><button class="m-ok" id="mBatchLabelClose" type="button">Close</button></div></div></div>
 
+<div class="mbg" id="mDwg"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info" style="color:var(--blue-600)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></div><div class="m-title" id="mDwgTitle">Drawings</div><div class="m-desc" id="mDwgDesc"></div><div class="dwg-list" id="mDwgList"></div><div class="mbtns"><button class="m-cancel" type="button" onclick="modal('mDwg',false)">Close</button></div></div></div>
+<div class="mbg" id="mRest"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div><div class="m-title">Put the rest on this skid?</div><div class="m-desc" id="mRestDesc"></div><div class="mbtns"><button class="m-ok" id="mRestYes" type="button">Yes, they are all on this skid</button><button class="m-cancel" type="button" onclick="modal('mRest',false)">Cancel</button></div></div></div>
 <div class="mbg" id="mDirConfirm"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="m-title">Scan out of order?</div><div class="m-desc" id="mDirConfirmBody"></div><div class="mbtns"><button class="m-ok" id="mDirConfirmYes" type="button">Yes, Scan It</button><button class="m-cancel" id="mDirConfirmNo" type="button">Cancel</button></div></div></div>
 
 <div class="mbg" id="mDirManual"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></div><div class="m-title">Manual Entry</div><div class="m-desc">Barcode unreadable? Type the 10-character code from the label.</div><div class="fg"><label class="fg-label" for="dirManualInput">Code</label><input class="fg-input" id="dirManualInput" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="10" style="font-size:22px;letter-spacing:2px;text-align:center;text-transform:uppercase" placeholder="e.g. Y4GPRARMUK"></div><div class="err-box" id="dirManualErr">Enter the 10-character code.</div><div class="mbtns"><button class="m-ok" id="dirManualOk" type="button">Submit</button><button class="m-cancel" id="dirManualCancel" type="button">Cancel</button></div></div></div>
@@ -1163,7 +1192,7 @@ const lsSet=(k,v)=>{
 // checked first in enterScanScreen()) so it's excluded here too.
 const RESTORABLE_SCREENS=new Set(['scrScan','scrList','scrBatch']);
 function show(id){
-  if(id!=='scrScan')document.body.classList.remove('dlv-scan');
+  if(id!=='scrScan'){document.body.classList.remove('dlv-scan','ho-scan');hoMode=false;}
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));$(id).classList.add('on');
   if(RESTORABLE_SCREENS.has(id))lsSet(LS.lastScreen,id);
 }
@@ -1184,7 +1213,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-10.1';
+const APP_VERSION='2026-11-12.1';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1206,6 +1235,45 @@ async function flushDiag(){
   if((lsGet(LS_DIAG)||[]).length&&!serverDown)setTimeout(flushDiag,1500); // notes added while sending
 }
 setInterval(flushDiag,60000);
+// ── NEWER APP NOTICE (2026-11-11) ── the server says which app version is
+// current (/app-version). A phone running an older one shows a bar at the
+// bottom: tap it to load the new app (same as the Refresh button). If a
+// refresh did not bring the new version (not published to the phones yet),
+// the bar stays away for 6 hours instead of asking again and again.
+// (Separate from checkAppUpdate() further down, the red dot on Refresh when
+// the page file itself changed.)
+const LS_UPD='mx_upd_tried';
+function appVerCmp(a,b){
+  const p=v=>String(v||'').split(/[-.]/).map(x=>parseInt(x,10)||0),x=p(a),y=p(b);
+  for(let i=0;i<Math.max(x.length,y.length);i++){if((x[i]||0)!==(y[i]||0))return (x[i]||0)-(y[i]||0);}
+  return 0;
+}
+async function checkServerAppVersion(){
+  if(!cfg.url||awayOn)return;
+  let v=null;
+  try{const r=await fetch(cfg.url+'/app-version',{cache:'no-store',signal:AbortSignal.timeout(4000)});if(!r.ok)return;v=(await r.json()).version;}catch(e){return;}
+  let bar=$('updBar');
+  if(!bar){ // on the page itself, so it shows over every screen
+    bar=document.createElement('button');bar.type='button';bar.id='updBar';bar.setAttribute('aria-live','polite');bar.onclick=startAppUpdate;
+    bar.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg><div>A newer Matrex app is ready<br><span id="updBarVer"></span></div><span class="upd-x" aria-label="Later" title="Later">&#10005;</span>';
+    document.body.appendChild(bar);
+  }
+  const tried=lsGet(LS_UPD)||{};
+  const newer=v&&appVerCmp(v,APP_VERSION)>0;
+  const waitMore=newer&&tried.v===v&&Date.now()-(tried.at||0)<6*3600e3;
+  bar.classList.toggle('on',!!(newer&&!waitMore));
+  if(newer){bar.dataset.v=v;$('updBarVer').textContent='This phone has '+APP_VERSION+', the newest is '+v+'. Tap to update.';}
+}
+function startAppUpdate(ev){
+  const v=$('updBar').dataset.v;
+  lsSet(LS_UPD,{v,at:Date.now()});
+  if(ev&&ev.target&&ev.target.closest&&ev.target.closest('.upd-x')){$('updBar').classList.remove('on');return;} // Later: again in 6 hours
+  diag('app_update',APP_VERSION+' -> '+v);
+  hardRefresh(true);
+}
+setTimeout(checkServerAppVersion,8000);
+setInterval(checkServerAppVersion,30*60000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkServerAppVersion();});
 // ── AWAY FROM THE OFFICE (2026-11-09) ── an approved phone gets its own key
 // from the server while on the office Wi-Fi. When the office server can't be
 // reached, the view screens (batches, parts, notes, cutting list, delivery
@@ -1456,6 +1524,7 @@ function isCompleteStage(){
   return!!(s&&s.stage_type!=='cutting'&&/^complete/i.test(String(s.stage_name||'').trim()));
 }
 function refreshSkidRow(){
+  refreshDwgRow();refreshCompleteRest();
   const row=$('skidRow');if(!row)return;
   const on=isCompleteStage();
   row.style.display=on?'':'none';
@@ -1468,6 +1537,78 @@ function refreshSkidRow(){
   $('bSkidNext').disabled=!(c&&c.n<(c.max||1));
 }
 function setSkid(c){cfg.cskid=c;lsSet(LS.cfg,cfg);refreshSkidRow();}
+
+// ── DRAWINGS AT BENDING (2026-11-11, Jay) - tap DWG, scan any label: the phone
+// lists that batch's drawings (server /parts/drawings) and tapping one opens
+// the PDF. That scan is NOT recorded. One lookup per tap.
+let dwgMode=false;
+function refreshDwgRow(){
+  const r=$('dwgRow');if(!r)return;
+  let on=false;try{on=isMachineRequiredStage();}catch(e){}
+  r.style.display=on?'':'none';
+  if(!on&&dwgMode)setDwgMode(false);
+}
+function setDwgMode(on){
+  dwgMode=on;const b=$('bDwg');if(!b)return;
+  b.classList.toggle('on',on);$('bDwgText').textContent=on?'Scan a label - tap here to cancel':'DWG';
+}
+function toggleDwgMode(){
+  if(!dwgMode&&(!cfg.url||!navigator.onLine||serverDown)){beep('err');showFlash('bad','Drawings need the server - it is not reachable right now');return;}
+  setDwgMode(!dwgMode);
+  if(dwgMode)showFlash('ok','Scan any label of the batch to see its drawing');
+}
+async function lookupDrawings(uid){
+  setDwgMode(false);
+  try{
+    const res=await fetch(cfg.url+'/parts/drawings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,unique_id:uid}),signal:AbortSignal.timeout(8000)});
+    const j=await res.json().catch(()=>({}));
+    if(!res.ok){beep('err');showFlash('bad',res.status===403?'This phone is not approved yet':(j.error||'Could not get the drawing'));return;}
+    beep('ok');
+    $('mDwgTitle').textContent=j.batch;
+    $('mDwgDesc').textContent=(j.tag?j.tag+' - ':'')+(j.drawings.length?'tap a drawing to open it':'no drawing on file for this batch yet')+(j.missing&&j.missing.length?' (none found for '+j.missing.join(', ')+')':'');
+    $('mDwgList').innerHTML=j.drawings.map(d=>'<a class="dwg-link" href="'+esc(cfg.url+d.url)+'" target="_blank" rel="noopener"><b>'+esc(d.name)+'</b><span>'+esc(d.what)+'</span></a>').join('');
+    modal('mDwg',true);
+  }catch(e){beep('err');showFlash('bad','Could not reach the server for the drawing');}
+}
+
+// ── COMPLETE THE REST (2026-11-11) - at Complete, once a panel of a batch is
+// scanned onto a skid, one tap puts the batch's other panels on the same skid
+// (server /parts/complete-rest). Only shown while that batch has panels left.
+let restInfo=null;
+function refreshCompleteRest(){
+  const b=$('bCompleteRest');if(!b)return;
+  let s=null;
+  try{
+    if(isCompleteStage())for(let i=scans.length-1;i>=0;i--){const x=scans[i];if(x.stageNumber===cfg.stageNumber&&x.batch&&x.batchTotal&&(x.matchStatus==='MATCHED_NEW'||x.matchStatus==='MATCHED_ALREADY')){s=x;break;}}
+  }catch(e){s=null;}
+  const c=cfg.cskid,left=s?s.batchTotal-s.batchScanned:0;
+  restInfo=s&&left>0?{uid:s.uniqueId,batch:s.batch,left,skid:c&&c.batch===s.batch?c.n||1:null}:null;
+  b.style.display=restInfo?'':'none';
+  if(restInfo)b.textContent='Put the other '+left+' of '+restInfo.batch+(restInfo.skid?' on SKID '+restInfo.skid:' on its skid');
+}
+function askCompleteRest(){
+  if(!restInfo)return;
+  if(!cfg.url||!navigator.onLine||serverDown){beep('err');showFlash('bad','This needs the server - it is not reachable right now');return;}
+  const n=restInfo.left;
+  $('mRestDesc').textContent='The '+n+' panel'+(n===1?'':'s')+' of '+restInfo.batch+' not scanned here yet go on '+(restInfo.skid?'SKID '+restInfo.skid:'the skid of the last panel')+'. Only do this when they are really all on it.';
+  modal('mRest',true);
+}
+$('mRestYes').onclick=async()=>{
+  const r=restInfo;if(!r){modal('mRest',false);return;}
+  const btn=$('mRestYes');btn.disabled=true;
+  try{
+    const res=await fetch(cfg.url+'/parts/complete-rest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device:cfg.dev,unique_id:r.uid,skid:r.skid,expect:r.left}),signal:AbortSignal.timeout(15000)});
+    const j=await res.json().catch(()=>({}));
+    modal('mRest',false);
+    if(!res.ok){beep('err');showFlash('bad',j.error||'Could not complete the rest');return;}
+    // the batch's progress on this phone moves to what the server now has
+    for(const x of scans)if(x.batch===j.batch&&x.stageNumber===cfg.stageNumber){x.batchScanned=j.batch_scanned;x.batchTotal=j.batch_total;}
+    saveScans();currentBatchScanned=j.batch_scanned;currentBatchTotal=j.batch_total;
+    beep('ok');showFlash('ok',j.added+' panel'+(j.added===1?'':'s')+' put on SKID '+j.skid+' - '+j.batch+' '+j.batch_scanned+'/'+j.batch_total);
+    updateCounters();refreshCompleteRest();
+  }catch(e){modal('mRest',false);beep('err');showFlash('bad','Could not reach the server - nothing was changed');}
+  finally{btn.disabled=false;}
+};
 function stepSkid(d){
   const c=cfg.cskid;if(!c||!c.batch)return;
   const n=Math.min(Math.max(1,c.n+d),Math.max(1,c.max||1));
@@ -2101,11 +2242,15 @@ async function handleRaw(raw,method){
   // The delivery QR printed on a packing slip opens Delivery confirmation.
   const dlvSlip=parseDeliveryQr(raw);
   if(dlvSlip){beep('ok');openDeliveryScreen(dlvSlip);return;}
+  // In-house hand-off armed (Phase 5): this scan only names the batch being handed off.
+  if(hoMode){if(raw.length!==ID_LEN){beep('err');showFlash('bad','Not a Matrex label - scan any label of the batch');return;}await hoLookup(raw);return;}
   if(document.body.classList.contains('dlv-scan')){beep('err');showFlash('err','Not a packing slip QR - scan the QR code on the packing slip');return;}
   // Hard requirement on a Bending phone - no scan gets processed (not
   // even saved locally) without a machine actively selected. Checked
   // here, before the barcode is even validated, so nothing about this
   // scan attempt is recorded anywhere until it's picked.
+  // DWG armed: this scan only looks up the batch's drawings (no machine needed, nothing recorded).
+  if(dwgMode){if(raw.length!==ID_LEN){beep('err');showFlash('bad','Not a Matrex code - scan a label');return;}await lookupDrawings(raw);return;}
   if(isMachineRequiredStage()&&!cfg.machine){
     beep('err');nudgeMachineSelection('Select your machine before scanning — required');return;
   }
@@ -2147,7 +2292,7 @@ function applyMatch(part,data,fromReconcile){
   // MATCHED_ALREADY still carry real batch progress worth showing).
   part.batchScanned=data.batch_scanned||0;part.batchTotal=data.batch_total||0;
   if(data.status==='NOT_FOUND'){part.flag='NOT_REGISTERED';return;}
-  part.batchSheet=data.sheet_name||'';part.project=data.project||'';part.floor=data.floor||'';
+  part.batchSheet=data.sheet_name||'';part.project=data.project||'';part.floor=data.floor||'';part.batch=data.batch||'';
   part.partType=data.part_type||'';part.partName=data.tag||part.uniqueId;
   part.size=[data.width,data.height].filter(Boolean).join(' X ');
   part.qty=data.qty||'';part.colour=data.colour||'';
@@ -2284,7 +2429,7 @@ function commit(part){
   try{saveScans();}catch(e){phoneStorageFull=true;}
   if(phoneStorageFull)diag('storage_full','could not keep '+part.uniqueId+' on the phone');
   if(part.batchTotal!=null){currentBatchScanned=part.batchScanned;currentBatchTotal=part.batchTotal;}
-  beep(part.flag&&part.flag!=='UNVERIFIED'?'err':'ok');updateCounters();renderRecent();
+  beep(part.flag&&part.flag!=='UNVERIFIED'?'err':'ok');updateCounters();renderRecent();refreshCompleteRest();
   const base=part.partName+(part.colour?' — '+part.colour:'');
   // A stage-scoped duplicate ("already scanned at Stage 2") reads very
   // differently from a classic one ("already scanned" full stop, the
@@ -3660,17 +3805,19 @@ function renderDeliveryList(){
   if(dlvMsg)h+='<div class="cut-msg '+dlvMsg.kind+'">'+esc(dlvMsg.text)+'</div>';
   h+='<div class="dlv-info" style="font-weight:600">Hand scanner: just scan the QR on the packing slip - the sign-off form opens by itself.</div>';
   h+='<div class="dlv-tools"><button class="btn btn-solid" type="button" onclick="dlvScanQr()">Scan with camera</button><button class="btn btn-outline" type="button" onclick="dlvRefresh()">Refresh</button></div>';
+  h+='<div class="dlv-tools"><button class="btn btn-outline" type="button" onclick="hoStart()">In-house hand-off (INTERNAL batch)</button></div>';
   h+='<div class="dlv-info">'+(c.fetched_at?'Packing slips on this phone: '+c.slips.length+' · downloaded '+esc(fmtDT(c.fetched_at))+'. Open this screen on the shop Wi-Fi before leaving so the slips are on the phone at the delivery site.':'No packing slips on this phone yet - open this screen on the shop Wi-Fi to download them.')+(q.length?' <b style="color:var(--amber-700)">'+q.length+' confirmation'+(q.length===1?'':'s')+' waiting to send.</b>':'')+'</div>';
   if(!list.length)h+='<div class="empty-box"><div class="es">'+(words.length?'No packing slip matches.':'No packing slips yet.')+'</div></div>';
   h+=list.slice(0,80).map(s=>{
     const queued=dlvQueuedFor(s.slip_number);
-    const tag=queued?'<span class="dlv-wait">Waiting to send</span>':s.delivered?'<span class="dlv-ok">Delivered</span>':'';
+    const tag=queued?'<span class="dlv-wait">Waiting to send</span>':s.delivered&&s.skids_left>0?'<span class="dlv-wait">'+s.skids_left+' skid'+(s.skids_left===1?'':'s')+' to go</span>':s.delivered?'<span class="dlv-ok">Delivered</span>':'';
     return '<div class="cut-card tap" onclick="openDeliverySlip(\''+esc(s.slip_number)+'\')"><div class="cut-head"><div style="min-width:0"><div class="cut-batch">'+esc(s.slip_number)+' · '+esc(s.batch)+'</div><div class="cut-meta">'+esc([s.ship_to,s.job_name,s.slip_date].filter(Boolean).join(' · '))+' · '+s.part_count+' part'+(s.part_count===1?'':'s')+(s.skid_count?' · '+s.skid_count+' skid'+(s.skid_count==1?'':'s'):'')+'</div></div>'+tag+'</div></div>';
   }).join('');
   $('dlvContent').innerHTML=h;
 }
 function dlvRefresh(){dlvMsg=null;$('dlvContent').querySelector('.dlv-info')&&($('dlvContent').querySelector('.dlv-info').textContent='Downloading…');refreshDeliverySlips(false).then(ok=>{if(!ok&&!dlvMsg)dlvMsg={kind:'warn',text:'Could not reach the server - showing the slips already on this phone.'};renderDeliveryList();});}
-function dlvScanQr(){document.body.classList.add('dlv-scan');show('scrScan');startScanner();}
+function dlvScanQr(){hoMode=false;dlvScanHeadText('&#128666; Delivery scan','Point the camera at the QR code on the packing slip');document.body.classList.remove('ho-scan');document.body.classList.add('dlv-scan');show('scrScan');startScanner();}
+function dlvScanHeadText(t,s){const h=$('dlvScanHead');if(!h)return;const a=h.querySelector('.dsh-t'),b=h.querySelector('.dsh-s');if(a)a.innerHTML=t;if(b)b.textContent=s;}
 // Back to the Delivery list (focus the search box to type a slip number).
 function dlvScanCancel(typeIt){
   openDeliveryScreen();
@@ -3685,7 +3832,7 @@ async function openDeliverySlip(slipNumber){
   dlvView='form';
   dlvSlip=s||{slip_number:slipNumber,_unknown:true,parts:[]};
   const drv=lsGet(LS_DLV_DRIVER)||{};
-  dlvForm={driver_name:drv.name||'',carrier:drv.carrier||'Matrex truck',received_by:'',receiver_email:'',condition:'OK',notes:'',photos:[],signed:false};
+  dlvForm={driver_name:drv.name||'',carrier:drv.carrier||'Matrex truck',received_by:'',receiver_email:'',condition:'',skids:null,notes:'',photos:[],signed:false};
   const dr=dlvDraft();
   if(dr&&dr.slip_number===dlvSlip.slip_number){Object.assign(dlvForm,dr.form,{signed:false,drvSigned:false});const n=(dr.form.photos||[]).length;dlvMsg={kind:'ok',text:'Picked up where you left off'+(n?' - '+n+' photo'+(n===1?'':'s')+' kept':'')+'.'};}
   renderDeliveryForm();
@@ -3698,6 +3845,7 @@ function renderDeliveryForm(){
   let h='';
   if(dlvMsg)h+='<div class="cut-msg '+dlvMsg.kind+'">'+esc(dlvMsg.text)+'</div>';
   if(queued)h+='<div class="cut-msg warn">A confirmation for this slip is already saved on this phone and waiting to send.</div>';
+  else if(s.delivered&&s.skids_left>0)h+='<div class="cut-msg warn">'+esc(s.skids_delivered+' of '+(s.skid_count||1)+' skids delivered so far (last '+fmtDT(s.delivered.delivered_at)+'). '+s.skids_left+' still to deliver - confirm them here.')+'</div>';
   else if(s.delivered)h+='<div class="cut-msg ok">Already confirmed as delivered '+esc(fmtDT(s.delivered.delivered_at))+' - received by '+esc(s.delivered.received_by)+'. Sending another confirmation adds a new record.</div>';
   // The screen IS the packing slip: same layout as the printed page, with the
   // Receiver section (name, email, date, signature) filled in right on it.
@@ -3731,6 +3879,7 @@ function renderDeliveryForm(){
   h+=dlvEmailSuggestHtml(s);
   h+='<div class="ps-rl">Date received</div><div class="ps-fixed">'+esc(new Date().toLocaleString('en-US',{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))+'</div>';
   h+='<div class="ps-rl">Receiver signature <em>*</em></div><div class="dlv-sig"><canvas id="dlvSigCanvas"></canvas><div class="dlv-sigline"></div><div class="dlv-sighint">Receiver signs here</div></div><button type="button" class="dlv-sigclear" onclick="dlvClearSig()">Clear signature</button>';
+  h+=dlvSkidPickHtml(s,f)+dlvCondPickHtml(f);
   h+='<div class="ps-sec"><label class="ps-rl" for="dlvNotes">Notes</label><textarea class="ps-line" id="dlvNotes" rows="2" placeholder="Tap to add a note (optional)">'+esc(f.notes)+'</textarea></div>';
   h+='</div></div>';
   h+='<div class="cut-card">'+dlvPhotosHtml(s,f)+'</div>';
@@ -3790,7 +3939,67 @@ async function dlvAddPhotos(input){
 // camera opens, so if the phone closes the app while the camera is up, the
 // details and photos come back when it reopens.
 const DLV_MAX_PHOTOS=20,LS_DLV_DRAFT='mx_dlv_draft',DLV_DRAFT_MAX_MS=12*3600e3;
-function dlvSkidsNeeded(s){const n=parseInt(s&&s.skid_count,10);return Math.min(DLV_MAX_PHOTOS,n>0?n:1);}
+function dlvSkidsNeeded(s){const n=(dlvForm&&dlvSkidsNow(s,dlvForm))||dlvSkidsLeft(s)||parseInt(s&&s.skid_count,10);return Math.min(DLV_MAX_PHOTOS,n>0?n:1);}
+// ── SKIDS + CONDITION (Phase 5, Jay 2026-11-12): the driver taps how many skids
+// were dropped off - fewer than the slip leaves the rest "still to deliver" in
+// the office until a later delivery - and taps the condition (nothing is
+// pre-ticked). One photo per skid delivered now.
+function dlvSkidsLeft(s){if(!s||s._unknown)return 0;return s.skids_left!=null?s.skids_left:(parseInt(s.skid_count,10)||1);}
+function dlvSkidsNow(s,f){const left=dlvSkidsLeft(s);return left<2?(left||null):(f&&f.skids)||null;}
+function dlvSkidPickHtml(s,f){
+  const left=dlvSkidsLeft(s);if(left<2)return '';
+  let h='<div class="ps-rl">Skids delivered now <em>*</em> <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#666">('+left+(s.skids_delivered?' still to deliver':' on this slip')+')</span></div><div class="dlv-pick">';
+  for(let i=1;i<=left;i++)h+='<button type="button" class="dlv-chip'+(f.skids===i?' on':'')+'" onclick="dlvSet(\'skids\','+i+')">'+i+(i===left?' (all)':'')+'</button>';
+  return h+'</div>';
+}
+function dlvCondPickHtml(f){
+  return '<div class="ps-rl">Condition <em>*</em></div><div class="dlv-pick">'+DLV_CONDITIONS.map(([k,l])=>'<button type="button" class="dlv-chip'+(f.condition===k?' on':'')+(k!=='OK'?' warn':'')+'" onclick="dlvSet(\'condition\',\''+k+'\')">'+esc(l)+'</button>').join('')+'</div>';
+}
+// ── IN-HOUSE HAND-OFF (Phase 5): an INTERNAL batch handed to another area of
+// the shop - tap the button, scan any label of the batch, tap Hand off.
+var hoMode=false,hoInfo=null,hoBusy=false; // var: show() can run before this line
+const LS_HO_WHO='mx_ho_who';
+function hoStart(){
+  if(!cfg.url){beep('err');showFlash('bad','Hand-offs need the server - set it up first');return;}
+  hoMode=true;dlvScanHeadText('&#128230; In-house hand-off','Scan any label of the INTERNAL batch being handed off');
+  document.body.classList.add('dlv-scan','ho-scan');show('scrScan');hoMode=true;startScanner();
+}
+async function hoLookup(uid){
+  if(hoBusy)return;hoBusy=true;
+  try{
+    const r=await fetch(cfg.url+'/parts/handoff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device:cfg.dev,unique_id:uid,lookup:true}),signal:AbortSignal.timeout(8000)});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){beep('err');showFlash('bad',r.status===403?'This phone is not approved yet':(j.error||'Could not look up this label'));return;}
+    beep('ok');hoInfo={...j,uid,who:null};
+    openDeliveryScreen();dlvView='handoff';renderHandoff();
+  }catch(e){beep('err');showFlash('bad','Hand-offs need the server - it is not reachable right now');}
+  finally{hoBusy=false;}
+}
+function renderHandoff(msg){
+  const j=hoInfo;if(!j)return;
+  $('dlvTitle').textContent='In-house hand-off';$('dlvSub').textContent=j.batch;$('dlvSearchWrap').style.display='none';
+  const who=j.who!=null?j.who:(lsGet(LS_HO_WHO)||'');
+  let h=msg?'<div class="cut-msg '+msg.kind+'">'+esc(msg.text)+'</div>':'';
+  h+='<div class="cut-card"><div class="cut-batch">'+esc(j.batch)+'</div><div class="cut-meta">'+esc([j.job_name,j.floor_or_work_order,j.part_name].filter(Boolean).join(' · '))+' · '+j.parts+' part'+(j.parts===1?'':'s')+' · '+esc(j.ship_to||'INTERNAL')+'</div>'
+    +(j.last?'<div class="cut-msg warn" style="margin-top:10px">Already handed off '+esc(fmtDT(j.last.at))+' to '+esc(j.last.received_by)+'. Saving again adds a new record.</div>':'')
+    +'<label class="dlv-lbl" for="hoWho" style="display:block;margin-top:12px">Taken by <em>*</em></label><input class="ps-line" id="hoWho" autocomplete="off" placeholder="Name of the person taking it" value="'+esc(who)+'">'
+    +'<button class="btn btn-solid" id="bHoSave" type="button" onclick="hoSave()" style="margin-top:12px">Hand off '+j.parts+' part'+(j.parts===1?'':'s')+'</button>'
+    +'<button class="btn btn-outline" type="button" onclick="openDeliveryScreen()" style="margin-top:8px">Cancel</button></div>';
+  $('dlvContent').innerHTML=h;
+}
+async function hoSave(){
+  const who=(($('hoWho')&&$('hoWho').value)||'').trim();hoInfo.who=who;
+  if(!who){beep('err');renderHandoff({kind:'err',text:'Write who is taking the batch.'});return;}
+  const b=$('bHoSave');b.disabled=true;b.textContent='Saving…';
+  try{
+    const r=await fetch(cfg.url+'/parts/handoff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device:cfg.dev,unique_id:hoInfo.uid,received_by:who}),signal:AbortSignal.timeout(10000)});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){beep('err');renderHandoff({kind:'err',text:j.error||'Not saved - try again.'});return;}
+    try{lsSet(LS_HO_WHO,who);}catch(e){}
+    beep('ok');dlvView='done';
+    $('dlvContent').innerHTML='<div class="cut-card dlv-done"><svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="var(--green-700)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="7 12.5 10.5 16 17 9"/></svg><div class="big">Handed off</div><div class="cut-meta">'+esc(j.batch)+' · '+j.parts+' part'+(j.parts===1?'':'s')+' · taken by '+esc(who)+'</div><button class="btn btn-solid" type="button" onclick="hoStart()" style="margin-top:14px">Next hand-off</button><button class="btn btn-outline" type="button" onclick="openDeliveryScreen()">Done</button></div>';
+  }catch(e){beep('err');renderHandoff({kind:'err',text:'No connection to the server - try again on the shop Wi-Fi.'});}
+}
 function dlvPhotosHtml(s,f){
   const need=dlvSkidsNeeded(s),known=parseInt(s&&s.skid_count,10)>0,n=f.photos.length;
   let h='<label class="dlv-lbl">Skid photos <em>*</em></label>';
@@ -3807,7 +4016,7 @@ function dlvDraft(){const d=lsGet(LS_DLV_DRAFT);return d&&d.slip_number&&d.form&
 function dlvSaveDraft(){
   if(!dlvForm||!dlvSlip||dlvView!=='form')return;
   dlvReadInputs();
-  const form={driver_name:dlvForm.driver_name,carrier:dlvForm.carrier,received_by:dlvForm.received_by,receiver_email:dlvForm.receiver_email,condition:dlvForm.condition,notes:dlvForm.notes,photos:dlvForm.photos.slice(),sigData:dlvSigDataUrl()};
+  const form={driver_name:dlvForm.driver_name,carrier:dlvForm.carrier,received_by:dlvForm.received_by,receiver_email:dlvForm.receiver_email,condition:dlvForm.condition,skids:dlvForm.skids,notes:dlvForm.notes,photos:dlvForm.photos.slice(),sigData:dlvSigDataUrl()};
   const rec={slip_number:dlvSlip.slip_number,saved_at:Date.now(),form};
   try{lsSet(LS_DLV_DRAFT,rec);}catch(e){try{form.photos=[];lsSet(LS_DLV_DRAFT,rec);}catch(_){}}
 }
@@ -3888,11 +4097,11 @@ setTimeout(()=>{if(cfg.url)refreshDeliverySlips(true);},4000);
 async function saveDelivery(){
   dlvReadInputs();
   const f=dlvForm,s=dlvSlip;
-  const err=!f.received_by.trim()?'Enter the name of the person receiving the delivery.':!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test(String(f.receiver_email||'').trim())?'Enter the receiver\'s email address - the signed packing slip is emailed to them.':(f.condition!=='OK'&&!f.notes.trim())?'Describe the problem in Notes.':f.photos.length<dlvSkidsNeeded(s)?'Take a photo of every skid - '+f.photos.length+' of '+dlvSkidsNeeded(s)+' taken.':((f.receiver_email||'').trim()&&!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test((f.receiver_email||'').trim()))?'Check the receiver email - or leave it empty.':!dlvSigDataUrl()?'The receiver needs to sign.':'';
+  const err=!f.received_by.trim()?'Enter the name of the person receiving the delivery.':!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test(String(f.receiver_email||'').trim())?'Enter the receiver\'s email address - the signed packing slip is emailed to them.':!f.condition?'Tap the condition of the delivery - OK, damaged, short or other.':(dlvSkidsLeft(s)>1&&!f.skids)?'Tap how many skids were delivered now.':(f.condition!=='OK'&&!f.notes.trim())?'Describe the problem in Notes.':f.photos.length<dlvSkidsNeeded(s)?'Take a photo of every skid - '+f.photos.length+' of '+dlvSkidsNeeded(s)+' taken.':((f.receiver_email||'').trim()&&!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test((f.receiver_email||'').trim()))?'Check the receiver email - or leave it empty.':!dlvSigDataUrl()?'The receiver needs to sign.':'';
   if(err){beep('err');dlvMsg={kind:'err',text:err};f.sigData=dlvSigDataUrl();f.drvSigData=dlvDrvSigDataUrl();renderDeliveryForm();window.scrollTo({top:0,behavior:'smooth'});return;}
   try{lsSet(LS_DLV_DRIVER,{name:f.driver_name.trim(),carrier:f.carrier});}catch(e){}
   if((f.receiver_email||'').trim())try{const em=String(f.receiver_email).trim().toLowerCase(),L=(lsGet(LS_DLV_EMAILS)||[]).filter(x=>!(x.email===em&&x.job_name===(s.job_name||'')&&x.ship_to===(s.ship_to||'')));L.unshift({email:em,job_name:s.job_name||'',ship_to:s.ship_to||'',last_used:new Date().toISOString(),uses:1});lsSet(LS_DLV_EMAILS,L.slice(0,200));}catch(e){}
-  const rec={confirmation_id:uuid(),slip_number:s.slip_number,received_by:f.received_by.trim(),receiver_email:(f.receiver_email||'').trim(),driver_name:f.driver_name.trim(),carrier:f.carrier,condition:'OK',email_required:true,notes:f.notes.trim(),signature:dlvSigDataUrl(),driver_signature:dlvDrvSigDataUrl(),photos:f.photos.slice(),delivered_at:new Date().toISOString()};
+  const rec={confirmation_id:uuid(),slip_number:s.slip_number,received_by:f.received_by.trim(),receiver_email:(f.receiver_email||'').trim(),driver_name:f.driver_name.trim(),carrier:f.carrier,condition:f.condition,condition_required:true,skids_delivered:dlvSkidsNow(s,f),skids_required:dlvSkidsLeft(s)>0,email_required:true,notes:f.notes.trim(),signature:dlvSigDataUrl(),driver_signature:dlvDrvSigDataUrl(),photos:f.photos.slice(),delivered_at:new Date().toISOString()};
   const btn=$('bDlvSave');btn.disabled=true;btn.textContent='Saving…';
   const r=cfg.url?await dlvPost(rec):{ok:false,permanent:false,error:'No server configured'};
   let msg;
