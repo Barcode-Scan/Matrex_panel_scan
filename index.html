@@ -659,6 +659,60 @@ textarea.ps-line{resize:vertical;min-height:44px}
   .skid-new{padding:0 10px;font-size:14px}
   .skid-arrow{min-width:40px}
 }
+/* TEXT SIZE FOLLOWS THE SCREEN (Jay, 2026-11-12). --k scales the big numbers and
+   titles (smaller on narrow phones so nothing wraps, bigger on big phones and
+   tablets); --kt scales everyday text, which never goes below its normal size.
+   375-429 px wide (most phones) = the sizes as they were. */
+:root{--k:1;--kt:1}
+@media (max-width:359px){:root{--k:.86}}
+@media (min-width:360px) and (max-width:374px){:root{--k:.93}}
+@media (min-width:430px){:root{--k:1.06;--kt:1.04}}
+@media (min-width:600px){:root{--k:1.15;--kt:1.12}}
+@media (min-width:900px){:root{--k:1.22;--kt:1.18}}
+.tb-name{font-size:calc(20px*var(--k))}
+.tb-date{font-size:calc(12px*var(--kt))}
+.cbox .n{font-size:calc(34px*var(--k))}
+#nBatchProgress{font-size:calc(22px*var(--k));padding-top:6px}
+.cbox .l{font-size:calc(11px*var(--kt))}
+.batch-progress-badge{font-size:calc(32px*var(--k))}
+#scanToast .stx{font-size:calc(24px*var(--k))}
+#scanToast .stx-sub{font-size:calc(15px*var(--kt))}
+#camStatus{font-size:calc(15px*var(--kt))}
+#torchBtn{font-size:calc(12px*var(--kt))}
+.eng-pill{font-size:calc(13px*var(--kt))}
+.mach-qbtn-name{font-size:calc(13px*var(--kt))}
+.dwg-btn{font-size:calc(16px*var(--kt))}
+.skid-cur .l,.skid-cur .b{font-size:calc(11px*var(--kt))}
+.skid-cur .n{font-size:calc(30px*var(--k))}
+.skid-new,.crest-btn{font-size:calc(15px*var(--kt))}
+#flash{font-size:calc(16px*var(--kt))}
+#camPick{font-size:calc(15px*var(--kt))}
+.s-txt,.s-btn{font-size:calc(13px*var(--kt))}
+.s-next{font-size:calc(12px*var(--kt))}
+.sec-title{font-size:calc(13px*var(--kt))}
+.sec-link{font-size:calc(15px*var(--kt))}
+.srow-name{font-size:calc(16px*var(--kt))}
+.srow-sub,.srow-time{font-size:calc(13px*var(--kt))}
+.empty-box .et{font-size:calc(16px*var(--kt))}
+.empty-box .es{font-size:calc(13px*var(--kt))}
+.btn{font-size:calc(17px*var(--kt))}
+.btn-outline{font-size:calc(16px*var(--kt))}
+.btn-ghost{font-size:calc(15px*var(--kt))}
+.dsh-t{font-size:calc(18px*var(--k))}
+.dsh-s{font-size:calc(13px*var(--kt))}
+.m-title{font-size:calc(22px*var(--k))}
+.m-desc,.data-row{font-size:calc(16px*var(--kt))}
+.data-k{font-size:calc(13px*var(--kt))}
+.dir-progress-label{font-size:calc(13px*var(--kt))}
+.dir-expected-eyebrow{font-size:calc(11px*var(--kt))}
+.dir-expected-name{font-size:calc(24px*var(--k))}
+.dir-expected-sub{font-size:calc(15px*var(--kt))}
+.dir-banner{font-size:calc(17px*var(--kt))}
+.nq-top{font-size:calc(15px*var(--kt))}
+.nq-meta,.nq-dwg{font-size:calc(13px*var(--kt))}
+.dwg-link b{font-size:calc(16px*var(--kt))}
+.dwg-link span{font-size:calc(13px*var(--kt))}
+@media (max-width:360px){.skid-new{font-size:14px}}
 </style>
 </head>
 <body>
@@ -779,6 +833,43 @@ textarea.ps-line{resize:vertical;min-height:44px}
       Open via <code>https://</code> or serve from localhost. Camera will not start on plain HTTP.
     </div>
 
+    <!-- CAMERA AT THE TOP of the scan screen (Jay, 2026-11-12): the camera, its
+         size slider and the scan result line come first; pills, machines, DWG /
+         Next in queue, skid row and counters sit under it. -->
+    <div id="camSlotFree">
+    <div id="cambox">
+      <video id="cam" muted playsinline autoplay></video>
+      <div id="aim">
+        <div class="aim-c aim-tl"></div><div class="aim-c aim-tr"></div>
+        <div class="aim-c aim-bl"></div><div class="aim-c aim-br"></div>
+      </div>
+      <button id="torchBtn" type="button">Torch</button>
+      <div id="scanLine"></div>
+      <div id="scanToast"><div class="stx"><div id="scanToastTxt"></div><div id="scanToastSub" class="stx-sub" style="display:none"></div></div></div>
+      <div id="camStatus">
+        <svg class="spin" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" style="width:28px;height:28px">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+        <span id="camMsg" style="line-height:1.6;white-space:pre-line">Starting camera…</span>
+      </div>
+    </div>
+    </div>
+
+    <div class="camsize-row" role="group" aria-label="Camera preview size">
+      <svg class="camsize-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18-5h-3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m11-5v3a2 2 0 0 1-2 2h-3"/></svg>
+      <input type="range" id="camSizeSlider" class="camsize-slider" min="90" max="420" step="10" value="240" aria-label="Camera preview height">
+      <svg class="camsize-ico big" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18-5h-3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m11-5v3a2 2 0 0 1-2 2h-3"/></svg>
+    </div>
+
+    <div id="camPickWrap">
+      <select id="camPick"></select>
+    </div>
+
+    <div id="flash" role="alert">
+      <svg class="flash-icon" id="flashIco" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <span id="flashTxt"></span>
+    </div>
+
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <div class="eng-pill" id="engPill" style="margin-bottom:12px">
         <div class="eng-dot"></div>
@@ -816,42 +907,7 @@ textarea.ps-line{resize:vertical;min-height:44px}
     <div class="counters">
       <div class="cbox c-scan" id="cScanned" onclick="openListScreen('all')"><div class="n" id="nTotal">0</div><div class="l">Scanned</div></div>
       <div class="cbox c-flag" id="cFlagged" onclick="openListScreen('flagged')"><div class="n" id="nFlag">0</div><div class="l">Flagged</div></div>
-      <div class="cbox"><div class="n" id="nBatchProgress" style="font-size:22px;padding-top:6px">—</div><div class="l">This Batch</div></div>
-    </div>
-
-
-    <div id="camSlotFree">
-    <div id="cambox">
-      <video id="cam" muted playsinline autoplay></video>
-      <div id="aim">
-        <div class="aim-c aim-tl"></div><div class="aim-c aim-tr"></div>
-        <div class="aim-c aim-bl"></div><div class="aim-c aim-br"></div>
-      </div>
-      <button id="torchBtn" type="button">Torch</button>
-      <div id="scanLine"></div>
-      <div id="scanToast"><div class="stx"><div id="scanToastTxt"></div><div id="scanToastSub" class="stx-sub" style="display:none"></div></div></div>
-      <div id="camStatus">
-        <svg class="spin" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" style="width:28px;height:28px">
-          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-        </svg>
-        <span id="camMsg" style="font-size:15px;line-height:1.6;white-space:pre-line">Starting camera…</span>
-      </div>
-    </div>
-    </div>
-
-    <div class="camsize-row" role="group" aria-label="Camera preview size">
-      <svg class="camsize-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18-5h-3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m11-5v3a2 2 0 0 1-2 2h-3"/></svg>
-      <input type="range" id="camSizeSlider" class="camsize-slider" min="90" max="420" step="10" value="240" aria-label="Camera preview height">
-      <svg class="camsize-ico big" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18-5h-3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m11-5v3a2 2 0 0 1-2 2h-3"/></svg>
-    </div>
-
-    <div id="camPickWrap">
-      <select id="camPick"></select>
-    </div>
-
-    <div id="flash" role="alert">
-      <svg class="flash-icon" id="flashIco" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-      <span id="flashTxt"></span>
+      <div class="cbox"><div class="n" id="nBatchProgress">—</div><div class="l">This Batch</div></div>
     </div>
 
     <div class="dsh-foot" id="dlvScanFoot"><button class="btn btn-outline" type="button" onclick="dlvScanCancel()">Cancel</button><button class="btn btn-outline" type="button" onclick="dlvScanCancel(true)">Type slip number</button></div>
@@ -961,6 +1017,7 @@ textarea.ps-line{resize:vertical;min-height:44px}
     <div style="width:70px;display:flex;justify-content:flex-end"><button class="tb-btn hr-btn" type="button" aria-label="Refresh - get the latest app and data" title="Refresh" onclick="hardRefresh(true)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div>
   </div>
   <div class="page">
+    <div id="dirCamSlot"></div><!-- camera at the top here too (2026-11-12) -->
     <div class="dir-progress-wrap">
       <div class="dir-progress-track"><div class="dir-progress-fill" id="dirProgressFill" style="width:0%"></div></div>
       <div class="dir-progress-label" id="dirProgressLabel">0 of 0 scanned</div>
@@ -970,8 +1027,6 @@ textarea.ps-line{resize:vertical;min-height:44px}
     <div id="dirExpectedCard" class="dir-expected-card"></div>
 
     <div id="dirBanner" class="dir-banner"></div>
-
-    <div id="dirCamSlot"></div>
 
     <div class="btn-row mt12">
       <button class="btn btn-outline" id="bDirManual" type="button">Manual Entry</button>
@@ -1245,7 +1300,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-12.4';
+const APP_VERSION='2026-11-12.5';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1967,7 +2022,9 @@ function setCamMsg(msg,isErr){
 }
 
 // ── CAMERA SIZE — live slider, persisted per phone ─────────
-const CAMSIZE_MIN=90,CAMSIZE_MAX=420,CAMSIZE_DEFAULT=240;
+// First-time camera height follows the screen (2026-11-12): about a third of a
+// tall phone or tablet, never under 200 px. The slider still sets it per phone.
+const CAMSIZE_MIN=90,CAMSIZE_MAX=420,CAMSIZE_DEFAULT=Math.round(Math.min(360,Math.max(200,(window.innerHeight||720)*0.32))/10)*10;
 let camSize=Math.min(CAMSIZE_MAX,Math.max(CAMSIZE_MIN,parseInt(lsGet(LS.camSize),10)||CAMSIZE_DEFAULT));
 function applyCamSize(px){$('cambox').style.height=px+'px';}
 applyCamSize(camSize);
