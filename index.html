@@ -869,12 +869,6 @@ textarea.ps-line{resize:vertical;min-height:44px}
         <span style="color:var(--gray-500)">Stage</span>
         <span class="eng-val" id="stageVal"></span>
       </div>
-      <!-- who is working on this phone today - their scans count as their hours (2026-11-12) -->
-      <button type="button" class="eng-pill" id="workerPill" style="margin-bottom:12px;display:none;border:0;font-family:inherit;cursor:pointer" onclick="openWorkerPick()" aria-label="Who is working on this phone">
-        <div class="eng-dot"></div>
-        <span style="color:var(--gray-500)">Worker</span>
-        <span class="eng-val" id="workerVal">Tap to pick</span>
-      </button>
       <div class="batch-progress-badge" id="batchProgressBadge" style="display:none"></div>
     </div>
 
@@ -1215,7 +1209,6 @@ textarea.ps-line{resize:vertical;min-height:44px}
 
 <div class="mbg" id="mProblem"><div class="msheet"><div class="mhandle"></div><div class="m-title">Report a problem</div><div class="m-desc">What is the problem with?</div><div class="mbtns"><button class="m-ok" type="button" id="mProblemPart" onclick="reportPartProblem()">A part</button><button class="m-ok" type="button" onclick="openMachineSheet()" style="background:var(--amber-700)">A machine - down or back up</button><button class="m-cancel" type="button" onclick="modal('mProblem',false)">Close</button></div></div></div>
 <div class="mbg" id="mMachine"><div class="msheet"><div class="mhandle"></div><div class="m-title" id="mMachTitle">Machines</div><div class="m-desc" id="mMachDesc">Loading…</div><div class="nq-list" id="mMachList"></div><div class="mbtns"><button class="m-cancel" type="button" onclick="machineBack()">Close</button></div></div></div>
-<div class="mbg" id="mWorker"><div class="msheet"><div class="mhandle"></div><div class="m-title">Who is working?</div><div class="m-desc">Pick your name. Your scans on this phone today count as your hours.</div><div class="dlv-pick" id="mWorkerList"></div><div class="fg"><label class="fg-label" for="workerOther">Not on the list</label><input class="fg-input" id="workerOther" placeholder="Type your name" autocapitalize="words" maxlength="60"></div><div class="mbtns"><button class="m-ok" type="button" onclick="setWorker($('workerOther').value)">Use this name</button><button class="m-cancel" type="button" onclick="modal('mWorker',false)">Close</button></div></div></div>
 <div class="mbg" id="mNextQ"><div class="msheet"><div class="mhandle"></div><div class="m-title" id="mNextQTitle">Next in queue</div><div class="m-desc" id="mNextQDesc"></div><div class="nq-list" id="mNextQList"></div><div class="mbtns"><button class="m-cancel" type="button" onclick="modal('mNextQ',false)">Close</button></div></div></div>
 <div class="mbg" id="mDwg"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info" style="color:var(--blue-600)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></div><div class="m-title" id="mDwgTitle">Drawings</div><div class="m-desc" id="mDwgDesc"></div><div class="dwg-list" id="mDwgList"></div><div class="mbtns"><button class="m-cancel" type="button" id="mDwgClose" onclick="closeDwg()">Close</button></div></div></div>
 <div class="mbg" id="mRest"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div><div class="m-title">Put the rest on this skid?</div><div class="m-desc" id="mRestDesc"></div><div class="mbtns"><button class="m-ok" id="mRestYes" type="button">Yes, they are all on this skid</button><button class="m-cancel" type="button" onclick="modal('mRest',false)">Cancel</button></div></div></div>
@@ -1332,7 +1325,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-12.11';
+const APP_VERSION='2026-11-13.1';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1490,36 +1483,13 @@ async function loadStageOptions(){
 // hidden entirely for a classic (no stage) phone.
 function refreshStagePill(){
   const pill=$('stagePill');
-  if(!cfg.stageNumber){pill.style.display='none';refreshCuttingButton();cfg.stageType=null;applyCutMode();refreshWorkerPill();return;}
+  if(!cfg.stageNumber){pill.style.display='none';refreshCuttingButton();cfg.stageType=null;applyCutMode();return;}
   const match=stageOptionsCache.find(s=>s.stage_number===cfg.stageNumber);
   $('stageVal').textContent=match?match.stage_name:('Stage '+cfg.stageNumber);
   pill.style.display='';
   refreshCuttingButton();
   if(match&&cfg.stageType!==match.stage_type){cfg.stageType=match.stage_type||'scan';lsSet(LS.cfg,cfg);}
   applyCutMode();
-  refreshWorkerPill();
-}
-// ── WORKER (2026-11-12, labour hours): who is scanning on this phone today. Picked
-// once a day from the Library team list (kept on the phone for offline use);
-// every scan carries the name. Scanning is never blocked without one.
-const LS_WORKER='mx_worker',LS_TEAM='mx_team';
-function curWorker(){const w=lsGet(LS_WORKER);return w&&w.day===todayStr()&&w.name?w.name:'';}
-function refreshWorkerPill(){
-  const p=$('workerPill');if(!p)return;
-  p.style.display=cfg.stageNumber&&!isCuttingStage()?'':'none';
-  const w=curWorker();$('workerVal').textContent=w||'Tap to pick';
-  p.classList.toggle('ready',!!w);p.classList.toggle('err',!w);
-}
-async function openWorkerPick(){
-  const draw=names=>{$('mWorkerList').innerHTML=(names||[]).length?names.map(n=>'<button type="button" class="dlv-chip'+(n===curWorker()?' on':'')+'" data-n="'+esc(n)+'" onclick="setWorker(this.dataset.n)">'+esc(n)+'</button>').join(''):'<div class="m-desc" style="margin:0">No team list on this phone yet - type your name below.</div>';};
-  draw(lsGet(LS_TEAM));$('workerOther').value='';modal('mWorker',true);
-  if(!cfg.url)return;
-  try{const r=await fetch(cfg.url+'/phone/team?device_id='+encodeURIComponent(deviceId),{signal:AbortSignal.timeout(6000)});const j=await r.json();if(r.ok&&Array.isArray(j.names)){lsSet(LS_TEAM,j.names);draw(j.names);}}catch(e){}
-}
-function setWorker(name){
-  name=String(name||'').trim().slice(0,60);
-  if(!name){beep('err');$('workerOther').focus();return;}
-  lsSet(LS_WORKER,{name,day:todayStr()});modal('mWorker',false);refreshWorkerPill();showFlash('ok','Scans now count for '+name);
 }
 // ── CUT-ONLY MODE — a phone set to the Cut stage (a 'cutting' stage: logged
 // per material/finish, never by scanning tags) only gets the Cutting Log:
@@ -1783,7 +1753,7 @@ $('mRestYes').onclick=async()=>{
   const r=restInfo;if(!r){modal('mRest',false);return;}
   const btn=$('mRestYes');btn.disabled=true;
   try{
-    const res=await fetch(cfg.url+'/parts/complete-rest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device:cfg.dev,worker:curWorker()||undefined,unique_id:r.uid,skid:r.skid,expect:r.left}),signal:AbortSignal.timeout(15000)});
+    const res=await fetch(cfg.url+'/parts/complete-rest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device:cfg.dev,unique_id:r.uid,skid:r.skid,expect:r.left}),signal:AbortSignal.timeout(15000)});
     const j=await res.json().catch(()=>({}));
     modal('mRest',false);
     if(!res.ok){beep('err');showFlash('bad',j.error||'Could not complete the rest');return;}
@@ -2461,7 +2431,6 @@ function blankPart(uniqueId){
     // when this part was scanned.
     stageNumber:cfg.stageNumber||null,
     machine:cfg.machine||null,
-    worker:curWorker()||null,
     // Complete stage: the skid this panel goes on, and the batch that skid
     // number belongs to (the server decides for a panel from another batch).
     cskid:isCompleteStage()&&cfg.cskid?cfg.cskid.n||null:null,
@@ -2565,7 +2534,7 @@ async function handleScan(uniqueId){
 
   const tMatch=Date.now();
   try{
-    const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:cfg.machine||undefined,worker:part.worker||undefined,skid:part.cskid||undefined,skid_batch:part.cskidBatch||undefined}),signal:AbortSignal.timeout(MATCH_TIMEOUT_MS)});
+    const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:cfg.machine||undefined,skid:part.cskid||undefined,skid_batch:part.cskidBatch||undefined}),signal:AbortSignal.timeout(MATCH_TIMEOUT_MS)});
     if(res.status===403){
       const j=await res.json().catch(()=>({}));
       deviceStatus=j.status||'UNKNOWN';
@@ -2597,7 +2566,7 @@ async function reconcileUnverified(){
   let sent=0;
   for(const part of pending){
     try{
-      const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:part.uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:part.machine||cfg.machine||undefined,worker:part.worker||undefined,skid:part.cskid||undefined,skid_batch:part.cskidBatch||undefined,offline:true}),signal:AbortSignal.timeout(6000)});
+      const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:part.uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:part.machine||cfg.machine||undefined,skid:part.cskid||undefined,skid_batch:part.cskidBatch||undefined,offline:true}),signal:AbortSignal.timeout(6000)});
       if(!res.ok)continue; // still unreachable/unapproved — leave UNVERIFIED, try again next time
       const data=await res.json();
       applyMatch(part,data,true);sent++;
@@ -3016,7 +2985,7 @@ function machineBack(){if(machPick){drawMachines();return;}modal('mMachine',fals
 async function sendMachine(action,reason){
   const m=machPick;if(!m)return;
   try{
-    const r=await fetch(cfg.url+'/phone/machine',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device:cfg.dev,worker:curWorker()||undefined,machine_id:m.id,action,reason}),signal:AbortSignal.timeout(8000)});
+    const r=await fetch(cfg.url+'/phone/machine',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device:cfg.dev,machine_id:m.id,action,reason}),signal:AbortSignal.timeout(8000)});
     const j=await r.json().catch(()=>({}));
     if(!r.ok){beep('err');showFlash('bad',j.error||'Could not save');return;}
     beep('ok');modal('mMachine',false);showFlash('ok',action==='up'?m.name+' is running again':m.name+' marked down - the office can see it');
@@ -3050,7 +3019,7 @@ $('noteSubmit').onclick=async()=>{
   const endpoint=isVoid?'/parts/void':'/parts/notes';
   const btn=$('noteSubmit');const old=btn.textContent;btn.textContent=isVoid?'Voiding…':'Adding…';btn.disabled=true;
   try{
-    const res=await fetch(cfg.url+endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:noteTarget.uniqueId,category,note:text,device_id:deviceId,device:cfg.dev,stage_number:cfg.stageNumber||undefined,worker:curWorker()||undefined,photo:notePhotoData||undefined})});
+    const res=await fetch(cfg.url+endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:noteTarget.uniqueId,category,note:text,device_id:deviceId,device:cfg.dev,stage_number:cfg.stageNumber||undefined,photo:notePhotoData||undefined})});
     resetNotePhoto();
     if(!res.ok){const j=await res.json().catch(()=>({}));throw new Error(j.error||'HTTP '+res.status);}
     const data=await res.json();
