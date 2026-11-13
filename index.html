@@ -1328,7 +1328,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-13.3';
+const APP_VERSION='2026-11-13.4';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1802,8 +1802,11 @@ let nextMidnightUpload=null,engineLabel='Starting…';
 // code specifically stays blocked after being scanned — separate constants
 // (even though both currently share the same 2s value) so either can be
 // tuned independently later without the other silently changing too.
-const SCAN_COOLDOWN_MS=2000;
-const SAME_CODE_COOLDOWN_MS=2000;
+// 2026-11-13 (Jay: faster scanning): 0.8 s between two DIFFERENT labels (was 2 s - two phones were
+// running into that wait), and the SAME label stays blocked for 3 s (was 2 s) against double scans.
+// Overlapping scans are safe: each has its own /parts/match request; the server says MATCHED_ALREADY.
+const SCAN_COOLDOWN_MS=800;
+const SAME_CODE_COOLDOWN_MS=3000;
 let lastScanVal='',lastScanTime=0;
 let codeReader=null,controls=null,trackRef=null,torchOn=false;
 // Free-scan and Directed Scan share the one physical camera/zxing engine
@@ -2308,7 +2311,7 @@ async function runWithDevice(deviceId){
     // specifically since it's sensor/ISP capture, the more expensive of
     // the two axes, while easing up on decode-attempt frequency (cheap
     // CPU work against whatever frame is already there) at the same time.
-    const idealFps=8;
+    const idealFps=15; // 2026-11-13 (Jay): 8 -> 15 so a label is picked up sooner; the camera still stops after 30 s idle
     const videoConstraints=deviceId
       ?{deviceId:{exact:deviceId},width:{ideal:idealW},height:{ideal:idealH},frameRate:{ideal:idealFps}}
       :{facingMode:'environment',width:{ideal:idealW},height:{ideal:idealH},frameRate:{ideal:idealFps}};
@@ -2319,7 +2322,7 @@ async function runWithDevice(deviceId){
         if(!raw)return;
         noteScanActivity();
         setEngine('Got scan! Resuming…','ready');
-        setTimeout(()=>setEngine('Scanning…','scanning'),1200);
+        setTimeout(()=>setEngine('Scanning…','scanning'),700);
         scanMode==='DIRECTED'?handleDirectedRaw(raw):handleRaw(raw,'SCAN');
       }
       // NotFoundException fires every frame with no barcode visible —
