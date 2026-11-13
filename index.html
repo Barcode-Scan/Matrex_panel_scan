@@ -1325,7 +1325,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-13.1';
+const APP_VERSION='2026-11-13.2';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1697,9 +1697,12 @@ let dwgBackToQueue=false;
 function showDrawings(j,fromQueue){
   dwgBackToQueue=!!fromQueue;
   $('mDwgTitle').textContent=j.batch;
-  $('mDwgDesc').textContent=(j.tag?j.tag+' - ':'')+(j.drawings.length?'tap a drawing to open it':'no drawing on file for this batch yet')+(j.missing&&j.missing.length?' (none found for '+j.missing.join(', ')+')':'');
+  const sch=j.schedules||[];
+  $('mDwgDesc').textContent=(j.tag?j.tag+' - ':'')+(j.drawings.length?'tap what you want to open':'no drawing on file for this batch yet'+(sch.length?' - tap the schedule PDF to open it':''))+(j.missing&&j.missing.length?' (none found for '+j.missing.join(', ')+')':'');
   // work steps for this part type at this stage + "new revision" warning (2026-11-12, gap list #9)
   $('mDwgList').innerHTML=j.drawings.map(d=>'<a class="dwg-link" href="'+esc(cfg.url+d.url)+'" target="_blank" rel="noopener"'+(d.new_rev?' style="border-color:var(--amber-700);background:var(--amber-50)"':'')+'><b>'+esc(d.name)+'</b><span>'+(d.new_rev?'<b style="color:var(--amber-700)">Changed this week - check the new revision. </b>':'')+esc(d.what)+'</span></a>').join('')
+    // the batch's schedule PDF(s), after the drawings (2026-11-13, Jay)
+    +sch.map(d=>'<a class="dwg-link" href="'+esc(cfg.url+d.url)+'" target="_blank" rel="noopener" style="background:var(--white)"><b>'+esc(d.name)+'</b><span>'+esc(d.what)+'</span></a>').join('')
     +(j.steps||[]).map(g=>'<div class="dwg-steps"><div class="sec-title" style="margin:10px 0 6px">Work steps - '+esc(g.part_type)+'</div><ol style="margin:0;padding-left:22px">'
       +g.steps.map(s=>'<li style="margin:6px 0;font-size:16px">'+esc(s.text)+(s.photo?' <a href="'+esc(cfg.url+s.photo)+'" target="_blank" rel="noopener">Photo</a>':'')+'</li>').join('')+'</ol></div>').join('');
   $('mDwgClose').textContent=fromQueue?'Back to the queue':'Close';
@@ -1707,14 +1710,23 @@ function showDrawings(j,fromQueue){
 }
 function closeDwg(){modal('mDwg',false);if(dwgBackToQueue){dwgBackToQueue=false;modal('mNextQ',true);}}
 // DWG on a queue entry (Bending / Complete, 2026-11-12): the batch's drawings, no scan needed.
+// 2026-11-13 (Jay): the drawing opens right away - no extra tap on the PDF. The new
+// tab is opened during the tap (phones block tabs opened later), then pointed at the
+// batch's first drawing. Only when there is more to see (other drawings, work steps,
+// none on file) does the drawings sheet also stay open behind it.
 async function queueDrawings(batch){
   if(!cfg.url||!navigator.onLine||serverDown){beep('err');showFlash('bad','Drawings need the server - it is not reachable right now');return;}
+  let w=null;try{w=window.open('','_blank');}catch(e){}
+  const shut=()=>{try{if(w)w.close();}catch(e){}};
   try{
     const res=await fetch(cfg.url+'/parts/drawings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,batch,stage_number:cfg.stageNumber||undefined}),signal:AbortSignal.timeout(8000)});
     const j=await res.json().catch(()=>({}));
-    if(!res.ok){beep('err');showFlash('bad',res.status===403?'This phone is not approved yet':(j.error||'Could not get the drawing'));return;}
+    if(!res.ok){shut();beep('err');showFlash('bad',res.status===403?'This phone is not approved yet':(j.error||'Could not get the drawing'));return;}
+    const d=(j.drawings||[])[0];
+    if(d&&w){try{w.location.href=cfg.url+d.url;}catch(e){w=null;}}else shut();
+    if(d&&w&&j.drawings.length===1&&!(j.steps||[]).length&&!(j.missing||[]).length)return; // nothing else to show: stay on the queue
     modal('mNextQ',false);showDrawings(j,true);
-  }catch(e){beep('err');showFlash('bad','Could not reach the server for the drawing');}
+  }catch(e){shut();beep('err');showFlash('bad','Could not reach the server for the drawing');}
 }
 async function lookupDrawings(uid){
   setDwgMode(false);
