@@ -185,6 +185,9 @@ body.cut-stage #scrDelivery .sb-spacer{display:none!important}
 .nq-meta{font-size:13px;color:var(--gray-600);margin-top:4px}
 .nq-dwg{flex:none;min-height:36px;padding:4px 12px;border:1.5px solid var(--blue-600);background:var(--white);color:var(--blue-700);border-radius:999px;font-size:13px;font-weight:800;font-family:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 .nq-dwg:active{transform:scale(.96)}
+button.nq-item{display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button.nq-item:active{transform:scale(.98)}
+.nq-go{flex:none;font-size:22px;line-height:1;color:var(--blue-600)}
 .dwg-btn{width:100%;min-height:52px;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--white);border:1.5px solid var(--blue-600);color:var(--blue-700);border-radius:var(--pill);font-size:16px;font-weight:800;cursor:pointer;-webkit-tap-highlight-color:transparent;font-family:inherit}
 .dwg-btn.on{background:var(--blue-600);border-color:var(--blue-600);color:#fff}
 .dwg-btn:active,.crest-btn:active{transform:scale(.97)}
@@ -1325,7 +1328,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-13.2';
+const APP_VERSION='2026-11-13.3';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1682,13 +1685,13 @@ async function openNextQueue(){
     const j=await r.json().catch(()=>({}));
     if(!r.ok){$('mNextQDesc').textContent=r.status===403?'This phone is not approved yet.':(j.error||'Could not load the queue.');return;}
     $('mNextQTitle').textContent=j.stage+' - next in queue';
-    $('mNextQDesc').textContent=j.count?('Top = start next. '+j.count+' batch'+(j.count===1?'':'es')+' waiting'+(j.count>j.queue.length?' (first '+j.queue.length+' shown)':'')+'. The office sets this order on the Daily Planner.'):'Nothing waiting at '+j.stage+' right now.';
+    $('mNextQDesc').textContent=j.count?('Top = start next. '+j.count+' batch'+(j.count===1?'':'es')+' waiting'+(j.count>j.queue.length?' (first '+j.queue.length+' shown)':'')+'. The office sets this order on the Daily Planner. Tap a batch to open its drawing or schedule PDF.'):'Nothing waiting at '+j.stage+' right now.';
     const day=v=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(v||'');return m?new Date(+m[1],m[2]-1,+m[3]).toLocaleDateString([],{month:'short',day:'numeric'}):'';};
-    $('mNextQList').innerHTML=j.queue.map((v,i)=>'<div class="nq-item'+(i===0?' first':'')+'"><div class="nq-top"><span class="nq-n">'+(i+1)+'</span><span style="flex:1;min-width:0;overflow-wrap:anywhere">'+esc(v.batch)+'</span>'
+    $('mNextQList').innerHTML=j.queue.map((v,i)=>'<button type="button" class="nq-item'+(i===0?' first':'')+'" data-b="'+esc(v.batch)+'" onclick="queueDrawings(this.dataset.b)" aria-label="Open the drawing or schedule of '+esc(v.batch)+'"><div class="nq-top"><span class="nq-n">'+(i+1)+'</span><span style="flex:1;min-width:0;overflow-wrap:anywhere">'+esc(v.batch)+'</span>'
       +(v.in_progress?'<span class="nq-tag">Working</span>':'')+(v.priority?'<span class="nq-tag'+(v.priority==='Rush'?' rush':'')+'">'+esc(v.priority)+'</span>':'')
-      +'<button type="button" class="nq-dwg" data-b="'+esc(v.batch)+'" onclick="queueDrawings(this.dataset.b)" aria-label="Drawing of '+esc(v.batch)+'">DWG</button></div>'
+      +'<span class="nq-go" aria-hidden="true">&rsaquo;</span></div>'
       +'<div class="nq-meta">'+esc([v.job_name,v.floor_or_work_order,v.part_name].filter(Boolean).join(' · '))+'</div>'
-      +'<div class="nq-meta"><b>'+v.left+'</b> of '+v.total+' parts left'+(j.prev?' · '+esc(j.prev)+' '+(v.before>=v.total?'done':v.before+'/'+v.total):'')+(v.target_finish?' · target '+esc(day(v.target_finish)):'')+'</div></div>').join('');
+      +'<div class="nq-meta"><b>'+v.left+'</b> of '+v.total+' parts left'+(j.prev?' · '+esc(j.prev)+' '+(v.before>=v.total?'done':v.before+'/'+v.total):'')+(v.target_finish?' · target '+esc(day(v.target_finish)):'')+'</div></button>').join('');
   }catch(e){$('mNextQDesc').textContent='Could not reach the server - check the Wi-Fi and try again.';}
 }
 // The drawings sheet - after a DWG scan, or from a "Next in queue" entry (then
@@ -1698,7 +1701,7 @@ function showDrawings(j,fromQueue){
   dwgBackToQueue=!!fromQueue;
   $('mDwgTitle').textContent=j.batch;
   const sch=j.schedules||[];
-  $('mDwgDesc').textContent=(j.tag?j.tag+' - ':'')+(j.drawings.length?'tap what you want to open':'no drawing on file for this batch yet'+(sch.length?' - tap the schedule PDF to open it':''))+(j.missing&&j.missing.length?' (none found for '+j.missing.join(', ')+')':'');
+  $('mDwgDesc').textContent=(j.tag?j.tag+' - ':'')+(j.drawings.length?'tap what you want to open':(sch.length?'no drawing on file yet - tap the schedule PDF to open it':'no drawing or schedule PDF on file for this batch yet'))+(j.missing&&j.missing.length?' (none found for '+j.missing.join(', ')+')':'');
   // work steps for this part type at this stage + "new revision" warning (2026-11-12, gap list #9)
   $('mDwgList').innerHTML=j.drawings.map(d=>'<a class="dwg-link" href="'+esc(cfg.url+d.url)+'" target="_blank" rel="noopener"'+(d.new_rev?' style="border-color:var(--amber-700);background:var(--amber-50)"':'')+'><b>'+esc(d.name)+'</b><span>'+(d.new_rev?'<b style="color:var(--amber-700)">Changed this week - check the new revision. </b>':'')+esc(d.what)+'</span></a>').join('')
     // the batch's schedule PDF(s), after the drawings (2026-11-13, Jay)
@@ -1710,23 +1713,15 @@ function showDrawings(j,fromQueue){
 }
 function closeDwg(){modal('mDwg',false);if(dwgBackToQueue){dwgBackToQueue=false;modal('mNextQ',true);}}
 // DWG on a queue entry (Bending / Complete, 2026-11-12): the batch's drawings, no scan needed.
-// 2026-11-13 (Jay): the drawing opens right away - no extra tap on the PDF. The new
-// tab is opened during the tap (phones block tabs opened later), then pointed at the
-// batch's first drawing. Only when there is more to see (other drawings, work steps,
-// none on file) does the drawings sheet also stay open behind it.
+// 2026-11-13 (Jay): tapping the batch entry shows its drawings and schedule PDF(s) to pick from.
 async function queueDrawings(batch){
   if(!cfg.url||!navigator.onLine||serverDown){beep('err');showFlash('bad','Drawings need the server - it is not reachable right now');return;}
-  let w=null;try{w=window.open('','_blank');}catch(e){}
-  const shut=()=>{try{if(w)w.close();}catch(e){}};
   try{
     const res=await fetch(cfg.url+'/parts/drawings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,batch,stage_number:cfg.stageNumber||undefined}),signal:AbortSignal.timeout(8000)});
     const j=await res.json().catch(()=>({}));
-    if(!res.ok){shut();beep('err');showFlash('bad',res.status===403?'This phone is not approved yet':(j.error||'Could not get the drawing'));return;}
-    const d=(j.drawings||[])[0];
-    if(d&&w){try{w.location.href=cfg.url+d.url;}catch(e){w=null;}}else shut();
-    if(d&&w&&j.drawings.length===1&&!(j.steps||[]).length&&!(j.missing||[]).length)return; // nothing else to show: stay on the queue
+    if(!res.ok){beep('err');showFlash('bad',res.status===403?'This phone is not approved yet':(j.error||'Could not get the drawing'));return;}
     modal('mNextQ',false);showDrawings(j,true);
-  }catch(e){shut();beep('err');showFlash('bad','Could not reach the server for the drawing');}
+  }catch(e){beep('err');showFlash('bad','Could not reach the server for the drawing');}
 }
 async function lookupDrawings(uid){
   setDwgMode(false);
