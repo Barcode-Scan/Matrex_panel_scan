@@ -854,6 +854,12 @@ textarea.ps-line{resize:vertical;min-height:44px}
         <span style="color:var(--gray-500)">Stage</span>
         <span class="eng-val" id="stageVal"></span>
       </div>
+      <!-- who is working on this phone today - their scans count as their hours (2026-11-12) -->
+      <button type="button" class="eng-pill" id="workerPill" style="margin-bottom:12px;display:none;border:0;font-family:inherit;cursor:pointer" onclick="openWorkerPick()" aria-label="Who is working on this phone">
+        <div class="eng-dot"></div>
+        <span style="color:var(--gray-500)">Worker</span>
+        <span class="eng-val" id="workerVal">Tap to pick</span>
+      </button>
       <div class="batch-progress-badge" id="batchProgressBadge" style="display:none"></div>
     </div>
 
@@ -929,10 +935,16 @@ textarea.ps-line{resize:vertical;min-height:44px}
 
     <!-- Recent scans, Assign Skid, Manual Entry and Download CSV live on the
          Recent Scans screen now (Jay, 2026-11-12) - this opens it. -->
+    <div class="btn-row" style="margin-top:0">
+    <button class="btn btn-outline" id="bReportProblem" type="button" onclick="reportProblem()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Report a problem
+    </button>
     <button class="btn btn-outline" id="bRecentScans" type="button">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="3" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="3" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg>
       Recent scans
     </button>
+    </div>
     <button class="btn btn-outline" id="bCuttingMain" type="button" style="display:none;margin-top:10px">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
       Cutting Log
@@ -1178,7 +1190,7 @@ textarea.ps-line{resize:vertical;min-height:44px}
 
 <div class="mbg" id="mClear"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap danger"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></div><div class="m-title">Clear Today's Scans?</div><div class="m-desc">Download or upload the CSV first. This cannot be undone.</div><div class="mbtns"><button class="m-confirm" id="mClearOk" type="button">Clear Scans</button><button class="m-cancel" id="mClearCancel" type="button">Keep Them</button></div></div></div>
 
-<div class="mbg" id="mScan"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="m-title">Scan details</div><div class="m-desc">Review the mapped fields from this barcode scan.</div><div class="data-card" id="mScanData"></div><div class="sec-hdr" style="margin-top:4px"><span class="sec-title">Notes</span></div><div id="notesList" style="margin-bottom:10px"></div><div class="mbtns" id="noteActionBtns" style="justify-content:flex-start;gap:8px"><button class="btn btn-outline" id="bAddNote" type="button" style="display:none">+ Add Note</button><button class="btn btn-outline" id="bVoidPart" type="button" style="display:none;color:var(--red-600);border-color:var(--red-600)">Void This Part</button><button class="btn btn-outline" id="bUnvoidPart" type="button" style="display:none;color:var(--green-700);border-color:var(--green-700)">Undo Void</button></div><div id="addNoteForm" style="display:none"><div id="voidWarning" style="display:none;font-size:12px;color:var(--red-600);margin-bottom:8px">This marks the part VOID — every future scan of it will be flagged. Choose a reason below.</div><div class="fg"><label class="fg-label" for="noteCategory">Category</label><select class="fg-input" id="noteCategory"></select></div><div class="fg"><label class="fg-label" for="noteText">Details <span id="noteTextReq" style="display:none;color:var(--red-600)">*</span></label><input class="fg-input" id="noteText" placeholder="Optional details"></div><div class="mbtns"><button class="m-ok" id="noteSubmit" type="button">Add Note</button><button class="m-cancel" id="noteCancel" type="button">Cancel</button></div></div><div class="mbtns" id="mScanCloseWrap"><button class="m-ok" id="mScanClose" type="button">Close</button></div></div></div>
+<div class="mbg" id="mScan"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="m-title">Scan details</div><div class="m-desc">Review the mapped fields from this barcode scan.</div><div class="data-card" id="mScanData"></div><div class="sec-hdr" style="margin-top:4px"><span class="sec-title">Notes</span></div><div id="notesList" style="margin-bottom:10px"></div><div class="mbtns" id="noteActionBtns" style="justify-content:flex-start;gap:8px"><button class="btn btn-outline" id="bAddNote" type="button" style="display:none">+ Add Note</button><button class="btn btn-outline" id="bVoidPart" type="button" style="display:none;color:var(--red-600);border-color:var(--red-600)">Void This Part</button><button class="btn btn-outline" id="bUnvoidPart" type="button" style="display:none;color:var(--green-700);border-color:var(--green-700)">Undo Void</button></div><div id="addNoteForm" style="display:none"><div id="voidWarning" style="display:none;font-size:12px;color:var(--red-600);margin-bottom:8px">This marks the part VOID — every future scan of it will be flagged. Choose a reason below.</div><div class="fg"><label class="fg-label" for="noteCategory">Category</label><select class="fg-input" id="noteCategory"></select></div><div class="fg"><label class="fg-label" for="noteText">Details <span id="noteTextReq" style="display:none;color:var(--red-600)">*</span></label><input class="fg-input" id="noteText" placeholder="Optional details"></div><div class="fg"><label class="fg-label" for="notePhoto">Photo (optional)</label><input type="file" id="notePhoto" accept="image/*" capture="environment" class="fg-input" style="padding:10px"><img id="notePhotoPrev" alt="Photo to send" style="display:none;max-width:100%;max-height:160px;margin-top:8px;border-radius:10px"></div><div class="mbtns"><button class="m-ok" id="noteSubmit" type="button">Add Note</button><button class="m-cancel" id="noteCancel" type="button">Cancel</button></div></div><div class="mbtns" id="mScanCloseWrap"><button class="m-ok" id="mScanClose" type="button">Close</button></div></div></div>
 
 <div class="mbg" id="mSettingsAuth"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div class="m-title">Settings Locked</div><div class="m-desc">Enter the settings password to continue.</div><div class="fg"><label class="fg-label" for="setAuthPw">Password</label><div class="f-wrap"><input class="f-input" id="setAuthPw" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Enter password"><button class="f-eye" id="setAuthEye" type="button" aria-label="Show password"><svg id="setAuthEyeIco" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div><div class="err-box" id="setAuthErr">Incorrect password.</div><div class="mbtns"><button class="m-ok" id="setAuthOk" type="button">Unlock</button><button class="m-cancel" id="setAuthCancel" type="button">Cancel</button></div></div></div>
 
@@ -1186,6 +1198,9 @@ textarea.ps-line{resize:vertical;min-height:44px}
 
 <div class="mbg" id="mBatchLabel"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="m-title">Label details</div><div class="data-card" id="mBatchLabelData"></div><div class="sec-hdr" style="margin-top:4px"><span class="sec-title">Notes</span></div><div id="batchLabelNotes" style="margin-bottom:10px"></div><div class="mbtns"><button class="m-ok" id="mBatchLabelClose" type="button">Close</button></div></div></div>
 
+<div class="mbg" id="mProblem"><div class="msheet"><div class="mhandle"></div><div class="m-title">Report a problem</div><div class="m-desc">What is the problem with?</div><div class="mbtns"><button class="m-ok" type="button" id="mProblemPart" onclick="reportPartProblem()">A part</button><button class="m-ok" type="button" onclick="openMachineSheet()" style="background:var(--amber-700)">A machine - down or back up</button><button class="m-cancel" type="button" onclick="modal('mProblem',false)">Close</button></div></div></div>
+<div class="mbg" id="mMachine"><div class="msheet"><div class="mhandle"></div><div class="m-title" id="mMachTitle">Machines</div><div class="m-desc" id="mMachDesc">Loading…</div><div class="nq-list" id="mMachList"></div><div class="mbtns"><button class="m-cancel" type="button" onclick="machineBack()">Close</button></div></div></div>
+<div class="mbg" id="mWorker"><div class="msheet"><div class="mhandle"></div><div class="m-title">Who is working?</div><div class="m-desc">Pick your name. Your scans on this phone today count as your hours.</div><div class="dlv-pick" id="mWorkerList"></div><div class="fg"><label class="fg-label" for="workerOther">Not on the list</label><input class="fg-input" id="workerOther" placeholder="Type your name" autocapitalize="words" maxlength="60"></div><div class="mbtns"><button class="m-ok" type="button" onclick="setWorker($('workerOther').value)">Use this name</button><button class="m-cancel" type="button" onclick="modal('mWorker',false)">Close</button></div></div></div>
 <div class="mbg" id="mNextQ"><div class="msheet"><div class="mhandle"></div><div class="m-title" id="mNextQTitle">Next in queue</div><div class="m-desc" id="mNextQDesc"></div><div class="nq-list" id="mNextQList"></div><div class="mbtns"><button class="m-cancel" type="button" onclick="modal('mNextQ',false)">Close</button></div></div></div>
 <div class="mbg" id="mDwg"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info" style="color:var(--blue-600)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></div><div class="m-title" id="mDwgTitle">Drawings</div><div class="m-desc" id="mDwgDesc"></div><div class="dwg-list" id="mDwgList"></div><div class="mbtns"><button class="m-cancel" type="button" id="mDwgClose" onclick="closeDwg()">Close</button></div></div></div>
 <div class="mbg" id="mRest"><div class="msheet"><div class="mhandle"></div><div class="m-icon-wrap info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071E3" stroke-width="2.5" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div><div class="m-title">Put the rest on this skid?</div><div class="m-desc" id="mRestDesc"></div><div class="mbtns"><button class="m-ok" id="mRestYes" type="button">Yes, they are all on this skid</button><button class="m-cancel" type="button" onclick="modal('mRest',false)">Cancel</button></div></div></div>
@@ -1302,7 +1317,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-12.8';
+const APP_VERSION='2026-11-12.9';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1460,13 +1475,36 @@ async function loadStageOptions(){
 // hidden entirely for a classic (no stage) phone.
 function refreshStagePill(){
   const pill=$('stagePill');
-  if(!cfg.stageNumber){pill.style.display='none';refreshCuttingButton();cfg.stageType=null;applyCutMode();return;}
+  if(!cfg.stageNumber){pill.style.display='none';refreshCuttingButton();cfg.stageType=null;applyCutMode();refreshWorkerPill();return;}
   const match=stageOptionsCache.find(s=>s.stage_number===cfg.stageNumber);
   $('stageVal').textContent=match?match.stage_name:('Stage '+cfg.stageNumber);
   pill.style.display='';
   refreshCuttingButton();
   if(match&&cfg.stageType!==match.stage_type){cfg.stageType=match.stage_type||'scan';lsSet(LS.cfg,cfg);}
   applyCutMode();
+  refreshWorkerPill();
+}
+// ── WORKER (2026-11-12, labour hours): who is scanning on this phone today. Picked
+// once a day from the Library team list (kept on the phone for offline use);
+// every scan carries the name. Scanning is never blocked without one.
+const LS_WORKER='mx_worker',LS_TEAM='mx_team';
+function curWorker(){const w=lsGet(LS_WORKER);return w&&w.day===todayStr()&&w.name?w.name:'';}
+function refreshWorkerPill(){
+  const p=$('workerPill');if(!p)return;
+  p.style.display=cfg.stageNumber&&!isCuttingStage()?'':'none';
+  const w=curWorker();$('workerVal').textContent=w||'Tap to pick';
+  p.classList.toggle('ready',!!w);p.classList.toggle('err',!w);
+}
+async function openWorkerPick(){
+  const draw=names=>{$('mWorkerList').innerHTML=(names||[]).length?names.map(n=>'<button type="button" class="dlv-chip'+(n===curWorker()?' on':'')+'" data-n="'+esc(n)+'" onclick="setWorker(this.dataset.n)">'+esc(n)+'</button>').join(''):'<div class="m-desc" style="margin:0">No team list on this phone yet - type your name below.</div>';};
+  draw(lsGet(LS_TEAM));$('workerOther').value='';modal('mWorker',true);
+  if(!cfg.url)return;
+  try{const r=await fetch(cfg.url+'/phone/team?device_id='+encodeURIComponent(deviceId),{signal:AbortSignal.timeout(6000)});const j=await r.json();if(r.ok&&Array.isArray(j.names)){lsSet(LS_TEAM,j.names);draw(j.names);}}catch(e){}
+}
+function setWorker(name){
+  name=String(name||'').trim().slice(0,60);
+  if(!name){beep('err');$('workerOther').focus();return;}
+  lsSet(LS_WORKER,{name,day:todayStr()});modal('mWorker',false);refreshWorkerPill();showFlash('ok','Scans now count for '+name);
 }
 // ── CUT-ONLY MODE — a phone set to the Cut stage (a 'cutting' stage: logged
 // per material/finish, never by scanning tags) only gets the Cutting Log:
@@ -1675,7 +1713,10 @@ function showDrawings(j,fromQueue){
   dwgBackToQueue=!!fromQueue;
   $('mDwgTitle').textContent=j.batch;
   $('mDwgDesc').textContent=(j.tag?j.tag+' - ':'')+(j.drawings.length?'tap a drawing to open it':'no drawing on file for this batch yet')+(j.missing&&j.missing.length?' (none found for '+j.missing.join(', ')+')':'');
-  $('mDwgList').innerHTML=j.drawings.map(d=>'<a class="dwg-link" href="'+esc(cfg.url+d.url)+'" target="_blank" rel="noopener"><b>'+esc(d.name)+'</b><span>'+esc(d.what)+'</span></a>').join('');
+  // work steps for this part type at this stage + "new revision" warning (2026-11-12, gap list #9)
+  $('mDwgList').innerHTML=j.drawings.map(d=>'<a class="dwg-link" href="'+esc(cfg.url+d.url)+'" target="_blank" rel="noopener"'+(d.new_rev?' style="border-color:var(--amber-700);background:var(--amber-50)"':'')+'><b>'+esc(d.name)+'</b><span>'+(d.new_rev?'<b style="color:var(--amber-700)">Changed this week - check the new revision. </b>':'')+esc(d.what)+'</span></a>').join('')
+    +(j.steps||[]).map(g=>'<div class="dwg-steps"><div class="sec-title" style="margin:10px 0 6px">Work steps - '+esc(g.part_type)+'</div><ol style="margin:0;padding-left:22px">'
+      +g.steps.map(s=>'<li style="margin:6px 0;font-size:16px">'+esc(s.text)+(s.photo?' <a href="'+esc(cfg.url+s.photo)+'" target="_blank" rel="noopener">Photo</a>':'')+'</li>').join('')+'</ol></div>').join('');
   $('mDwgClose').textContent=fromQueue?'Back to the queue':'Close';
   modal('mDwg',true);
 }
@@ -1684,7 +1725,7 @@ function closeDwg(){modal('mDwg',false);if(dwgBackToQueue){dwgBackToQueue=false;
 async function queueDrawings(batch){
   if(!cfg.url||!navigator.onLine||serverDown){beep('err');showFlash('bad','Drawings need the server - it is not reachable right now');return;}
   try{
-    const res=await fetch(cfg.url+'/parts/drawings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,batch}),signal:AbortSignal.timeout(8000)});
+    const res=await fetch(cfg.url+'/parts/drawings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,batch,stage_number:cfg.stageNumber||undefined}),signal:AbortSignal.timeout(8000)});
     const j=await res.json().catch(()=>({}));
     if(!res.ok){beep('err');showFlash('bad',res.status===403?'This phone is not approved yet':(j.error||'Could not get the drawing'));return;}
     modal('mNextQ',false);showDrawings(j,true);
@@ -1693,7 +1734,7 @@ async function queueDrawings(batch){
 async function lookupDrawings(uid){
   setDwgMode(false);
   try{
-    const res=await fetch(cfg.url+'/parts/drawings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,unique_id:uid}),signal:AbortSignal.timeout(8000)});
+    const res=await fetch(cfg.url+'/parts/drawings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,unique_id:uid,stage_number:cfg.stageNumber||undefined}),signal:AbortSignal.timeout(8000)});
     const j=await res.json().catch(()=>({}));
     if(!res.ok){beep('err');showFlash('bad',res.status===403?'This phone is not approved yet':(j.error||'Could not get the drawing'));return;}
     beep('ok');
@@ -1727,7 +1768,7 @@ $('mRestYes').onclick=async()=>{
   const r=restInfo;if(!r){modal('mRest',false);return;}
   const btn=$('mRestYes');btn.disabled=true;
   try{
-    const res=await fetch(cfg.url+'/parts/complete-rest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device:cfg.dev,unique_id:r.uid,skid:r.skid,expect:r.left}),signal:AbortSignal.timeout(15000)});
+    const res=await fetch(cfg.url+'/parts/complete-rest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device:cfg.dev,worker:curWorker()||undefined,unique_id:r.uid,skid:r.skid,expect:r.left}),signal:AbortSignal.timeout(15000)});
     const j=await res.json().catch(()=>({}));
     modal('mRest',false);
     if(!res.ok){beep('err');showFlash('bad',j.error||'Could not complete the rest');return;}
@@ -2405,6 +2446,7 @@ function blankPart(uniqueId){
     // when this part was scanned.
     stageNumber:cfg.stageNumber||null,
     machine:cfg.machine||null,
+    worker:curWorker()||null,
     // Complete stage: the skid this panel goes on, and the batch that skid
     // number belongs to (the server decides for a panel from another batch).
     cskid:isCompleteStage()&&cfg.cskid?cfg.cskid.n||null:null,
@@ -2508,7 +2550,7 @@ async function handleScan(uniqueId){
 
   const tMatch=Date.now();
   try{
-    const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:cfg.machine||undefined,skid:part.cskid||undefined,skid_batch:part.cskidBatch||undefined}),signal:AbortSignal.timeout(MATCH_TIMEOUT_MS)});
+    const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:cfg.machine||undefined,worker:part.worker||undefined,skid:part.cskid||undefined,skid_batch:part.cskidBatch||undefined}),signal:AbortSignal.timeout(MATCH_TIMEOUT_MS)});
     if(res.status===403){
       const j=await res.json().catch(()=>({}));
       deviceStatus=j.status||'UNKNOWN';
@@ -2540,7 +2582,7 @@ async function reconcileUnverified(){
   let sent=0;
   for(const part of pending){
     try{
-      const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:part.uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:part.machine||cfg.machine||undefined,skid:part.cskid||undefined,skid_batch:part.cskidBatch||undefined,offline:true}),signal:AbortSignal.timeout(6000)});
+      const res=await fetch(cfg.url+'/parts/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:part.uniqueId,device_id:deviceId,device:cfg.dev,scanned_at:part.time,stage_number:part.stageNumber||undefined,machine:part.machine||cfg.machine||undefined,worker:part.worker||undefined,skid:part.cskid||undefined,skid_batch:part.cskidBatch||undefined,offline:true}),signal:AbortSignal.timeout(6000)});
       if(!res.ok)continue; // still unreachable/unapproved — leave UNVERIFIED, try again next time
       const data=await res.json();
       applyMatch(part,data,true);sent++;
@@ -2901,7 +2943,72 @@ window.openScanDetail=async i=>{
     $('notesList').innerHTML='<div style="font-size:13px;color:var(--gray-500)">Could not load notes.</div>';
   }
 };
+// ── REPORT A PROBLEM (2026-11-12, quality reports): the note form for the part just
+// scanned, with an optional photo. The server makes it a quality report (stage +
+// worker go with it); the office follows it up on the dashboard's Quality reports tab.
+let notePhotoData=null;
+function resetNotePhoto(){notePhotoData=null;$('notePhoto').value='';$('notePhotoPrev').style.display='none';}
+function shrinkPhoto(file){return new Promise((ok,bad)=>{const fr=new FileReader();fr.onerror=()=>bad(new Error('read'));fr.onload=()=>{const img=new Image();img.onload=()=>{const k=Math.min(1,1280/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext('2d').drawImage(img,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',0.75));};img.onerror=()=>bad(new Error('image'));img.src=fr.result;};fr.readAsDataURL(file);});}
+$('notePhoto').addEventListener('change',async e=>{
+  const f=e.target.files&&e.target.files[0];notePhotoData=null;$('notePhotoPrev').style.display='none';if(!f)return;
+  try{notePhotoData=await shrinkPhoto(f);$('notePhotoPrev').src=notePhotoData;$('notePhotoPrev').style.display='block';}catch(x){beep('err');showFlash('bad','Could not read that photo - try again');}
+});
+// Report a problem: a part, or a machine (down / back up) - 2026-11-12, gap list #7 #10.
+function reportProblem(){
+  const list=scansForDate(today);let i=list.length-1;
+  while(i>=0&&!noteCanAttach(list[i]))i--;
+  $('mProblemPart').textContent=i>=0?'A part - '+(list[i].partName||list[i].uniqueId):'A part (scan it first)';
+  modal('mProblem',true);
+}
+async function reportPartProblem(){
+  modal('mProblem',false);
+  const list=scansForDate(today);let i=list.length-1;
+  while(i>=0&&!noteCanAttach(list[i]))i--;
+  if(i<0){beep('err');showFlash('bad','Scan the part first, then tap Report a problem');return;}
+  viewDate=today;await openScanDetail(i);
+  if($('bAddNote').style.display!=='none')$('bAddNote').click();
+}
+// MACHINE DOWN / BACK UP from the phone: the office sees it on the dashboard's Machines tab.
+const MACH_REASONS={BREAKDOWN:'Breakdown',TOOLING:'Tooling',NO_MATERIAL:'No material',MAINTENANCE:'Maintenance',NO_OPERATOR:'No operator',OTHER:'Other'};
+let machList=[],machPick=null;
+async function openMachineSheet(){
+  modal('mProblem',false);machPick=null;
+  $('mMachTitle').textContent='Machines';$('mMachDesc').textContent='Loading…';$('mMachList').innerHTML='';modal('mMachine',true);
+  if(!cfg.url){$('mMachDesc').textContent='Set the server address in Settings first.';return;}
+  try{
+    const r=await fetch(cfg.url+'/phone/machines?device_id='+encodeURIComponent(deviceId),{signal:AbortSignal.timeout(8000)});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){$('mMachDesc').textContent=r.status===403?'This phone is not approved yet.':(j.error||'Could not load the machines.');return;}
+    machList=j.machines||[];drawMachines();
+  }catch(e){$('mMachDesc').textContent='Could not reach the server - check the Wi-Fi and try again.';}
+}
+function drawMachines(){
+  machPick=null;$('mMachTitle').textContent='Machines';
+  $('mMachDesc').textContent=machList.length?'Tap the machine that stopped - or the one running again.':'No machines set up yet - the office adds them on the dashboard (Machines tab).';
+  $('mMachList').innerHTML=machList.map((m,i)=>'<button type="button" class="nq-item'+(m.down?' first':'')+'" style="text-align:left;font:inherit;cursor:pointer" onclick="pickMachine('+i+')"><div class="nq-top"><span style="flex:1">'+esc(m.name)+'</span>'+(m.down?'<span class="nq-tag rush">Down</span>':'<span class="nq-tag" style="background:var(--green-50);color:var(--green-700)">Running</span>')+'</div>'+(m.down?'<div class="nq-meta">'+esc(MACH_REASONS[m.down.reason]||m.down.reason)+' since '+esc(new Date(m.down.since).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))+'</div>':'')+'</button>').join('');
+}
+function pickMachine(i){
+  const m=machList[i];machPick=m;
+  if(m.down){
+    $('mMachTitle').textContent=m.name+' - running again?';$('mMachDesc').textContent='Down since '+new Date(m.down.since).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})+' ('+(MACH_REASONS[m.down.reason]||m.down.reason)+').';
+    $('mMachList').innerHTML='<button type="button" class="m-ok" onclick="sendMachine(\'up\')">Yes - it is running again</button>';
+    return;
+  }
+  $('mMachTitle').textContent=m.name+' is down';$('mMachDesc').textContent='Why did it stop?';
+  $('mMachList').innerHTML='<div class="dlv-pick">'+Object.entries(MACH_REASONS).map(([k,t])=>'<button type="button" class="dlv-chip" onclick="sendMachine(\'down\',\''+k+'\')">'+t+'</button>').join('')+'</div>';
+}
+function machineBack(){if(machPick){drawMachines();return;}modal('mMachine',false);}
+async function sendMachine(action,reason){
+  const m=machPick;if(!m)return;
+  try{
+    const r=await fetch(cfg.url+'/phone/machine',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device:cfg.dev,worker:curWorker()||undefined,machine_id:m.id,action,reason}),signal:AbortSignal.timeout(8000)});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){beep('err');showFlash('bad',j.error||'Could not save');return;}
+    beep('ok');modal('mMachine',false);showFlash('ok',action==='up'?m.name+' is running again':m.name+' marked down - the office can see it');
+  }catch(e){beep('err');showFlash('bad','Could not reach the server - try again');}
+}
 $('bAddNote').onclick=()=>{
+  resetNotePhoto();
   noteFormMode='note';
   $('noteActionBtns').style.display='none';$('notesList').style.display='none';
   $('voidWarning').style.display='none';
@@ -2909,6 +3016,7 @@ $('bAddNote').onclick=()=>{
   $('noteSubmit').textContent='Add Note';
 };
 $('bVoidPart').onclick=()=>{
+  resetNotePhoto();
   noteFormMode='void';
   $('noteActionBtns').style.display='none';$('notesList').style.display='none';
   $('voidWarning').style.display='block';
@@ -2927,7 +3035,8 @@ $('noteSubmit').onclick=async()=>{
   const endpoint=isVoid?'/parts/void':'/parts/notes';
   const btn=$('noteSubmit');const old=btn.textContent;btn.textContent=isVoid?'Voiding…':'Adding…';btn.disabled=true;
   try{
-    const res=await fetch(cfg.url+endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:noteTarget.uniqueId,category,note:text,device_id:deviceId,device:cfg.dev})});
+    const res=await fetch(cfg.url+endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique_id:noteTarget.uniqueId,category,note:text,device_id:deviceId,device:cfg.dev,stage_number:cfg.stageNumber||undefined,worker:curWorker()||undefined,photo:notePhotoData||undefined})});
+    resetNotePhoto();
     if(!res.ok){const j=await res.json().catch(()=>({}));throw new Error(j.error||'HTTP '+res.status);}
     const data=await res.json();
     noteTarget.noteCount=(data.notes||[]).length;
@@ -3802,6 +3911,7 @@ function renderCutBatch(keepInputs){
       h+=cutStepper('cutCut'+l.line_no,'Full sheets cut now',rem?'<button type="button" class="cut-quick" onclick="$(\'cutCut'+l.line_no+'\').value='+rem+'">Cut all remaining ('+rem+')</button>':'')
         +cutStepper('cutDmg'+l.line_no,'Sheets damaged while cutting','Ruined full sheets - not counted as cut')
         +cutStepper('cutOff'+l.line_no,'Offcuts used','Pieces used instead of a new sheet')
+        +'<div class="fg" style="margin:10px 0 0"><label class="fg-label" for="cutLot'+l.line_no+'">Sheet lot / heat no. <span style="font-weight:400;color:var(--gray-500)">from the bundle tag</span></label><input class="fg-input" id="cutLot'+l.line_no+'" maxlength="60" autocapitalize="characters" placeholder="e.g. H24-1187" value="'+esc(cutLotFor(l))+'"></div>'
         +'<label class="cut-check"><input type="checkbox" id="cutFin'+l.line_no+'"'+(l.finished?' checked disabled':'')+'> '+(l.finished?'Already marked complete':'Batch cutting done - mark complete')+'</label>'
         +'<input class="cut-note" id="cutNote'+l.line_no+'" maxlength="300" placeholder="Note (optional) - e.g. why a sheet was damaged">';
     }else{
@@ -3824,6 +3934,11 @@ function openCutPdf(id){
   if(!cutCurrent||!cfg.url)return;
   window.open(cfg.url+'/cutting/batch/'+encodeURIComponent(cutCurrent.batch)+'/pdf/'+id+'?device_id='+encodeURIComponent(deviceId),'_blank');
 }
+// Sheet lot per material (2026-11-12, traceability): the last lot used for a material
+// is filled in again, since one bundle usually lasts several batches.
+const LS_CUT_LOTS='mx_cut_lots';
+const cutLotKey=l=>(String(l.material||'')+'|'+String(l.finish||'')).toUpperCase();
+function cutLotFor(l){return (lsGet(LS_CUT_LOTS)||{})[cutLotKey(l)]||'';}
 async function saveCutting(){
   const b=cutCurrent;if(!b)return;
   const operator=($('cutOperator').value||'').trim();
@@ -3850,7 +3965,9 @@ async function saveCutting(){
         return;
       }
     }
-    entries.push({entry_id:uuid(),line_no:l.line_no,sheets_cut:cut,sheets_damaged:dmg,offcuts_used:off,line_finished:fin,note:($('cutNote'+l.line_no).value||'').trim()});
+    const lot=(($('cutLot'+l.line_no)||{}).value||'').trim().toUpperCase();
+    if(lot){const m=lsGet(LS_CUT_LOTS)||{};m[cutLotKey(l)]=lot;lsSet(LS_CUT_LOTS,m);}
+    entries.push({entry_id:uuid(),line_no:l.line_no,sheets_cut:cut,sheets_damaged:dmg,offcuts_used:off,line_finished:fin,note:($('cutNote'+l.line_no).value||'').trim(),lot:lot||undefined});
   }
   if(!entries.length){cutMsg={kind:'err',text:'Nothing to save - enter sheets cut, damaged or offcuts, or tick "finished" on a material.'};renderCutBatch(true);return;}
   if(warn.length&&!confirm(warn.join('\n')+'\n\nSave anyway?'))return;
