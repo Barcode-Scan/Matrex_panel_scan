@@ -1317,7 +1317,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-12.9';
+const APP_VERSION='2026-11-12.10';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -4092,7 +4092,7 @@ async function openDeliverySlip(slipNumber){
   dlvView='form';
   dlvSlip=s||{slip_number:slipNumber,_unknown:true,parts:[]};
   const drv=lsGet(LS_DLV_DRIVER)||{};
-  dlvForm={driver_name:drv.name||'',carrier:drv.carrier||'Matrex truck',received_by:'',receiver_email:'',condition:'',skids:null,notes:'',photos:[],signed:false};
+  dlvForm={driver_name:drv.name||'',carrier:drv.carrier||'Matrex truck',received_by:'',receiver_email:'',extra:[],condition:'',skids:null,notes:'',photos:[],signed:false};
   const dr=dlvDraft();
   if(dr&&dr.slip_number===dlvSlip.slip_number){Object.assign(dlvForm,dr.form,{signed:false,drvSigned:false});const n=(dr.form.photos||[]).length;dlvMsg={kind:'ok',text:'Picked up where you left off'+(n?' - '+n+' photo'+(n===1?'':'s')+' kept':'')+'.'};}
   renderDeliveryForm();
@@ -4135,7 +4135,10 @@ function renderDeliveryForm(){
   }
   h+='<div class="ps-recv">';
   h+='<label class="ps-rl" for="dlvReceiver">Receiver name <em>*</em></label><input class="ps-line" id="dlvReceiver" placeholder="Tap to write the receiver\'s name" autocomplete="off" value="'+esc(f.received_by)+'">';
-  h+='<label class="ps-rl" for="dlvRcvEmail">Email <em>*</em> <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#666">(the signed slip is emailed to them)</span></label><input class="ps-line" id="dlvRcvEmail" type="email" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" list="dlvEmailList" onblur="dlvCheckEmail()" placeholder="Tap to add email" value="'+esc(f.receiver_email||'')+'">';
+  h+='<label class="ps-rl" for="dlvRcvEmail">Email <em>*</em> <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#666">(the signed slip is emailed to everyone listed)</span></label><input class="ps-line" id="dlvRcvEmail" type="email" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" list="dlvEmailList" onblur="dlvCheckEmail()" placeholder="Tap to add email" value="'+esc(f.receiver_email||'')+'">';
+  // several emails (Jay, 2026-11-12)
+  (f.extra||[]).forEach((v,i)=>{h+='<div style="display:flex;gap:6px;align-items:flex-end;margin-top:6px"><input class="ps-line dlvXEmail" type="email" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" list="dlvEmailList" aria-label="Another email" placeholder="Another email" value="'+esc(v)+'"><button type="button" class="nq-dwg" style="min-height:40px" aria-label="Remove this email" onclick="dlvRemoveEmail('+i+')">&times;</button></div>';});
+  if((f.extra||[]).length<9)h+='<button type="button" class="nq-dwg" style="margin:8px 0 2px" onclick="dlvAddEmail()">+ Add another email</button>';
   h+=dlvEmailSuggestHtml(s);
   h+='<div class="ps-rl">Date received</div><div class="ps-fixed">'+esc(new Date().toLocaleString('en-US',{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))+'</div>';
   h+='<div class="ps-rl">Receiver signature <em>*</em></div><div class="dlv-sig"><canvas id="dlvSigCanvas"></canvas><div class="dlv-sigline"></div><div class="dlv-sighint">Receiver signs here</div></div><button type="button" class="dlv-sigclear" onclick="dlvClearSig()">Clear signature</button>';
@@ -4153,7 +4156,11 @@ function dlvReadInputs(){
   if(!dlvForm)return;
   const g=id=>$(id)?$(id).value:'';
   dlvForm.driver_name=g('dlvDriver');dlvForm.received_by=g('dlvReceiver');dlvForm.receiver_email=g('dlvRcvEmail');dlvForm.notes=g('dlvNotes');
+  if($('dlvRcvEmail'))dlvForm.extra=[...document.querySelectorAll('.dlvXEmail')].map(i=>i.value);
 }
+function dlvAllEmails(f){return [f.receiver_email,...(f.extra||[])].map(x=>String(x||'').trim()).filter(Boolean);}
+function dlvAddEmail(v){dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm.drvSigData=dlvDrvSigDataUrl();dlvForm.extra=(dlvForm.extra||[]).concat([v||'']);renderDeliveryForm();if(!v){const x=document.querySelectorAll('.dlvXEmail');if(x.length)x[x.length-1].focus();}}
+function dlvRemoveEmail(i){dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm.drvSigData=dlvDrvSigDataUrl();dlvForm.extra.splice(i,1);renderDeliveryForm();}
 function dlvSet(k,v){dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm.drvSigData=dlvDrvSigDataUrl();dlvForm[k]=v;renderDeliveryForm();}
 function dlvRemovePhoto(i){dlvReadInputs();dlvForm.sigData=dlvSigDataUrl();dlvForm.drvSigData=dlvDrvSigDataUrl();dlvForm.photos.splice(i,1);dlvSaveDraft();renderDeliveryForm();}
 // Photos are shrunk on the phone (longest side 1280px, JPEG) so they fit in
@@ -4276,7 +4283,7 @@ function dlvDraft(){const d=lsGet(LS_DLV_DRAFT);return d&&d.slip_number&&d.form&
 function dlvSaveDraft(){
   if(!dlvForm||!dlvSlip||dlvView!=='form')return;
   dlvReadInputs();
-  const form={driver_name:dlvForm.driver_name,carrier:dlvForm.carrier,received_by:dlvForm.received_by,receiver_email:dlvForm.receiver_email,condition:dlvForm.condition,skids:dlvForm.skids,notes:dlvForm.notes,photos:dlvForm.photos.slice(),sigData:dlvSigDataUrl()};
+  const form={driver_name:dlvForm.driver_name,carrier:dlvForm.carrier,received_by:dlvForm.received_by,receiver_email:dlvForm.receiver_email,extra:(dlvForm.extra||[]).slice(),condition:dlvForm.condition,skids:dlvForm.skids,notes:dlvForm.notes,photos:dlvForm.photos.slice(),sigData:dlvSigDataUrl()};
   const rec={slip_number:dlvSlip.slip_number,saved_at:Date.now(),form};
   try{lsSet(LS_DLV_DRAFT,rec);}catch(e){try{form.photos=[];lsSet(LS_DLV_DRAFT,rec);}catch(_){}}
 }
@@ -4357,11 +4364,12 @@ setTimeout(()=>{if(cfg.url)refreshDeliverySlips(true);},4000);
 async function saveDelivery(){
   dlvReadInputs();
   const f=dlvForm,s=dlvSlip;
-  const err=!f.received_by.trim()?'Enter the name of the person receiving the delivery.':!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test(String(f.receiver_email||'').trim())?'Enter the receiver\'s email address - the signed packing slip is emailed to them.':!f.condition?'Tap the condition of the delivery - OK, damaged, short or other.':(dlvSkidsLeft(s)>1&&!f.skids)?'Tap how many skids were delivered now.':(f.condition!=='OK'&&!f.notes.trim())?'Describe the problem in Notes.':f.photos.length<dlvSkidsNeeded(s)?'Take a photo of every skid - '+f.photos.length+' of '+dlvSkidsNeeded(s)+' taken.':((f.receiver_email||'').trim()&&!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test((f.receiver_email||'').trim()))?'Check the receiver email - or leave it empty.':!dlvSigDataUrl()?'The receiver needs to sign.':'';
+  const badX=(f.extra||[]).map(x=>String(x||'').trim()).filter(Boolean).find(x=>!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test(x));
+  const err=!f.received_by.trim()?'Enter the name of the person receiving the delivery.':!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test(String(f.receiver_email||'').trim())?'Enter the receiver\'s email address - the signed packing slip is emailed to them.':badX?'Check the email "'+badX+'" - or remove it.':!f.condition?'Tap the condition of the delivery - OK, damaged, short or other.':(dlvSkidsLeft(s)>1&&!f.skids)?'Tap how many skids were delivered now.':(f.condition!=='OK'&&!f.notes.trim())?'Describe the problem in Notes.':f.photos.length<dlvSkidsNeeded(s)?'Take a photo of every skid - '+f.photos.length+' of '+dlvSkidsNeeded(s)+' taken.':((f.receiver_email||'').trim()&&!/^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']{2,}$/.test((f.receiver_email||'').trim()))?'Check the receiver email - or leave it empty.':!dlvSigDataUrl()?'The receiver needs to sign.':'';
   if(err){beep('err');dlvMsg={kind:'err',text:err};f.sigData=dlvSigDataUrl();f.drvSigData=dlvDrvSigDataUrl();renderDeliveryForm();window.scrollTo({top:0,behavior:'smooth'});return;}
   try{lsSet(LS_DLV_DRIVER,{name:f.driver_name.trim(),carrier:f.carrier});}catch(e){}
-  if((f.receiver_email||'').trim())try{const em=String(f.receiver_email).trim().toLowerCase(),L=(lsGet(LS_DLV_EMAILS)||[]).filter(x=>!(x.email===em&&x.job_name===(s.job_name||'')&&x.ship_to===(s.ship_to||'')));L.unshift({email:em,job_name:s.job_name||'',ship_to:s.ship_to||'',last_used:new Date().toISOString(),uses:1});lsSet(LS_DLV_EMAILS,L.slice(0,200));}catch(e){}
-  const rec={confirmation_id:uuid(),slip_number:s.slip_number,received_by:f.received_by.trim(),receiver_email:(f.receiver_email||'').trim(),driver_name:f.driver_name.trim(),carrier:f.carrier,condition:f.condition,condition_required:true,skids_delivered:dlvSkidsNow(s,f),skids_required:dlvSkidsLeft(s)>0,email_required:true,notes:f.notes.trim(),signature:dlvSigDataUrl(),driver_signature:dlvDrvSigDataUrl(),photos:f.photos.slice(),delivered_at:new Date().toISOString()};
+  for(const em0 of dlvAllEmails(f))try{const em=em0.toLowerCase(),L=(lsGet(LS_DLV_EMAILS)||[]).filter(x=>!(x.email===em&&x.job_name===(s.job_name||'')&&x.ship_to===(s.ship_to||'')));L.unshift({email:em,job_name:s.job_name||'',ship_to:s.ship_to||'',last_used:new Date().toISOString(),uses:1});lsSet(LS_DLV_EMAILS,L.slice(0,200));}catch(e){}
+  const rec={confirmation_id:uuid(),slip_number:s.slip_number,received_by:f.received_by.trim(),receiver_email:dlvAllEmails(f).join(', '),driver_name:f.driver_name.trim(),carrier:f.carrier,condition:f.condition,condition_required:true,skids_delivered:dlvSkidsNow(s,f),skids_required:dlvSkidsLeft(s)>0,email_required:true,notes:f.notes.trim(),signature:dlvSigDataUrl(),driver_signature:dlvDrvSigDataUrl(),photos:f.photos.slice(),delivered_at:new Date().toISOString()};
   const btn=$('bDlvSave');btn.disabled=true;btn.textContent='Saving…';
   const r=cfg.url?await dlvPost(rec):{ok:false,permanent:false,error:'No server configured'};
   let msg;
@@ -4405,7 +4413,13 @@ function dlvEmailSuggestHtml(s){
   h+='<div class="dlv-email-hint" id="dlvEmailHint" style="display:none"></div>';
   return h;
 }
-function dlvPickEmail(e){const i=$('dlvRcvEmail');if(i){i.value=e;}if(dlvForm)dlvForm.receiver_email=e;const hn=$('dlvEmailHint');if(hn)hn.style.display='none';}
+// a suggestion fills the email box, or - when it is used already - adds another email (2026-11-12)
+function dlvPickEmail(e){
+  const i=$('dlvRcvEmail');if(!dlvForm)return;dlvReadInputs();
+  if(dlvAllEmails(dlvForm).some(x=>x.toLowerCase()===e))return;
+  if(i&&!i.value.trim()){i.value=e;dlvForm.receiver_email=e;const hn=$('dlvEmailHint');if(hn)hn.style.display='none';return;}
+  dlvAddEmail(e);
+}
 function dlvEditDist(a,b){
   if(Math.abs(a.length-b.length)>2)return 9;
   let p=[...Array(b.length+1).keys()];
