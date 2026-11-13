@@ -719,6 +719,21 @@ textarea.ps-line{resize:vertical;min-height:44px}
 #cambox #flash{padding:10px 12px}
 #dirCamSlot{position:relative}
 #dirCamSlot .dir-banner{z-index:9;padding:10px 12px}
+/* OVERNIGHT RUNS (2026-11-12) */
+.cut-ovn-btn{display:block;width:100%;margin-top:10px;min-height:44px;border:1.5px dashed var(--blue-600);background:var(--white);color:var(--blue-700);border-radius:12px;font:700 15px inherit;font-family:inherit;cursor:pointer}
+.cut-ovn-on{display:flex;align-items:center;gap:8px;margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--blue-50);color:var(--blue-700);font-size:14px}
+.cut-ovn-on span{flex:1;min-width:0}
+.cut-ovn-note{margin-top:8px;font-size:13px;font-weight:700;color:var(--blue-700)}
+.cut-ovn-on button{flex:none;min-height:36px;border:1px solid var(--blue-600);background:var(--white);color:var(--blue-700);border-radius:999px;padding:4px 12px;font:700 13px inherit;font-family:inherit;cursor:pointer}
+#ovnGate{display:none;position:fixed;inset:0;z-index:950;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.ovn-wrap{max-width:var(--content-w,640px);margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 16px 40px}
+.ovn-h{font-size:calc(22px*var(--k,1));margin:4px 0 4px}
+.ovn-sub{color:var(--gray-500);font-size:calc(15px*var(--kt,1));margin-bottom:14px}
+.ovn-step{font-size:12px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--amber-700)}
+.ovn-pick{display:flex;gap:12px;align-items:flex-start;cursor:pointer}
+.ovn-pick input{width:24px;height:24px;flex:none;margin-top:2px}
+.ovn-pick small{display:block;color:var(--gray-500);font-size:13px;margin-top:2px}
+.ovn-notice{display:block;width:100%;text-align:left;cursor:pointer;font:inherit;border:1.5px solid #F6C453}
 #flash.float{position:fixed;top:calc(76px + env(safe-area-inset-top));left:12px;right:12px;max-width:616px;margin:0 auto;z-index:70;box-shadow:var(--shadow-lg)}
 </style>
 </head>
@@ -1317,7 +1332,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-12.10';
+const APP_VERSION='2026-11-12.11';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -3795,12 +3810,13 @@ function openCuttingScreen(){
   show('scrCutting');
   $('cutContent').innerHTML='<div class="empty-box"><div class="es">Loading batches…</div></div>';
   flushCutQueue();
-  loadCutBatches();
+  loadCutBatches().then(()=>ovnMorningCheck()); // morning: the overnight log first (2026-11-12)
 }
 async function loadCutBatches(){
   try{
     const d=await cutGet('/cutting/batches'+(cutShowAll?'?all=1':''));
     cutBatches=d.batches||[];
+    try{await ovnFetch();}catch(e){/* older server: no overnight runs */}
     if(cutView==='list')renderCutList();
   }catch(e){
     if(cutView==='list')$('cutContent').innerHTML='<div class="cut-msg err">'+esc(e.message)+'</div>';
@@ -3839,6 +3855,10 @@ function renderCutList(){
   let h='';
   if(cutMsg){h+='<div class="cut-msg '+cutMsg.kind+'">'+esc(cutMsg.text)+'</div>';}
   if(pending)h+='<div class="cut-msg warn">'+pending+' cutting entr'+(pending===1?'y is':'ies are')+' saved on this phone and will send automatically when the server is reachable.</div>';
+  // overnight (2026-11-12): the morning log not done yet / what is running tonight
+  if(isCuttingStage()&&!ovnCheckedToday()&&new Date().getHours()>=5)h+='<button type="button" class="cut-msg warn ovn-notice" onclick="ovnMorningCheck(true)"><b>Overnight cutting log not done yet.</b> Tap to log what ran overnight before today\'s cutting.</button>';
+  const ovTonight=[...new Set(ovnRuns.map(r=>r.batch))];
+  if(ovTonight.length)h+='<div class="cut-msg ok"><b>Running overnight:</b> '+ovTonight.map(esc).join(', ')+' - log what it cut when the morning shift starts.</div>';
   h+='<label class="cut-check" style="border-top:none;padding-top:0"><input type="checkbox" '+(cutShowAll?'checked':'')+' onchange="cutShowAll=this.checked;loadCutBatches()"> Show finished batches too</label>';
   if(filtered)h+='<div class="cut-order-note"><b>Showing '+list.length+' of '+cutBatches.length+' batches</b></div>';
   if(list.some(b=>b.queue_position))h+='<div class="cut-order-note">Cut in this order - #1 first. The office sets the order; it updates by itself.</div>';
@@ -3850,6 +3870,7 @@ function renderCutList(){
       +'<div class="cut-head" style="justify-content:flex-start">'+(b.queue_position?'<div class="cut-pos">'+b.queue_position+'</div>':'')+'<div style="flex:1;min-width:0"><div class="cut-batch">'+esc(b.batch)+'</div><div class="cut-meta">'+esc([b.job_name,b.floor_or_work_order].filter(Boolean).join(' · '))+(b.target_finish?' · Due '+esc(String(b.target_finish).slice(0,10)):'')+(b.priority?' · <b style="color:var(--red-600)">'+esc(b.priority)+'</b>':'')+'</div></div>'+cutStatusTag(b.cut_status)+'</div>'
       +b.lines.map(l=>'<div class="cut-line"><span>'+esc(l.material)+(l.finish?' · '+esc(l.finish):'')+'</span><span>'+(l.done?'✓ ':'')+l.cut+' / '+cutQty(l.programmed)+' sheets</span></div>').join('')
       +(b.queue_position&&b.material_ok===false?'<div class="cut-mat-warn">Material not confirmed by the office yet</div>':'')
+      +(ovnRunsFor(b.batch).length?'<div class="cut-ovn-note">Running overnight · '+ovnRunsFor(b.batch).map(r=>r.planned+' sheets').join(' + ')+'</div>':'') // the button is inside the batch (Jay)
       +'</div>').join('');
   }
   $('cutContent').innerHTML=h;
@@ -3872,6 +3893,151 @@ async function loadCutBatch(batch,keepInputs){
     if(cutView==='detail')$('cutContent').innerHTML='<div class="cut-msg err">'+esc(e.message)+'</div>';
   }
 }
+// ── OVERNIGHT RUNS (Jay, 2026-11-12) ─────────────────────────────────────
+// End of shift: "Leave running overnight" on a batch - how many sheets were loaded per
+// material (server cut_overnight). Next morning, the first time the cutting phone is
+// opened, a page that cannot be skipped: each recorded run opens one by one to log
+// what the machine actually cut (+ damaged, + why fewer). If none was recorded it
+// asks; "yes" lists the batches cut lately to pick from. Counts on the night it ran.
+const CUT_RUN_REASONS=['Machine error','Ran out of sheets','Program stopped','Power / air off','Other'];
+const LS_OVN_CHECK='mx_ovn_check';
+let ovnRuns=[],ovnState=null;
+function cutYmd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function cutLastNight(){const d=new Date();d.setDate(d.getDate()-1);while(d.getDay()===0||d.getDay()===6)d.setDate(d.getDate()-1);return cutYmd(d);}
+const ovnDay=iso=>cutYmd(new Date(iso));
+const ovnCheckedToday=()=>lsGet(LS_OVN_CHECK)===cutYmd(new Date());
+const ovnRunsFor=batch=>ovnRuns.filter(r=>r.batch===batch);
+async function ovnFetch(){const d=await cutGet('/cutting/overnight');ovnRuns=d.runs||[];return d;}
+function ovnGate(html,canClose){
+  let g=$('ovnGate');
+  if(!g){g=document.createElement('div');g.id='ovnGate';g.setAttribute('role','dialog');g.setAttribute('aria-modal','true');document.body.appendChild(g);}
+  g.innerHTML='<div class="ovn-wrap">'+html+(canClose?'<button type="button" class="btn btn-outline" style="margin-top:10px" onclick="ovnClose()">Close</button>':'')+'</div>';
+  g.style.display='block';g.scrollTop=0;
+}
+function ovnClose(){ovnState=null;const g=$('ovnGate');if(g)g.style.display='none';}
+function ovnBatchTag(batch){
+  const rs=ovnRunsFor(batch);
+  if(!rs.length)return '<button type="button" class="cut-ovn-btn" onclick="event.stopPropagation();ovnStartDlg(\''+esc(batch).replace(/'/g,"\\'")+'\')">Leave running overnight</button>';
+  return '<div class="cut-ovn-on" onclick="event.stopPropagation()"><span><b>Running overnight</b> · '+rs.map(r=>r.planned+' sheets').join(' + ')+' since '+esc(new Date(rs[0].started_at).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))+'</span><button type="button" onclick="ovnCancel(\''+esc(batch).replace(/'/g,"\\'")+'\')">Cancel</button></div>';
+}
+// End of shift: record what was left running.
+async function ovnStartDlg(batch){
+  let v=(cutCurrent&&cutCurrent.batch===batch)?cutCurrent:cutBatches.find(b=>b.batch===batch);
+  if(!v||!v.lines){try{v=(await cutGet('/cutting/batch/'+encodeURIComponent(batch))).batch;}catch(e){beep('err');showFlash('bad',e.message);return;}}
+  const lines=v.lines.filter(l=>!l.done);
+  if(!lines.length){showFlash('bad','Every material of '+batch+' is cut already');return;}
+  ovnState={step:'start',batch,view:v};
+  ovnGate('<div class="ovn-step">Overnight run · '+esc(batch)+'</div><h2 class="ovn-h">How many sheets are you cutting overnight?</h2><div class="ovn-sub">'+esc([v.job_name,v.floor_or_work_order].filter(Boolean).join(' · '))+' - enter the sheets loaded for each material that runs tonight.</div>'
+    +'<div class="cut-card"><div class="fg" style="margin:0"><label class="fg-label" for="ovName">Your name <span class="fg-req">*</span></label><input class="fg-input" id="ovName" value="'+esc(lsGet(LS_CUT_OPERATOR)||'')+'"></div></div>'
+    +lines.map(l=>'<div class="cut-card"><div class="cut-mat">'+esc(l.material)+'</div><div class="cut-meta">'+(l.finish?'Finish: '+esc(l.finish)+' · ':'')+'Remaining '+cutQty(l.remaining)+'</div>'+cutStepper('ovPlan'+l.line_no,'Sheets cutting overnight','Leave 0 if this material is not running tonight')+'</div>').join('')
+    +'<div class="cut-msg" id="ovMsg" style="display:none"></div><button type="button" class="btn btn-solid" id="ovSave" onclick="ovnStartSave()">Save - leave running overnight</button>',true);
+  setTimeout(()=>{const first=$('ovPlan'+lines[0].line_no);if(first)first.focus();},50); // nothing filled in - the operator enters the number (Jay)
+}
+async function ovnStartSave(){
+  const s=ovnState;if(!s)return;
+  const name=($('ovName').value||'').trim(),msg=t=>{const m=$('ovMsg');m.className='cut-msg err';m.textContent=t;m.style.display='';};
+  if(!name){msg('Enter your name.');return;}
+  const lines=s.view.lines.filter(l=>!l.done).map(l=>({line_no:l.line_no,planned:parseInt(($('ovPlan'+l.line_no)||{}).value,10)||0})).filter(l=>l.planned>0);
+  if(!lines.length){msg('Enter how many sheets you are cutting overnight.');return;}
+  lsSet(LS_CUT_OPERATOR,name);$('ovSave').disabled=true;
+  try{
+    const r=await fetch(cfg.url+'/cutting/overnight/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device:cfg.dev,operator:name,batch:s.batch,lines}),signal:AbortSignal.timeout(10000)});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){$('ovSave').disabled=false;msg(j.error||'Could not save');return;}
+    beep('ok');ovnClose();await ovnFetch().catch(()=>{});showFlash('ok',s.batch+' is running overnight - log what it cut tomorrow morning');
+    cutView==='list'?renderCutList():renderCutBatch(true);
+  }catch(e){$('ovSave').disabled=false;msg('Needs the server - check the Wi-Fi and try again.');}
+}
+async function ovnCancel(batch){
+  if(!confirm('Cancel the overnight run of '+batch+'? Use this only if it was set by mistake.'))return;
+  try{const r=await fetch(cfg.url+'/cutting/overnight/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device:cfg.dev,operator:lsGet(LS_CUT_OPERATOR)||'',batch}),signal:AbortSignal.timeout(10000)});
+    if(!r.ok){const j=await r.json().catch(()=>({}));showFlash('bad',j.error||'Could not cancel');return;}
+    await ovnFetch().catch(()=>{});cutView==='list'?renderCutList():renderCutBatch(true);}
+  catch(e){showFlash('bad','Needs the server - try again');}
+}
+// Next morning: cannot go on to today's cutting until the overnight log is done.
+async function ovnMorningCheck(force){
+  if(!isCuttingStage()||!cfg.url||(ovnState&&ovnState.step!=='start'))return;
+  if(!force&&(ovnCheckedToday()||new Date().getHours()<5))return;
+  let d=null;try{d=await ovnFetch();}catch(e){d=null;}
+  const today=cutYmd(new Date());
+  const older=(d?d.runs:ovnRuns).filter(r=>ovnDay(r.started_at)<today);
+  const recent=d&&d.recent&&d.recent.length?d.recent:cutBatches.filter(b=>b.cut_status==='in_progress');
+  if(older.length){
+    const by=new Map();older.forEach(r=>{if(!by.has(r.batch))by.set(r.batch,[]);by.get(r.batch).push(r);});
+    ovnState={step:'log',items:[...by].map(([batch,rs])=>({batch,view:(d&&d.batches||{})[batch]||null,runs:rs,night:ovnDay(rs[0].started_at)})),i:0,recent,reason:''};
+  }else ovnState={step:'ask',items:[],i:0,recent,sel:new Set(),reason:''};
+  ovnDraw();
+}
+function ovnDone(){lsSet(LS_OVN_CHECK,cutYmd(new Date()));ovnClose();showFlash('ok','Overnight cutting log done - on to today\'s cutting');if(cutView==='list')loadCutBatches();}
+function ovnAnswer(yes){if(!yes){ovnDone();return;}ovnState.step='pick';ovnDraw();}
+function ovnPick(batch,on){on?ovnState.sel.add(batch):ovnState.sel.delete(batch);}
+function ovnPicked(){
+  const s=ovnState;if(!s.sel.size){alert('Tick the batch(es) you left cutting overnight.');return;}
+  s.items=[...s.sel].map(batch=>({batch,view:s.recent.find(v=>v.batch===batch)||null,runs:[],night:cutLastNight()}));s.i=0;s.step='log';ovnDraw();
+}
+async function ovnDraw(){
+  const s=ovnState;if(!s)return;
+  if(s.step==='ask'){
+    ovnGate('<h2 class="ovn-h">Good morning</h2><div class="ovn-sub">Before today\'s cutting: did you leave any sheets cutting overnight?</div>'
+      +'<button type="button" class="btn btn-solid" onclick="ovnAnswer(true)">Yes - log the overnight run</button>'
+      +'<button type="button" class="btn btn-outline" style="margin-top:10px" onclick="ovnAnswer(false)">No - nothing ran overnight</button>');
+    return;
+  }
+  if(s.step==='pick'){
+    ovnGate('<h2 class="ovn-h">Which batch was left cutting?</h2><div class="ovn-sub">Batches cut in the last few days that are not finished. Tick every one left running overnight.</div>'
+      +(s.recent.length?s.recent.map(v=>'<label class="cut-card ovn-pick"><input type="checkbox" '+(s.sel.has(v.batch)?'checked':'')+' onchange="ovnPick(\''+esc(v.batch).replace(/'/g,"\\'")+'\',this.checked)"><span><b>'+esc(v.batch)+'</b><small>'+esc([v.job_name,v.floor_or_work_order].filter(Boolean).join(' · '))+'</small><small>'+v.lines.map(l=>esc(l.material)+' '+l.cut+' / '+cutQty(l.programmed)).join(' · ')+'</small></span></label>').join('')
+        :'<div class="cut-msg warn">No unfinished batches from the last few days. Go back and answer No, or ask the office.</div>')
+      +'<button type="button" class="btn btn-solid" onclick="ovnPicked()">Continue</button><button type="button" class="btn btn-outline" style="margin-top:10px" onclick="ovnState.step=\'ask\';ovnDraw()">Back</button>');
+    return;
+  }
+  // log one batch at a time
+  const it=s.items[s.i];
+  if(!it.view){try{it.view=(await cutGet('/cutting/batch/'+encodeURIComponent(it.batch))).batch;}catch(e){ovnGate('<div class="cut-msg err">'+esc(e.message)+'</div><button type="button" class="btn btn-solid" onclick="ovnDraw()">Try again</button>');return;}}
+  const known=it.runs.length>0,lines=known?it.runs.map(r=>({...(it.view.lines.find(l=>l.line_no===r.line_no)||{material:r.material,finish:r.finish,line_no:r.line_no}),planned:r.planned})):it.view.lines.filter(l=>!l.done);
+  it.lines=lines;
+  ovnGate('<div class="ovn-step">Overnight cutting log'+(s.items.length>1?' · batch '+(s.i+1)+' of '+s.items.length:'')+'</div><h2 class="ovn-h">'+esc(it.batch)+'</h2><div class="ovn-sub">'+esc([it.view.job_name,it.view.floor_or_work_order].filter(Boolean).join(' · '))+(known?' · left running at '+esc(new Date(it.runs[0].started_at).toLocaleString([],{weekday:'short',hour:'numeric',minute:'2-digit'}))+(it.runs[0].started_by?' by '+esc(it.runs[0].started_by):''):'')+'</div>'
+    +'<div class="cut-card"><div class="fg"><label class="fg-label" for="ovName">Your name <span class="fg-req">*</span></label><input class="fg-input" id="ovName" value="'+esc(lsGet(LS_CUT_OPERATOR)||'')+'"></div>'
+    +'<div class="fg" style="margin-bottom:0"><label class="fg-label" for="ovNight">Left running on the night of</label><input class="fg-input" type="date" id="ovNight" max="'+cutYmd(new Date())+'" value="'+esc(it.night)+'"></div></div>'
+    +lines.map(l=>'<div class="cut-card"><div class="cut-mat">'+esc(l.material||'')+'</div><div class="cut-meta">'+(l.finish?'Finish: '+esc(l.finish):'')+(l.programmed!=null?' · Cut before: '+(l.cut||0)+' / '+cutQty(l.programmed):'')+'</div>'
+      +cutStepper('ovPlan'+l.line_no,'Sheets left cutting overnight',known?'Entered at the end of the shift':'How many the program was set to cut')
+      +cutStepper('ovCut'+l.line_no,'Sheets the machine cut overnight','')
+      +cutStepper('ovDmg'+l.line_no,'Sheets damaged','Ruined full sheets - not counted as cut')+'</div>').join('')
+    +'<div class="cut-card"><div class="fg-label" style="margin-bottom:6px">If it cut fewer sheets than loaded - why?</div><div class="dlv-pick" style="margin:0">'
+    +CUT_RUN_REASONS.map(r=>'<button type="button" class="dlv-chip'+(s.reason===r?' on warn':'')+'" onclick="ovnReason(\''+r+'\')">'+esc(r)+'</button>').join('')+'</div>'
+    +'<input class="cut-note" id="ovNote" maxlength="300" placeholder="Note (optional) - what happened"></div>'
+    +'<div class="cut-msg" id="ovMsg" style="display:none"></div>'
+    +'<button type="button" class="btn btn-solid" id="ovSave" onclick="ovnLogSave()">'+(s.i<s.items.length-1?'Save - next batch':'Save overnight log')+'</button>'
+    +(known?'':'<button type="button" class="btn btn-outline" style="margin-top:10px" onclick="ovnState.step=\'pick\';ovnDraw()">Back - pick other batches</button>'));
+  lines.forEach(l=>{if(l.planned&&$('ovPlan'+l.line_no))$('ovPlan'+l.line_no).value=l.planned;});
+}
+function ovnReason(r){const keep={};document.querySelectorAll('#ovnGate input').forEach(i=>{keep[i.id]=i.value;});ovnState.reason=ovnState.reason===r?'':r;
+  const it=ovnState.items[ovnState.i];ovnDraw().then(()=>{Object.entries(keep).forEach(([id,v])=>{const el=$(id);if(el&&id)el.value=v;});});}
+async function ovnLogSave(){
+  const s=ovnState,it=s.items[s.i],msg=t=>{const m=$('ovMsg');m.className='cut-msg err';m.textContent=t;m.style.display='';m.scrollIntoView({block:'center'});};
+  const name=($('ovName').value||'').trim(),night=$('ovNight').value;
+  if(!name){msg('Enter your name.');return;}
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(night||'')){msg('Pick the night the sheets were left running.');return;}
+  const n=id=>{const v=parseInt(($(id)||{}).value,10);return Number.isInteger(v)&&v>=0?v:0;};
+  const entries=[];let short=false;
+  for(const l of it.lines){
+    const plan=n('ovPlan'+l.line_no),cut=n('ovCut'+l.line_no),dmg=n('ovDmg'+l.line_no);
+    if(!plan&&!cut&&!dmg)continue;
+    if(plan&&cut<plan)short=true;
+    entries.push({entry_id:uuid(),line_no:l.line_no,sheets_cut:cut,sheets_damaged:dmg,offcuts_used:0,line_finished:false,note:($('ovNote').value||'').trim(),run_planned:plan||undefined});
+  }
+  if(!entries.length){msg('Enter the sheets loaded and how many the machine cut.');return;}
+  if(short&&!s.reason){msg('It cut fewer sheets than loaded - tap why.');return;}
+  lsSet(LS_CUT_OPERATOR,name);$('ovSave').disabled=true;
+  const payload={operator:name,batch:it.batch,cut_at:new Date().toISOString(),entries,overnight:true,run_date:night,run_reason:s.reason||undefined,overnight_ids:it.runs.map(r=>r.id)};
+  const r=await cutPost(payload);
+  if(!r.ok&&r.permanent){$('ovSave').disabled=false;msg(r.error);return;}
+  if(!r.ok)lsSet(LS_CUT_QUEUE,[...cutQueue(),payload]); // no connection: kept on the phone, sends later
+  beep('ok');
+  if(s.i<s.items.length-1){s.i++;s.reason='';ovnDraw();showFlash('ok',it.batch+' overnight log saved'+(r.ok?'':' on this phone'));return;}
+  ovnDone();
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&$('scrCutting')&&$('scrCutting').classList.contains('on'))ovnMorningCheck();});
 function cutStepper(id,label,hint){
   return '<div class="cut-row"><div class="cut-lbl">'+label+(hint?'<small>'+hint+'</small>':'')+'</div>'
     +'<div class="stepper"><button type="button" onclick="cutStep(\''+id+'\',-1)" aria-label="Less">−</button>'
@@ -3898,6 +4064,7 @@ function renderCutBatch(keepInputs){
   }
   h+='<div class="cut-card"><div class="fg" style="margin-bottom:0"><label class="fg-label" for="cutOperator">Your name <span class="fg-req">*</span></label>'
     +'<input class="fg-input" id="cutOperator" autocapitalize="words" placeholder="Who is cutting?" value="'+esc(lsGet(LS_CUT_OPERATOR)||'')+'"></div></div>';
+
   b.lines.forEach(l=>{
     const pct=l.done?100:(l.programmed?Math.min(100,Math.round(l.cut/l.programmed*100)):0);
     const open=!l.done||cutOpenLines.has(l.line_no);
@@ -3919,11 +4086,13 @@ function renderCutBatch(keepInputs){
     }
     h+='</div>';
   });
+  h+=ovnBatchTag(b.batch).replace('class="cut-ovn-btn"','class="cut-ovn-btn" style="margin:0 0 12px"');
   h+='<button class="btn btn-solid" id="bCutSave" type="button" onclick="saveCutting()" style="position:sticky;bottom:12px;margin-top:4px">Save Cutting Log</button>';
   if(cutRecent.length){
     h+='<div class="s-sec" style="margin-top:22px">Logged so far</div><div class="cut-card">'
       +cutRecent.map(r=>'<div class="cut-hist"'+(r.voided_at?' style="text-decoration:line-through;opacity:.55"':'')+'><b>'+esc(r.material)+'</b> · '
         +[r.sheets_cut?r.sheets_cut+' cut':'',r.sheets_damaged?r.sheets_damaged+' damaged':'',r.offcuts_used?r.offcuts_used+' offcut'+(r.offcuts_used===1?'':'s'):'',r.line_finished?'finished':''].filter(Boolean).join(', ')
+        +(r.overnight?' <b style="color:var(--blue-700)">· overnight run'+(r.run_planned?' ('+r.sheets_cut+' of '+r.run_planned+' loaded)':'')+(r.run_reason?' - '+esc(r.run_reason):'')+'</b>':'')
         +'<br><span>'+esc(fmtDT(r.cut_at))+' · '+esc(r.operator||'')+(r.note?' · '+esc(r.note):'')+(r.voided_at?' · voided by office':'')+'</span></div>').join('')
       +'</div>';
   }
@@ -3950,6 +4119,7 @@ async function saveCutting(){
     const num=id=>{const v=($(id).value||'').trim();return v===''?0:Number(v);};
     const cut=num('cutCut'+l.line_no),dmg=num('cutDmg'+l.line_no),off=num('cutOff'+l.line_no);
     if([cut,dmg,off].some(n=>!Number.isInteger(n)||n<0||n>999)){cutMsg={kind:'err',text:'Use whole numbers (0-999) for '+l.material+'.'};renderCutBatch(true);return;}
+
     const finEl=$('cutFin'+l.line_no),fin=!!(finEl&&finEl.checked&&!finEl.disabled);
     if(!cut&&!dmg&&!off&&!fin)continue;
     // Damaged sheets go in the Damaged box, not Sheets cut (user, 2026-11-05).
