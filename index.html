@@ -1328,7 +1328,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-13.4';
+const APP_VERSION='2026-11-13.5';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -4023,7 +4023,8 @@ function cutStepper(id,label,hint){
     +'<input id="'+id+'" type="number" inputmode="numeric" min="0" max="999" step="1" value="0" onfocus="this.select()">'
     +'<button type="button" onclick="cutStep(\''+id+'\',1)" aria-label="More">+</button></div></div>';
 }
-function cutStep(id,d){const el=$(id);el.value=Math.max(0,Math.min(999,(parseInt(el.value,10)||0)+d));}
+// + on "Full sheets cut" stops at the sheets the schedule still has (Jay 2026-11-13: extra ruined sheets go under Damaged)
+function cutStep(id,d){const el=$(id);let mx=999;const m=/^cutCut(\d+)$/.exec(id);if(m&&cutCurrent){const l=(cutCurrent.lines||[]).find(x=>String(x.line_no)===m[1]);if(l&&l.remaining!=null&&l.programmed>0)mx=l.remaining;}el.value=Math.max(0,Math.min(mx,(parseInt(el.value,10)||0)+d));}
 function renderCutBatch(keepInputs){
   const b=cutCurrent;if(!b)return;
   const saved={};
@@ -4102,7 +4103,8 @@ async function saveCutting(){
     const finEl=$('cutFin'+l.line_no),fin=!!(finEl&&finEl.checked&&!finEl.disabled);
     if(!cut&&!dmg&&!off&&!fin)continue;
     // Damaged sheets go in the Damaged box, not Sheets cut (user, 2026-11-05).
-    if(l.remaining!=null&&cut>l.remaining)warn.push(l.material+': '+cut+' sheets cut entered but only '+l.remaining+' remain'+(l.programmed?' of '+l.programmed:'')+'.\nIf some sheets were damaged, put those in the Damaged box - only good sheets go in Sheets cut.');
+    // More sheets cut than the schedule has left is refused (was a warning; Jay 2026-11-13) - ruined sheets go under Damaged.
+    if(l.remaining!=null&&l.programmed>0&&cut>l.remaining){cutMsg={kind:'err',text:l.material+': '+(l.remaining?'only '+l.remaining+' more sheet'+(l.remaining===1?'':'s')+' can be cut':'all '+l.programmed+' sheets are already cut')+' ('+(l.cut||0)+' of '+l.programmed+' logged). Put sheets ruined while cutting in the Damaged box - only good sheets go in Full sheets cut.'};renderCutBatch(true);beep('err');return;}
     // Can't mark finished when far short of the programmed sheets (same rule as the server's finishShortfall).
     if(fin&&l.programmed>0){
       const tc=(l.cut||0)+cut,to=(l.offcuts||0)+off,short=l.programmed-tc-to;
