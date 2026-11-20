@@ -486,6 +486,11 @@ body.ho-scan #dlvScanFoot button+button{display:none}
 /* SETTINGS */
 .s-page{padding:16px;max-width:480px;margin:0 auto}
 /* ── Cutting Log screen ── */
+/* Leftover pieces under a batch (2026-11-20) */
+.rm-item{padding:12px 0;border-top:1px solid var(--gray-200)}.rm-item:first-of-type{border-top:0;padding-top:4px}
+.rm-size{font-size:20px;font-weight:700;color:var(--gray-900);font-variant-numeric:tabular-nums}.rm-size small{font-size:13px;font-weight:500;color:var(--gray-500)}
+.rm-btns{display:flex;gap:10px;margin-top:8px}.rm-btns .btn{flex:1;min-height:48px;margin:0}
+.rm-done{margin-top:6px;font-size:14px;color:var(--gray-700);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .cut-card{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:12px}
 .cut-card.tap{cursor:pointer;transition:transform .12s}
 .cut-card.tap:active{transform:scale(.99)}
@@ -1328,7 +1333,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-13.5';
+const APP_VERSION='2026-11-20.1';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -3737,6 +3742,7 @@ $('bBackBatch').onclick=()=>{
 // counted twice. Admins see it all on admin.html's Daily Cutting tab.
 const LS_CUT_OPERATOR='mx_cut_operator',LS_CUT_QUEUE='mx_cut_queue';
 let cutView='list',cutBatches=[],cutCurrent=null,cutRecent=[],cutShowAll=false,cutMsg=null,cutOpenLines=new Set();
+let cutRemnants=[];const cutRmEdit=new Set(); // leftover pieces of the open batch (2026-11-20)
 function cutQueue(){return lsGet(LS_CUT_QUEUE)||[];}
 async function cutGet(path){
   if(!cfg.url)throw new Error('No server configured — set a Receiver URL in Settings first.');
@@ -3865,8 +3871,10 @@ function openCutBatch(batch){
 async function loadCutBatch(batch,keepInputs){
   if(!batch)return;
   try{
-    const d=await cutGet('/cutting/batch/'+encodeURIComponent(batch));
-    cutCurrent=d.batch;cutRecent=d.recent||[];
+    // leftover pieces load alongside; a server without them (not updated yet) just shows none
+    const [d,rm]=await Promise.all([cutGet('/cutting/batch/'+encodeURIComponent(batch)),cutGet('/cutting/remnants/'+encodeURIComponent(batch)).catch(()=>null)]);
+    if(!cutCurrent||cutCurrent.batch!==batch)cutRmEdit.clear();
+    cutCurrent=d.batch;cutRecent=d.recent||[];cutRemnants=(rm&&rm.remnants)||[];
     if(cutView==='detail')renderCutBatch(keepInputs);
   }catch(e){
     if(cutView==='detail')$('cutContent').innerHTML='<div class="cut-msg err">'+esc(e.message)+'</div>';
@@ -4066,6 +4074,7 @@ function renderCutBatch(keepInputs){
     }
     h+='</div>';
   });
+  h+=cutRemnantsHtml();
   h+=ovnBatchTag(b.batch).replace('class="cut-ovn-btn"','class="cut-ovn-btn" style="margin:0 0 12px"');
   h+='<button class="btn btn-solid" id="bCutSave" type="button" onclick="saveCutting()" style="position:sticky;bottom:12px;margin-top:4px">Save Cutting Log</button>';
   if(cutRecent.length){
@@ -4078,6 +4087,42 @@ function renderCutBatch(keepInputs){
   }
   $('cutContent').innerHTML=h;
   if(keepInputs)Object.entries(saved).forEach(([id,v])=>{const el=$(id);if(!el||el.disabled)return;if(el.type==='checkbox')el.checked=v;else el.value=v;});
+}
+// ── LEFTOVER PIECES (Jay 2026-11-20): the remnants the schedule PDF says this nest leaves.
+// The operator marks each one Keep (+ where it is stored) or Scrap - saved at once, needs a
+// connection. The office sees the list on the dashboard (Plan > Remnants).
+function cutRemnantsHtml(){
+  if(!cutRemnants.length)return '';
+  const open=cutRemnants.filter(r=>r.status==='NEW').length;
+  let h='<div class="s-sec" style="margin-top:6px">Leftover pieces '+(open?'<span class="cut-tag new">'+open+' to decide</span>':'<span class="cut-tag done">All decided</span>')+'</div><div class="cut-card">'
+    +'<div class="cut-meta" style="margin:0 0 4px">From the schedule PDF. Keep each piece (say where) or scrap it.</div>';
+  cutRemnants.forEach(r=>{
+    h+='<div class="rm-item"><div class="rm-size">'+esc(r.size)+'<small> in</small></div>'
+      +'<div class="cut-meta">'+esc(r.material)+(r.finish?' · '+esc(r.finish):'')+(r.sheet_name?' · sheet '+esc(r.sheet_name.replace(cutCurrent.batch+'-','')):'')+'</div>';
+    if(r.status==='NEW'||cutRmEdit.has(r.id)){
+      h+='<input class="fg-input" id="rmLoc'+r.id+'" maxlength="60" autocapitalize="characters" aria-label="Where it is kept" placeholder="Where is it kept? e.g. RACK B (optional)" value="'+esc(r.location||'')+'" style="margin-top:8px">'
+        +'<div class="rm-btns"><button type="button" class="btn btn-solid" onclick="cutRemnantSet('+r.id+',\'KEPT\')">Keep</button><button type="button" class="btn btn-outline" onclick="cutRemnantSet('+r.id+',\'SCRAPPED\')">Scrap</button></div>';
+    }else{
+      h+='<div class="rm-done"><span class="cut-tag '+(r.status==='KEPT'?'done':'prog')+'">'+({KEPT:'Kept',SCRAPPED:'Scrapped',USED:'Used'}[r.status]||r.status)+'</span>'+esc([r.location,r.decided_by].filter(Boolean).join(' · '))
+        +(r.status!=='USED'?'<button type="button" class="cut-quick" onclick="cutRmEdit.add('+r.id+');renderCutBatch(true)">Change</button>':'')+'</div>';
+    }
+    h+='</div>';
+  });
+  return h+'</div>';
+}
+async function cutRemnantSet(id,status){
+  const opEl=$('cutOperator'),op=((opEl&&opEl.value)||'').trim();
+  if(!op){showFlash('err','Enter your name at the top first');if(opEl)opEl.focus();return;}
+  lsSet(LS_CUT_OPERATOR,op);
+  const loc=$('rmLoc'+id)?$('rmLoc'+id).value.trim():'';
+  try{
+    const r=await fetch(cfg.url+'/cutting/remnants/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,device:cfg.dev,operator:op,status,location:loc}),signal:AbortSignal.timeout(10000)});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.error||('Server error (HTTP '+r.status+')'));
+    cutRemnants=cutRemnants.map(x=>x.id===id?j.remnant:x);cutRmEdit.delete(id);
+    showFlash('ok',status==='KEPT'?'Kept'+(loc?' - '+loc:''):'Scrapped');
+    renderCutBatch(true);
+  }catch(e){showFlash('err',e.name==='TimeoutError'||e.name==='TypeError'?'No connection - not saved. Try again when the phone is back on Wi-Fi.':e.message);}
 }
 function openCutPdf(id){
   if(!cutCurrent||!cfg.url)return;
