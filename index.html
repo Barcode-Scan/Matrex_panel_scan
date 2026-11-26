@@ -1333,7 +1333,7 @@ let deviceStatus='UNKNOWN'; // UNKNOWN | PENDING | APPROVED | REVOKED
 // log keeps short notes (tag check timed out / failed, upload failed or
 // slow, server not reachable) on the phone and sends them to the server
 // when it can - so a phone that "does nothing" can be looked at remotely.
-const APP_VERSION='2026-11-25.2';
+const APP_VERSION='2026-11-26.1';
 const LS_DIAG='mx_diag_queue';
 function diag(event,detail){
   try{
@@ -1810,9 +1810,13 @@ let nextMidnightUpload=null,engineLabel='Starting…';
 // 2026-11-13 (Jay: faster scanning): 0.8 s between two DIFFERENT labels (was 2 s - two phones were
 // running into that wait), and the SAME label stays blocked for 3 s (was 2 s) against double scans.
 // Overlapping scans are safe: each has its own /parts/match request; the server says MATCHED_ALREADY.
+// 2026-11-26 (Jay: "Already scanned" beeps right after a good scan): a Matrex label just scanned stays quiet
+// while the camera still sees it, and for 10 s after it last did - no beep, no extra row. Scanned again after
+// that, or after another label, it is a real repeat and still warns. Other codes keep the 3 s rule.
 const SCAN_COOLDOWN_MS=800;
 const SAME_CODE_COOLDOWN_MS=3000;
-let lastScanVal='',lastScanTime=0;
+const LABEL_QUIET_MS=10000;
+let lastScanVal='',lastScanTime=0,lastScanSeen=0;
 let codeReader=null,controls=null,trackRef=null,torchOn=false;
 // Free-scan and Directed Scan share the one physical camera/zxing engine
 // (only one screen is ever visible at a time, and most phones can't run
@@ -1896,8 +1900,25 @@ function downloadCSV(){downloadBlob(buildCSV(),csvName());}
 let uploading=false;
 let retryTimer=null,retryDelay=30000;
 const RETRY_MAX_MS=300000;
+// 2026-11-26 (Jay: Wi-Fi drops): an upload sends only the scans that are new or changed since the last good
+// upload (partial:true - the server rebuilds the day's CSV file itself), not the whole day: 400 scans by the
+// afternoon timed out on weak Wi-Fi and slowed the scan checks. Manual Upload and the midnight upload send all.
+function scanSig(s){
+  const t=[s.scanId,s.matchStatus||'',s.flag||'',s.skid||''].join('|');let h=5381;
+  for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;
+  return(h>>>0).toString(36);
+}
+function rowsToUpload(list,full){
+  return full?list.slice():list.filter(s=>s._up!==scanSig(s));
+}
 async function uploadToServer(reason){
   if(!cfg.url||!scans.length||uploading)return false;
+  const full=reason==='manual'||reason==='midnight-daily'||reason==='full-fallback';
+  const send=rowsToUpload(scans,full),sigs=send.map(scanSig);
+  if(!send.length){
+    syncedCount=scans.length;lsSet(LS.synced(today),syncedCount);
+    setSyncUI('ok',lsGet(LS.lastUp)?'Uploaded '+fmtT(lsGet(LS.lastUp)):'Up to date');return true;
+  }
   uploading=true;setSyncUI('syncing','Uploading…');
   const tUp=Date.now();
   try{
@@ -1906,7 +1927,10 @@ async function uploadToServer(reason){
     // qty/colour/skid/method/flag/time) so the server doesn't need to
     // re-parse the CSV text, which has Excel-safety quoting applied that
     // would make it lossy to reverse.
-    const r=await fetch(cfg.url+'/upload',{method:'POST',signal:AbortSignal.timeout(20000),headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:csvName(),csv:buildCSV(),device:cfg.dev,device_id:deviceId,date:today,count:scans.length,reason,rows:scans})});
+    const body=full?{filename:csvName(),csv:buildCSV(),device:cfg.dev,device_id:deviceId,date:today,count:scans.length,reason,rows:send}
+      :{filename:csvName(),partial:true,device:cfg.dev,device_id:deviceId,date:today,count:scans.length,reason,rows:send};
+    const r=await fetch(cfg.url+'/upload',{method:'POST',signal:AbortSignal.timeout(20000),headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(r.status===400&&!full){uploading=false;return uploadToServer('full-fallback');} // a server without short uploads yet
     if(r.status===403){
       const j=await r.json().catch(()=>({}));
       deviceStatus=j.status||'UNKNOWN';
@@ -1914,15 +1938,16 @@ async function uploadToServer(reason){
       uploading=false;scheduleRetry();return false;
     }
     if(!r.ok)throw new Error('HTTP '+r.status);
+    send.forEach((s,i)=>{s._up=sigs[i];});try{saveScans();}catch(e){}
     const ts=new Date().toISOString();lsSet(LS.lastUp,ts);
     syncedCount=scans.length;lsSet(LS.synced(today),syncedCount);
     clearTimeout(retryTimer);retryDelay=30000;
-    if(Date.now()-tUp>3000)diag('upload_slow',scans.length+' scans took '+(Date.now()-tUp)+' ms');
+    if(Date.now()-tUp>3000)diag('upload_slow',send.length+' of '+scans.length+' scans took '+(Date.now()-tUp)+' ms');
     flushDiag();
     setSyncUI('ok','Uploaded '+fmtT(ts));refreshSettings();uploading=false;return true;
   }catch(e){
     const mixed=isMixedContent(cfg.url);
-    diag('upload_fail',scans.length+' scans after '+(Date.now()-tUp)+' ms: '+(e&&(e.name+' '+e.message)));
+    diag('upload_fail',send.length+' of '+scans.length+' scans after '+(Date.now()-tUp)+' ms: '+(e&&(e.name+' '+e.message)));
     setSyncUI('fail',mixed?'Upload blocked — receiver must be https://':'Upload failed — '+e.message);
     uploading=false;scheduleRetry();return false;
   }
@@ -2158,9 +2183,13 @@ function resultInAimBox(result,videoEl){
 // a scan is accepted; returns the code to process, or '' if this decode
 // should be ignored (too soon, or an identical repeat too soon).
 function shouldAcceptScan(raw,now){
+  if(raw===lastScanVal){
+    const quiet=raw.length===ID_LEN?now-lastScanSeen<LABEL_QUIET_MS:now-lastScanTime<SAME_CODE_COOLDOWN_MS;
+    lastScanSeen=now; // still in view: its quiet time starts again
+    if(quiet)return'';
+  }
   if(now-lastScanTime<SCAN_COOLDOWN_MS)return'';
-  if(raw===lastScanVal&&now-lastScanTime<SAME_CODE_COOLDOWN_MS)return'';
-  lastScanVal=raw;lastScanTime=now;
+  lastScanVal=raw;lastScanTime=now;lastScanSeen=now;
   return raw;
 }
 
@@ -2199,10 +2228,9 @@ async function startScanner(){
     }catch(e){}
   }
   if(BarcodeFormat&&DecodeHintType){
-    hints.set(DecodeHintType.POSSIBLE_FORMATS,[
-      BarcodeFormat.PDF_417,BarcodeFormat.CODE_128,BarcodeFormat.QR_CODE,
-      BarcodeFormat.DATA_MATRIX,BarcodeFormat.EAN_13
-    ]);
+    // 2026-11-26 (Jay: "Not a Matrex code" beeps): only the two kinds our labels and slips use - QR and PDF417.
+    // Code 128, EAN-13 and Data Matrix were on too: they read box barcodes and bits of labels as wrong numbers.
+    hints.set(DecodeHintType.POSSIBLE_FORMATS,[BarcodeFormat.PDF_417,BarcodeFormat.QR_CODE]);
     hints.set(DecodeHintType.TRY_HARDER,true);
   }
 
@@ -2380,6 +2408,7 @@ function scanKey(p){
 const MATCH_LABELS={MATCHED_NEW:'Matched ✓',MATCHED_ALREADY:'Already scanned',VOIDED:'VOIDED',NOT_FOUND:'Not registered',UNVERIFIED:'Unverified — offline'};
 function matchLabel(p){
   if(p.matchStatus==='MATCHED_ALREADY'&&p.stageName)return'Already scanned at '+p.stageName;
+  if(p.matchStatus==='NOT_FOUND'&&p.oldBatch)return'Old label — '+p.oldBatch+(p.oldRemade?' was re-made':' was deleted');
   return MATCH_LABELS[p.matchStatus]||'';
 }
 function dataHtml(p){
@@ -2464,7 +2493,11 @@ function applyMatch(part,data,fromReconcile){
   // client-side until now. Captured regardless of status (VOIDED/
   // MATCHED_ALREADY still carry real batch progress worth showing).
   part.batchScanned=data.batch_scanned||0;part.batchTotal=data.batch_total||0;
-  if(data.status==='NOT_FOUND'){part.flag='NOT_REGISTERED';return;}
+  if(data.status==='NOT_FOUND'){
+    part.flag='NOT_REGISTERED';
+    if(data.old_batch){part.oldBatch=data.old_batch;part.oldBatchAt=data.old_batch_deleted_at||'';part.oldRemade=!!data.old_batch_remade;}
+    return;
+  }
   part.batchSheet=data.sheet_name||'';part.project=data.project||'';part.floor=data.floor||'';part.batch=data.batch||'';
   part.partType=data.part_type||'';part.partName=data.tag||part.uniqueId;
   part.size=[data.width,data.height].filter(Boolean).join(' X ');
@@ -2597,6 +2630,12 @@ async function reconcileUnverified(){
 setInterval(()=>{if(cfg.url&&!serverDown&&navigator.onLine&&unverifiedCount())reconcileUnverified();},20000);
 
 const FLAG_MSGS={DUPLICATE:'Already scanned',VOID:'VOIDED part',NOT_REGISTERED:'Not registered',UNVERIFIED:'Saved on phone — sends when back online',HOLD:'QUALITY HOLD'};
+// 2026-11-26 (Jay): a label from a deleted or re-made batch says so (the server finds it in Deleted Batches),
+// instead of only "Not registered".
+function oldLabelMsg(p){
+  let d='';try{if(p.oldBatchAt)d=' on '+new Date(p.oldBatchAt).toLocaleDateString([],{month:'short',day:'numeric'});}catch(e){}
+  return p.oldRemade?'OLD LABEL — '+p.oldBatch+' was re-made'+d+'. Use the new label':'OLD LABEL — batch '+p.oldBatch+' was deleted'+d;
+}
 function commit(part){
   scans.push(part);
   try{saveScans();}catch(e){phoneStorageFull=true;}
@@ -2612,6 +2651,7 @@ function commit(part){
   // given (see toggleQualityHold on the admin dashboard).
   const flagMsg=part.flag==='DUPLICATE'&&part.stageName?'Already scanned at '+part.stageName
     :part.flag==='HOLD'&&part.holdReason?'QUALITY HOLD — '+part.holdReason
+    :part.flag==='NOT_REGISTERED'&&part.oldBatch?oldLabelMsg(part)
     :FLAG_MSGS[part.flag];
   showFlash(part.flag?'bad':'ok',(flagMsg?base+' ('+flagMsg+')':base)+(phoneStorageFull?' — phone storage full, scan sent to server':''));
   if(part.method==='SCAN')showScanToast(part.partName,part.batchScanned,part.batchTotal);
@@ -2682,7 +2722,7 @@ function updateCounters(){
 const FLAG_CSS={DUPLICATE:'dup',VOID:'void',NOT_REGISTERED:'unknown',UNVERIFIED:'unverified',HOLD:'hold'};
 const FLAG_PILL_TEXT={DUPLICATE:'DUP',VOID:'VOID',NOT_REGISTERED:'UNKNOWN',UNVERIFIED:'PENDING',HOLD:'HOLD'};
 function flagClass(s){return FLAG_CSS[s.flag]||(s.method==='MANUAL'?'manual':'');}
-function flagPill(s){const t=FLAG_PILL_TEXT[s.flag];return t?`<span class="flag-pill fp-${flagClass(s)}">${t}</span>`:'';}
+function flagPill(s){const t=s.flag==='NOT_REGISTERED'&&s.oldBatch?'OLD':FLAG_PILL_TEXT[s.flag];return t?`<span class="flag-pill fp-${flagClass(s)}">${t}</span>`:'';}
 // Separate from flagPill on purpose — a part can be BOTH e.g. a
 // duplicate AND have a defect note, so both pills show together rather
 // than one replacing the other.
@@ -3555,7 +3595,10 @@ async function directedScan(uid,confirm,inputMethod){
     case'VOIDED':
       beep('err');showDirBanner('warn',(data.tag||data.unique_id)+' is VOIDED','This part was rejected — do not use it.');break;
     case'UNKNOWN_UID':
-      beep('err');showDirBanner('err','Unknown code',data.scanned_uid);break;
+      beep('err');
+      if(data.old_batch)showDirBanner('err','Old label',oldLabelMsg({oldBatch:data.old_batch,oldBatchAt:data.old_batch_deleted_at,oldRemade:data.old_batch_remade}));
+      else showDirBanner('err','Unknown code',data.scanned_uid);
+      break;
     case'JOB_COMPLETE':
       showDirBanner('ok','Batch already complete');break;
     case'NO_LINES':
